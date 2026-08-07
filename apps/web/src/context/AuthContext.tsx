@@ -73,7 +73,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
-  const [currentUser, setCurrentUser] = useState<User | null>(INITIAL_USERS[0]); // Default logged in as System Admin
+  const [currentUser, setCurrentUser] = useState<User | null>(null); // Initialized to null to show Login view first
 
   const login = (emailOrName: string, passwordInput: string) => {
     const targetUser = users.find(u => 

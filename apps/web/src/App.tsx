@@ -12,7 +12,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { CreateOrderModal } from './components/CreateOrderModal';
 import { OrderApprovalModal } from './components/OrderApprovalModal';
 import { DispatchModal } from './components/DispatchModal';
-import { UserManagementModal } from './components/UserManagementModal';
+import { OrderInvoiceModal } from './components/OrderInvoiceModal';
 import { INITIAL_ORDERS } from './lib/supabase';
 import { Order } from './types';
 
@@ -27,6 +27,7 @@ const MainLayout: React.FC = () => {
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
   const [selectedOrderForApproval, setSelectedOrderForApproval] = useState<Order | null>(null);
   const [selectedOrderForDispatch, setSelectedOrderForDispatch] = useState<Order | null>(null);
+  const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
 
   const { addNotification } = useNotifications();
 
@@ -44,6 +45,8 @@ const MainLayout: React.FC = () => {
       event_type: newOrder.status === 'SUBMITTED' ? 'ORDER_SUBMITTED' : 'ORDER_DRAFT',
       order_id: newOrder.id
     });
+    // Open Tax Invoice modal immediately for the Agency!
+    setSelectedOrderForInvoice(newOrder);
   };
 
   const handleApproveOrder = (orderId: string, remarks: string) => {
@@ -145,6 +148,7 @@ const MainLayout: React.FC = () => {
             orders={orders} 
             onOpenCreateOrder={() => setIsCreateOpen(true)}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
+            onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
           />
         )}
 
@@ -153,6 +157,7 @@ const MainLayout: React.FC = () => {
             orders={orders.filter(o => o.status === 'SUBMITTED' || o.status === 'HELD')} 
             onOpenCreateOrder={() => setIsCreateOpen(true)}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
+            onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
           />
         )}
 
@@ -198,6 +203,12 @@ const MainLayout: React.FC = () => {
       <UserManagementModal 
         isOpen={isUserMgmtOpen}
         onClose={() => setIsUserMgmtOpen(false)}
+      />
+
+      <OrderInvoiceModal 
+        order={selectedOrderForInvoice}
+        isOpen={!!selectedOrderForInvoice}
+        onClose={() => setSelectedOrderForInvoice(null)}
       />
     </div>
   );

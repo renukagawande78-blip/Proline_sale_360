@@ -1,17 +1,17 @@
 -- Proline OMS 360 Migration 02: RLS Policies & Row Level Security Setup
 
--- Enable RLS on all operational tables
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.agencies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.agency_financials ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.dispatches ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.dispatch_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+-- Enable RLS on all operational tables safely
+ALTER TABLE IF EXISTS public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.agencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.agency_financials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.dispatches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.dispatch_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.notifications ENABLE ROW LEVEL SECURITY;
 
 -- Helper SQL function to get current user role name
 CREATE OR REPLACE FUNCTION public.fn_current_user_role()
@@ -49,18 +49,22 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- =========================================================
 
 -- USERS: Everyone can read users in their system/team
+DROP POLICY IF EXISTS policy_users_select ON public.users;
 CREATE POLICY policy_users_select ON public.users
     FOR SELECT USING (true);
 
 -- COMPANIES: Selectable based on company access
+DROP POLICY IF EXISTS policy_companies_select ON public.companies;
 CREATE POLICY policy_companies_select ON public.companies
     FOR SELECT USING (public.fn_has_company_access(id));
 
 -- PRODUCTS: Selectable based on company access
+DROP POLICY IF EXISTS policy_products_select ON public.products;
 CREATE POLICY policy_products_select ON public.products
     FOR SELECT USING (public.fn_has_company_access(company_id));
 
 -- AGENCIES: Selectable based on company & salesperson/ASM mappings
+DROP POLICY IF EXISTS policy_agencies_select ON public.agencies;
 CREATE POLICY policy_agencies_select ON public.agencies
     FOR SELECT USING (
         public.fn_current_user_role() IN ('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ACCOUNTS', 'BILLING', 'DISPATCH_MANAGER')
@@ -83,6 +87,7 @@ CREATE POLICY policy_agencies_select ON public.agencies
 -- RLS POLICIES FOR ORDERS
 -- =========================================================
 
+DROP POLICY IF EXISTS policy_orders_select ON public.orders;
 CREATE POLICY policy_orders_select ON public.orders
     FOR SELECT USING (
         public.fn_current_user_role() IN ('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ACCOUNTS', 'BILLING')
@@ -93,11 +98,13 @@ CREATE POLICY policy_orders_select ON public.orders
         OR (public.fn_current_user_role() = 'SALES_PERSON' AND salesperson_id = auth.uid())
     );
 
+DROP POLICY IF EXISTS policy_orders_insert ON public.orders;
 CREATE POLICY policy_orders_insert ON public.orders
     FOR INSERT WITH CHECK (
         public.fn_current_user_role() IN ('SUPER_ADMIN', 'SYSTEM_ADMIN', 'SALES_PERSON')
     );
 
+DROP POLICY IF EXISTS policy_orders_update ON public.orders;
 CREATE POLICY policy_orders_update ON public.orders
     FOR UPDATE USING (
         public.fn_current_user_role() IN ('SUPER_ADMIN', 'SYSTEM_ADMIN')
@@ -105,6 +112,7 @@ CREATE POLICY policy_orders_update ON public.orders
     );
 
 -- ORDER ITEMS RLS
+DROP POLICY IF EXISTS policy_order_items_select ON public.order_items;
 CREATE POLICY policy_order_items_select ON public.order_items
     FOR SELECT USING (
         EXISTS (
@@ -117,12 +125,14 @@ CREATE POLICY policy_order_items_select ON public.order_items
 -- RLS POLICIES FOR NOTIFICATIONS
 -- =========================================================
 
+DROP POLICY IF EXISTS policy_notifications_select ON public.notifications;
 CREATE POLICY policy_notifications_select ON public.notifications
     FOR SELECT USING (
         recipient_user_id = auth.uid()
         OR recipient_role_id IN (SELECT role_id FROM public.users WHERE id = auth.uid())
     );
 
+DROP POLICY IF EXISTS policy_notifications_update ON public.notifications;
 CREATE POLICY policy_notifications_update ON public.notifications
     FOR UPDATE USING (
         recipient_user_id = auth.uid()

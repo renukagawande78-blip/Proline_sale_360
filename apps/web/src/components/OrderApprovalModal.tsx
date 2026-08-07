@@ -61,7 +61,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           <div>
             <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700 }}>AGENCY / PARTY DETAILS</div>
             <div style={{ fontWeight: 800, fontSize: '1rem', color: '#f8fafc' }}>{order.agency_name}</div>
-            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Company: {order.company_name}</div>
+            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Segment: {order.company_name} | Delivery: <span style={{ color: '#38bdf8', fontWeight: 700 }}>{order.delivery_type || 'F.O.R'}</span></div>
           </div>
           <div>
             <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700 }}>SALESPERSON & ASM</div>
@@ -125,7 +125,10 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
               <tbody>
                 {order.items?.map((item, idx) => (
                   <tr key={idx}>
-                    <td>{item.product_name}</td>
+                    <td>
+                      <div style={{ fontWeight: 700 }}>{item.product_name}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#38bdf8' }}>ID: {item.id} {item.remark ? `| Note: ${item.remark}` : ''}</div>
+                    </td>
                     <td>{item.box_qty}</td>
                     <td>{item.loose_pcs}</td>
                     <td><strong style={{ color: '#34d399' }}>{item.total_qty_pcs}</strong></td>

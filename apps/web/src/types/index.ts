@@ -48,6 +48,8 @@ export interface Agency {
   agency_name: string;
   company_id: string;
   area_id: string;
+  area_name?: string;
+  city?: string;
   address: string;
   contact_person: string;
   mobile: string;
@@ -85,6 +87,7 @@ export interface OrderItem {
   total_price: number;
   dispatched_qty_pcs: number;
   pending_qty_pcs: number;
+  remark?: string;
 }
 
 export interface Order {
@@ -106,6 +109,7 @@ export interface Order {
   total_qty_pcs: number;
   total_amount: number;
   remarks?: string;
+  delivery_type?: 'F.O.R' | 'Self Pickup';
   items?: OrderItem[];
   hold_reason?: string;
   hold_remarks?: string;

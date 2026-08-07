@@ -8,12 +8,14 @@ interface OrdersPageProps {
   orders: Order[];
   onOpenCreateOrder: () => void;
   onSelectOrderForApproval: (order: Order) => void;
+  onViewInvoice?: (order: Order) => void;
 }
 
 export const OrdersPage: React.FC<OrdersPageProps> = ({
   orders,
   onOpenCreateOrder,
-  onSelectOrderForApproval
+  onSelectOrderForApproval,
+  onViewInvoice
 }) => {
   const { currentUser } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
@@ -50,7 +52,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
           <Search size={16} color="#64748b" />
           <input 
             type="text" 
-            placeholder="Search by order number or agency..."
+            placeholder="Search by order number or agency name..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%', fontSize: '0.85rem' }}
@@ -63,7 +65,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
             onChange={e => setSelectedCompany(e.target.value)}
             style={{ padding: '0.55rem 0.75rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.85rem' }}
           >
-            <option value="ALL">All Companies / Brands</option>
+            <option value="ALL">All Segments</option>
             {MOCK_COMPANIES.map(c => (
               <option key={c.id} value={c.id}>{c.company_name}</option>
             ))}
@@ -115,23 +117,35 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                 <td>₹{order.total_amount.toLocaleString()}</td>
                 <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
                 <td>
-                  {(role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN') && (order.status === 'SUBMITTED' || order.status === 'HELD') ? (
-                    <button 
-                      className="btn btn-warning"
-                      onClick={() => onSelectOrderForApproval(order)}
-                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
-                    >
-                      <ShieldCheck size={14} /> Account Check
-                    </button>
-                  ) : (
-                    <button 
-                      className="btn btn-outline"
-                      onClick={() => onSelectOrderForApproval(order)}
-                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
-                    >
-                      View Details
-                    </button>
-                  )}
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {(role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN') && (order.status === 'SUBMITTED' || order.status === 'HELD') ? (
+                      <button 
+                        className="btn btn-warning"
+                        onClick={() => onSelectOrderForApproval(order)}
+                        style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                      >
+                        <ShieldCheck size={14} /> Account Check
+                      </button>
+                    ) : (
+                      <button 
+                        className="btn btn-outline"
+                        onClick={() => onSelectOrderForApproval(order)}
+                        style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                      >
+                        Details
+                      </button>
+                    )}
+                    {onViewInvoice && (
+                      <button 
+                        className="btn btn-primary"
+                        onClick={() => onViewInvoice(order)}
+                        style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', background: '#3b82f6' }}
+                        title="Print / Download Invoice"
+                      >
+                        Invoice
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

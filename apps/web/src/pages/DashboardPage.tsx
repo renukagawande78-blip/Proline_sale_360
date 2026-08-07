@@ -110,7 +110,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ orders, onOpenCrea
             <tr>
               <th>Order Number</th>
               <th>Date</th>
-              <th>Company</th>
+              <th>Segment</th>
               <th>Agency / Party</th>
               <th>Total PCS</th>
               <th>Amount (₹)</th>

@@ -29,7 +29,7 @@ export const DispatchPage: React.FC<DispatchPageProps> = ({ orders, onOpenDispat
               <th>Order Number</th>
               <th>Date</th>
               <th>Agency / Party</th>
-              <th>Company</th>
+              <th>Segment</th>
               <th>Ordered PCS</th>
               <th>Dispatched PCS</th>
               <th>Pending PCS</th>
