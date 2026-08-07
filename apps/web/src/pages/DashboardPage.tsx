@@ -9,17 +9,19 @@ interface DashboardPageProps {
   onSelectOrder: (order: Order) => void;
 }
 
-export const DashboardPage: React.FC<DashboardPageProps> = ({ orders, onOpenCreateOrder, onSelectOrder }) => {
+export const DashboardPage: React.FC<DashboardPageProps> = ({ orders = [], onOpenCreateOrder, onSelectOrder }) => {
   const { currentUser } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
   const fullName = currentUser?.full_name || 'User';
 
-  const totalOrders = orders.length;
-  const pendingOrders = orders.filter(o => o.status === 'SUBMITTED').length;
-  const approvedOrders = orders.filter(o => o.status === 'APPROVED').length;
-  const heldOrders = orders.filter(o => o.status === 'HELD').length;
-  const dispatchedOrders = orders.filter(o => o.status === 'DISPATCHED' || o.status === 'PARTIALLY_DISPATCHED').length;
-  const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
+  const safeOrders = orders || [];
+
+  const totalOrders = safeOrders.length;
+  const pendingOrders = safeOrders.filter(o => o.status === 'SUBMITTED').length;
+  const approvedOrders = safeOrders.filter(o => o.status === 'APPROVED').length;
+  const heldOrders = safeOrders.filter(o => o.status === 'HELD').length;
+  const dispatchedOrders = safeOrders.filter(o => o.status === 'DISPATCHED' || o.status === 'PARTIALLY_DISPATCHED').length;
+  const totalRevenue = safeOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
 
   return (
     <div className="page-body">
@@ -30,7 +32,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ orders, onOpenCrea
             Welcome back, {fullName}
           </h1>
           <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: 4 }}>
-            Role Context: <strong style={{ color: '#38bdf8' }}>{role.replace('_', ' ')}</strong> | Multi-Company B2B Order Console
+            Role Context: <strong style={{ color: '#38bdf8' }}>{role ? role.replace(/_/g, ' ') : ''}</strong> | Multi-Company B2B Order Console
           </p>
         </div>
 
@@ -93,7 +95,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ orders, onOpenCrea
             <span className="kpi-title">TOTAL VALUE</span>
             <TrendingUp size={20} color="#38bdf8" />
           </div>
-          <div className="kpi-value">₹{totalRevenue.toLocaleString()}</div>
+          <div className="kpi-value">₹{(totalRevenue || 0).toLocaleString()}</div>
           <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Gross order value</span>
         </div>
       </div>
@@ -119,14 +121,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ orders, onOpenCrea
             </tr>
           </thead>
           <tbody>
-            {orders.map(order => (
+            {safeOrders.map(order => (
               <tr key={order.id}>
                 <td><strong style={{ color: '#38bdf8' }}>{order.order_number}</strong></td>
                 <td>{order.order_date}</td>
                 <td>{order.company_name}</td>
                 <td>{order.agency_name}</td>
-                <td><span style={{ fontWeight: 800, color: '#34d399' }}>{order.total_qty_pcs}</span></td>
-                <td>₹{order.total_amount.toLocaleString()}</td>
+                <td><span style={{ fontWeight: 800, color: '#34d399' }}>{order.total_qty_pcs || 0}</span></td>
+                <td>₹{(order.total_amount || 0).toLocaleString()}</td>
                 <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
                 <td>
                   <button 

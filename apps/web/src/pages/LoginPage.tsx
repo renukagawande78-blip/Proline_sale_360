@@ -23,6 +23,7 @@ export const LoginPage: React.FC = () => {
     setUserInput(userEmail);
     setPasswordInput(userPass || '1234');
     setError(null);
+    login(userEmail, userPass || '1234');
   };
 
   return (
@@ -235,7 +236,7 @@ export const LoginPage: React.FC = () => {
                 <button
                   key={u.id}
                   type="button"
-                  onClick={() => handleSelectQuickUser(u.full_name, u.password)}
+                  onClick={() => handleSelectQuickUser(u.email, u.password)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

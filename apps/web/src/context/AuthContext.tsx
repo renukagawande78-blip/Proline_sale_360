@@ -51,17 +51,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<User | null>(null); // Initialized to null to show Login view first
 
   const login = (emailOrName: string, passwordInput: string) => {
-    const targetUser = users.find(u => 
-      u.email.toLowerCase() === emailOrName.toLowerCase() ||
-      u.full_name.toLowerCase().includes(emailOrName.toLowerCase()) ||
-      u.id === emailOrName
-    );
+    const cleanInput = (emailOrName || '').trim().toLowerCase();
+    const cleanPass = (passwordInput || '').trim();
 
-    if (!targetUser) {
-      return { success: false, error: 'User ID / Person Name not found in system.' };
+    if (!cleanInput) {
+      return { success: false, error: 'Please enter a Person Name, User ID, or Email.' };
     }
 
-    if (targetUser.password !== passwordInput) {
+    const targetUser = users.find(u => {
+      const email = (u.email || '').toLowerCase().trim();
+      const name = (u.full_name || '').toLowerCase().trim();
+      const id = (u.id || '').toLowerCase().trim();
+
+      return (
+        email === cleanInput ||
+        name === cleanInput ||
+        name.includes(cleanInput) ||
+        cleanInput.includes(name) ||
+        id === cleanInput
+      );
+    });
+
+    if (!targetUser) {
+      return { success: false, error: `User ID / Person Name "${emailOrName}" not found in system.` };
+    }
+
+    if (targetUser.password && targetUser.password !== cleanPass) {
       return { success: false, error: 'Invalid password. Default password is 1234 unless updated by Admin.' };
     }
 
