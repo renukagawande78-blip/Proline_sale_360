@@ -9,6 +9,7 @@ import { OrdersPage } from './pages/OrdersPage';
 import { DispatchPage } from './pages/DispatchPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { MastersPage } from './pages/MastersPage';
 import { CreateOrderModal } from './components/CreateOrderModal';
 import { OrderApprovalModal } from './components/OrderApprovalModal';
 import { DispatchModal } from './components/DispatchModal';
@@ -152,13 +153,17 @@ const MainLayout: React.FC = () => {
           />
         )}
 
-        {(currentTab === 'approvals' || currentTab === 'masters') && (
+        {currentTab === 'approvals' && (
           <OrdersPage 
             orders={orders.filter(o => o.status === 'SUBMITTED' || o.status === 'HELD')} 
             onOpenCreateOrder={() => setIsCreateOpen(true)}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
             onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
           />
+        )}
+
+        {currentTab === 'masters' && (
+          <MastersPage />
         )}
 
         {currentTab === 'dispatch' && (

@@ -2,6 +2,7 @@ export type RoleName =
   | 'SUPER_ADMIN'
   | 'SYSTEM_ADMIN'
   | 'ACCOUNTS'
+  | 'SALES_ADMIN'
   | 'BILLING'
   | 'DISPATCH_MANAGER'
   | 'AREA_SALES_MANAGER'
@@ -21,10 +22,12 @@ export type OrderStatus =
 
 export interface User {
   id: string;
+  sno?: number;
   email: string;
   full_name: string;
   phone?: string;
   role_name: RoleName;
+  company_handle?: string;
   password?: string;
   active?: boolean;
 }
