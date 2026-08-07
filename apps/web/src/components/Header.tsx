@@ -170,12 +170,12 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenUse
         {/* User Profile Summary */}
         <div className="user-profile-badge" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#0f172a', padding: '0.4rem 0.75rem', borderRadius: 10, border: '1px solid #334155' }}>
           <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #38bdf8, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '0.75rem' }}>
-            {currentUser.full_name.charAt(0)}
+            {currentUser.full_name ? currentUser.full_name.charAt(0) : 'U'}
           </div>
           <div>
             <div style={{ fontWeight: 700, fontSize: '0.825rem', color: '#f8fafc' }}>{currentUser.full_name}</div>
           </div>
-          <span className="role-pill" style={{ marginLeft: 4 }}>{currentUser.role_name.replace('_', ' ')}</span>
+          <span className="role-pill" style={{ marginLeft: 4 }}>{(currentUser.role_name || '').replace(/_/g, ' ')}</span>
         </div>
 
         {/* 3-DOT MENU BUTTON & POPUP DROPDOWN */}
@@ -225,7 +225,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenUse
                 <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#f8fafc' }}>{currentUser.full_name}</div>
                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>{currentUser.email}</div>
                 <div style={{ marginTop: 6, display: 'inline-block', fontSize: '0.675rem', fontWeight: 800, color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '0.2rem 0.55rem', borderRadius: 6, border: '1px solid rgba(56, 189, 248, 0.2)' }}>
-                  Active Role: {currentUser.role_name.replace('_', ' ')}
+                  Active Role: {(currentUser.role_name || '').replace(/_/g, ' ')}
                 </div>
               </div>
 
