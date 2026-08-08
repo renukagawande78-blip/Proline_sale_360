@@ -10,6 +10,7 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { PermissionControl } from '../types';
 
 interface SidebarProps {
   currentTab: string;
@@ -19,22 +20,25 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, isOpen, onCloseMobile }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ALL'] },
-    { id: 'orders', label: 'Sales Orders', icon: ShoppingCart, roles: ['ALL'] },
-    { id: 'approvals', label: 'System Admin Approvals', icon: CheckCircle2, roles: ['SUPER_ADMIN', 'SYSTEM_ADMIN'] },
-    { id: 'dispatch', label: 'Dispatch Management', icon: Truck, roles: ['SUPER_ADMIN', 'DISPATCH_MANAGER', 'SYSTEM_ADMIN'] },
-    { id: 'accounts', label: 'Accounts & Billing', icon: Receipt, roles: ['SUPER_ADMIN', 'ACCOUNTS', 'BILLING'] },
-    { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, roles: ['ALL'] },
-    { id: 'masters', label: 'Master Data', icon: Building2, roles: ['SUPER_ADMIN', 'SYSTEM_ADMIN'] }
+  const navItems: { id: string; label: string; icon: any; permissionKey?: keyof PermissionControl; fallbackRoles: string[] }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, fallbackRoles: ['ALL'] },
+    { id: 'orders', label: 'Sales Orders', icon: ShoppingCart, fallbackRoles: ['ALL'] },
+    { id: 'approvals', label: 'System Admin Approvals', icon: CheckCircle2, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'SALES_ADMIN'] },
+    { id: 'dispatch', label: 'Dispatch Management', icon: Truck, permissionKey: 'order_transfer_to_dispatch', fallbackRoles: ['SUPER_ADMIN', 'DISPATCH_MANAGER', 'SYSTEM_ADMIN', 'BILLING', 'SALES_ADMIN'] },
+    { id: 'accounts', label: 'Accounts & Billing', icon: Receipt, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'ACCOUNTS', 'BILLING', 'SYSTEM_ADMIN'] },
+    { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, fallbackRoles: ['ALL'] },
+    { id: 'masters', label: 'Master Data', icon: Building2, permissionKey: 'party_view', fallbackRoles: ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'SALES_ADMIN'] }
   ];
 
-  const filteredNav = navItems.filter(item => 
-    item.roles.includes('ALL') || item.roles.includes(role)
-  );
+  const filteredNav = navItems.filter(item => {
+    if (role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN') return true;
+    if (item.fallbackRoles.includes('ALL')) return true;
+    if (item.permissionKey && hasPermission(item.permissionKey)) return true;
+    return item.fallbackRoles.includes(role);
+  });
 
   const handleSelectTab = (tabId: string) => {
     onTabChange(tabId);

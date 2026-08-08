@@ -20,6 +20,21 @@ export type OrderStatus =
   | 'COMPLETED'
   | 'CANCELLED';
 
+export interface PermissionControl {
+  order_entry: boolean;                 // Order Entry / Add Sale
+  party_view: boolean;                  // Party / Agency View
+  new_party: boolean;                   // New Party Creation
+  product_mgmt: boolean;                // Product Master Management
+  order_transfer_to_billing: boolean;   // Order Transfer to Billing
+  order_status_dashboard_all: boolean;  // Order Status Dashboard (All)
+  company_order_status_dashboard: boolean; // Align Company's Order Status Dashboard
+  company_order_form: boolean;          // Company's Order Form / Align
+  order_transfer_to_dispatch: boolean; // Order Transfer to Dispatch
+  order_transfer_out_for_delivery: boolean; // Order Transfer to Out for Delivery
+  pod_verification: boolean;            // Pod Verification
+  user_authority: boolean;              // User Passwords & Authority
+}
+
 export interface User {
   id: string;
   sno?: number;
@@ -30,6 +45,7 @@ export interface User {
   company_handle?: string;
   password?: string;
   active?: boolean;
+  permissions?: PermissionControl;
 }
 
 export interface Company {
@@ -49,14 +65,15 @@ export interface Agency {
   id: string;
   agency_code: string;
   agency_name: string;
-  company_id: string;
-  area_id: string;
+  company_id?: string;
+  area_id?: string;
   area_name?: string;
   city?: string;
-  address: string;
-  contact_person: string;
-  mobile: string;
-  email: string;
+  address?: string;
+  contact_person?: string;
+  mobile?: string;
+  email?: string;
+  gst_number?: string;
   credit_limit: number;
 }
 

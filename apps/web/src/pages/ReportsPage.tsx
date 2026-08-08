@@ -77,7 +77,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ orders }) => {
             rows.push([
               o.order_number,
               item.id,
-              item.product_name,
+              item.product_name || 'N/A',
               item.box_qty,
               item.loose_pcs,
               item.total_qty_pcs,

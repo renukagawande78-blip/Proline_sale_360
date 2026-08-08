@@ -10,9 +10,11 @@ interface DashboardPageProps {
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ orders = [], onOpenCreateOrder, onSelectOrder }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
   const fullName = currentUser?.full_name || 'User';
+
+  const canCreateOrder = hasPermission('order_entry') || hasPermission('company_order_form') || role === 'SALES_PERSON' || role === 'SYSTEM_ADMIN';
 
   const safeOrders = orders || [];
 
@@ -36,7 +38,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ orders = [], onOpe
           </p>
         </div>
 
-        {role === 'SALES_PERSON' && (
+        {canCreateOrder && (
           <button className="btn btn-primary" onClick={onOpenCreateOrder}>
             + Create New Agency Order
           </button>

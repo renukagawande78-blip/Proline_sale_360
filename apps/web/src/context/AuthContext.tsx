@@ -1,16 +1,110 @@
 import React, { createContext, useContext, useState } from 'react';
-import { RoleName, User } from '../types';
+import { RoleName, User, PermissionControl } from '../types';
 
-interface AuthContextType {
-  currentUser: User | null;
-  users: User[];
-  login: (emailOrName: string, passwordInput: string) => { success: boolean; error?: string };
-  logout: () => void;
-  switchRole: (role: RoleName) => void;
-  updateUserPassword: (userId: string, newPassword: string) => void;
-}
+export const getDefaultPermissions = (role: RoleName): PermissionControl => {
+  if (role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTS') {
+    return {
+      order_entry: true,
+      party_view: true,
+      new_party: true,
+      product_mgmt: true,
+      order_transfer_to_billing: true,
+      order_status_dashboard_all: true,
+      company_order_status_dashboard: true,
+      company_order_form: true,
+      order_transfer_to_dispatch: true,
+      order_transfer_out_for_delivery: true,
+      pod_verification: true,
+      user_authority: true
+    };
+  }
 
-const INITIAL_USERS: User[] = [
+  if (role === 'SALES_ADMIN') {
+    return {
+      order_entry: true,
+      party_view: true,
+      new_party: true,
+      product_mgmt: true,
+      order_transfer_to_billing: true,
+      order_status_dashboard_all: true,
+      company_order_status_dashboard: true,
+      company_order_form: true,
+      order_transfer_to_dispatch: true,
+      order_transfer_out_for_delivery: false,
+      pod_verification: true,
+      user_authority: false
+    };
+  }
+
+  if (role === 'BILLING') {
+    return {
+      order_entry: false,
+      party_view: true,
+      new_party: false,
+      product_mgmt: false,
+      order_transfer_to_billing: true,
+      order_status_dashboard_all: true,
+      company_order_status_dashboard: true,
+      company_order_form: false,
+      order_transfer_to_dispatch: true,
+      order_transfer_out_for_delivery: false,
+      pod_verification: true,
+      user_authority: false
+    };
+  }
+
+  if (role === 'DISPATCH_MANAGER') {
+    return {
+      order_entry: false,
+      party_view: true,
+      new_party: false,
+      product_mgmt: false,
+      order_transfer_to_billing: false,
+      order_status_dashboard_all: true,
+      company_order_status_dashboard: true,
+      company_order_form: false,
+      order_transfer_to_dispatch: true,
+      order_transfer_out_for_delivery: true,
+      pod_verification: true,
+      user_authority: false
+    };
+  }
+
+  if (role === 'AREA_SALES_MANAGER') {
+    return {
+      order_entry: true,
+      party_view: true,
+      new_party: false,
+      product_mgmt: false,
+      order_transfer_to_billing: false,
+      order_status_dashboard_all: false,
+      company_order_status_dashboard: true,
+      company_order_form: true,
+      order_transfer_to_dispatch: false,
+      order_transfer_out_for_delivery: false,
+      pod_verification: false,
+      user_authority: false
+    };
+  }
+
+  // DEFAULT SALES_PERSON
+  return {
+    order_entry: true,
+    party_view: true,
+    new_party: false,
+    product_mgmt: false,
+    order_transfer_to_billing: false,
+    order_status_dashboard_all: false,
+    company_order_status_dashboard: true,
+    company_order_form: true,
+    order_transfer_to_dispatch: false,
+    order_transfer_out_for_delivery: false,
+    pod_verification: false,
+    user_authority: false
+  };
+};
+
+const SEED_USERS: User[] = [
   { sno: 1, id: 'u01', full_name: 'Chirag', email: 'chirag@proline.com', role_name: 'SYSTEM_ADMIN', company_handle: 'All', password: '1234', active: true },
   { sno: 2, id: 'u02', full_name: 'Harshad', email: 'harshad@proline.com', role_name: 'ACCOUNTS', company_handle: 'All', password: '1234', active: true },
   { sno: 3, id: 'u03', full_name: 'Jay', email: 'jay@proline.com', role_name: 'SALES_ADMIN', company_handle: 'Pringod, RCPL, Orion, Gandour, HPPL', password: '1234', active: true },
@@ -44,11 +138,27 @@ const INITIAL_USERS: User[] = [
   { sno: 31, id: 'u31', full_name: 'Taral', email: 'taral@proline.com', role_name: 'SALES_PERSON', company_handle: 'Daikin, Cruise, AK', password: '1234', active: true }
 ];
 
+const INITIAL_USERS: User[] = SEED_USERS.map(u => ({
+  ...u,
+  permissions: getDefaultPermissions(u.role_name)
+}));
+
+interface AuthContextType {
+  currentUser: User | null;
+  users: User[];
+  login: (emailOrName: string, passwordInput: string) => { success: boolean; error?: string };
+  logout: () => void;
+  switchRole: (role: RoleName) => void;
+  updateUserPassword: (userId: string, newPassword: string) => void;
+  updateUserPermissions: (userId: string, newPermissions: PermissionControl) => void;
+  hasPermission: (key: keyof PermissionControl) => boolean;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
-  const [currentUser, setCurrentUser] = useState<User | null>(null); // Initialized to null to show Login view first
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const login = (emailOrName: string, passwordInput: string) => {
     const cleanInput = (emailOrName || '').trim().toLowerCase();
@@ -80,7 +190,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Invalid password. Default password is 1234 unless updated by Admin.' };
     }
 
-    setCurrentUser(targetUser);
+    // Ensure permissions attached
+    const userWithPerms = {
+      ...targetUser,
+      permissions: targetUser.permissions || getDefaultPermissions(targetUser.role_name)
+    };
+
+    setCurrentUser(userWithPerms);
     return { success: true };
   };
 
@@ -91,7 +207,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const switchRole = (role: RoleName) => {
     const roleUser = users.find(u => u.role_name === role);
     if (roleUser) {
-      setCurrentUser(roleUser);
+      const userWithPerms = {
+        ...roleUser,
+        permissions: roleUser.permissions || getDefaultPermissions(roleUser.role_name)
+      };
+      setCurrentUser(userWithPerms);
     }
   };
 
@@ -102,8 +222,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateUserPermissions = (userId: string, newPermissions: PermissionControl) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions: newPermissions } : u));
+    if (currentUser && currentUser.id === userId) {
+      setCurrentUser(prev => prev ? { ...prev, permissions: newPermissions } : null);
+    }
+  };
+
+  const hasPermission = (key: keyof PermissionControl): boolean => {
+    if (!currentUser) return false;
+    if (currentUser.role_name === 'SYSTEM_ADMIN' || currentUser.role_name === 'SUPER_ADMIN') return true;
+    const perms = currentUser.permissions || getDefaultPermissions(currentUser.role_name);
+    return !!perms[key];
+  };
+
   return (
-    <AuthContext.Provider value={{ currentUser, users, login, logout, switchRole, updateUserPassword }}>
+    <AuthContext.Provider value={{ 
+      currentUser, 
+      users, 
+      login, 
+      logout, 
+      switchRole, 
+      updateUserPassword, 
+      updateUserPermissions, 
+      hasPermission 
+    }}>
       {children}
     </AuthContext.Provider>
   );

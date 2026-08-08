@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Component, ErrorInfo, ReactNode } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { Sidebar } from './components/Sidebar';
@@ -14,8 +14,55 @@ import { CreateOrderModal } from './components/CreateOrderModal';
 import { OrderApprovalModal } from './components/OrderApprovalModal';
 import { DispatchModal } from './components/DispatchModal';
 import { OrderInvoiceModal } from './components/OrderInvoiceModal';
+import { UserManagementModal } from './components/UserManagementModal';
 import { INITIAL_ORDERS } from './lib/supabase';
 import { Order } from './types';
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorText: string;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, errorText: '' };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, errorText: error?.toString() || 'Unknown Error' };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Proline OMS ErrorBoundary caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '2.5rem', color: '#fb7185', background: '#0f172a', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc' }}>⚠️ System Console Component Exception</h2>
+          <p style={{ color: '#94a3b8', marginTop: 8 }}>The console encountered a runtime error during component rendering:</p>
+          <pre style={{ background: '#1e293b', border: '1px solid #334155', padding: '1.25rem', borderRadius: 10, marginTop: '1.25rem', color: '#38bdf8', fontSize: '0.9rem', overflowX: 'auto' }}>
+            {this.state.errorText}
+          </pre>
+          <button 
+            onClick={() => window.location.reload()} 
+            style={{ marginTop: '1.5rem', padding: '0.75rem 1.5rem', background: '#38bdf8', color: '#0f172a', border: 'none', borderRadius: 8, fontWeight: 800, cursor: 'pointer' }}
+          >
+            Reload Proline OMS Console
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const MainLayout: React.FC = () => {
   const { currentUser } = useAuth();
@@ -221,10 +268,12 @@ const MainLayout: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <NotificationProvider>
-        <MainLayout />
-      </NotificationProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <NotificationProvider>
+          <MainLayout />
+        </NotificationProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 };
