@@ -219,6 +219,9 @@ interface AuthContextType {
   login: (emailOrName: string, passwordInput: string) => { success: boolean; error?: string };
   logout: () => void;
   switchRole: (role: RoleName) => void;
+  switchUserById: (userId: string) => void;
+  createUser: (userData: Omit<User, 'id'>) => void;
+  updateUser: (userId: string, updatedData: Partial<User>) => void;
   updateUserPassword: (userId: string, newPassword: string) => void;
   updateUserPermissions: (userId: string, newPermissions: PermissionControl) => void;
   assignUserPermissionGroup: (userId: string, groupId: string) => void;
@@ -232,7 +235,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [permissionGroups, setPermissionGroups] = useState<PermissionGroup[]>(INITIAL_PERMISSION_GROUPS);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(INITIAL_USERS[0]);
 
   const login = (emailOrName: string, passwordInput: string) => {
     const cleanInput = (emailOrName || '').trim().toLowerCase();
@@ -258,6 +261,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (!targetUser) {
       return { success: false, error: `User ID / Person Name "${emailOrName}" not found in system.` };
+    }
+
+    if (targetUser.active === false) {
+      return { success: false, error: `❌ Account Suspended: The user account for "${targetUser.full_name}" is currently INACTIVE. Contact System Admin.` };
     }
 
     if (targetUser.password && targetUser.password !== cleanPass) {
@@ -286,6 +293,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         permissions: roleUser.permissions || getDefaultPermissions(roleUser.role_name)
       };
       setCurrentUser(userWithPerms);
+    }
+  };
+
+  const createUser = (newUserData: Omit<User, 'id'>) => {
+    const newUser: User = {
+      ...newUserData,
+      id: 'u_' + (users.length + 1).toString().padStart(2, '0'),
+      sno: users.length + 1,
+      active: newUserData.active ?? true,
+      permissions: newUserData.permissions || getDefaultPermissions(newUserData.role_name)
+    };
+    setUsers(prev => [...prev, newUser]);
+  };
+
+  const updateUser = (userId: string, updatedData: Partial<User>) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        const next = { ...u, ...updatedData };
+        if (updatedData.role_name && !updatedData.permissions) {
+          next.permissions = getDefaultPermissions(updatedData.role_name);
+        }
+        return next;
+      }
+      return u;
+    }));
+
+    if (currentUser && currentUser.id === userId) {
+      setCurrentUser(prev => prev ? { ...prev, ...updatedData } : null);
     }
   };
 
@@ -365,6 +400,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return !!perms[targetKey];
   };
 
+  const switchUserById = (userId: string) => {
+    const targetUser = users.find(u => u.id === userId);
+    if (targetUser) {
+      const userWithPerms = {
+        ...targetUser,
+        permissions: targetUser.permissions || getDefaultPermissions(targetUser.role_name)
+      };
+      setCurrentUser(userWithPerms);
+    }
+  };
+
   return (
     <AuthContext.Provider value={{ 
       currentUser, 
@@ -373,6 +419,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       login, 
       logout, 
       switchRole, 
+      switchUserById,
+      createUser,
+      updateUser,
       updateUserPassword, 
       updateUserPermissions, 
       assignUserPermissionGroup,

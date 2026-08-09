@@ -17,6 +17,10 @@ export type OrderStatus =
   | 'DISPATCH_PENDING'
   | 'PARTIALLY_DISPATCHED'
   | 'DISPATCHED'
+  | 'BILLED'
+  | 'READY_FOR_PICKUP'
+  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED'
   | 'COMPLETED'
   | 'CANCELLED';
 
@@ -60,12 +64,16 @@ export interface User {
   password?: string;
   active?: boolean;
   permissions?: PermissionControl;
+  assigned_segment?: SegmentType | 'ALL';
 }
+
+export type SegmentType = 'FMCG' | 'FMCD';
 
 export interface Company {
   id: string;
   company_code: string;
   company_name: string;
+  segment?: SegmentType;
 }
 
 export interface Area {
@@ -73,6 +81,29 @@ export interface Area {
   area_code: string;
   area_name: string;
   region: string;
+}
+
+export type ZoneRegion = 'Surat City Zone' | 'South Gujarat Rural Zone';
+
+export type ZoneName =
+  | 'City-A'
+  | 'City-B'
+  | 'City-C'
+  | 'City-D'
+  | 'City-E'
+  | 'Upper South'
+  | 'South'
+  | 'East'
+  | 'North';
+
+export interface ZoneMaster {
+  id: string;
+  zone_code: string;
+  zone_name: ZoneName;
+  region: ZoneRegion;
+  major_areas: string[];
+  description?: string;
+  agency_count?: number;
 }
 
 export interface Agency {
@@ -88,15 +119,45 @@ export interface Agency {
   mobile?: string;
   email?: string;
   gst_number?: string;
+  gstin?: string;
+  account_group?: string;
   credit_limit: number;
+  zone_id?: string;
+  zone_name?: string;
+  zone_region?: string;
+  bank_name?: string;
+  account_number?: string;
+  ifsc_code?: string;
+  branch_name?: string;
+  assigned_salesperson?: string;
+  active?: boolean;
 }
 
 export interface AgencyFinancials {
   agency_id: string;
+  agency_name?: string;
+  credit_limit?: number;
+  current_outstanding?: number;
   outstanding_amount: number;
   overdue_amount: number;
-  advance_amount: number;
-  oldest_overdue_days: number;
+  advance_amount?: number;
+  oldest_overdue_days?: number;
+  available_credit?: number;
+  credit_score?: number;
+  payment_terms_days?: number;
+  accounts_clearance_status?: string;
+  account_type?: string;
+  remarks?: string;
+  updated_at?: string;
+  updated_by_name?: string;
+}
+
+export interface MRPHistoryEntry {
+  previous_mrp: number;
+  new_mrp: number;
+  updated_at: string;
+  updated_by: string;
+  reason?: string;
 }
 
 export interface Product {
@@ -106,6 +167,16 @@ export interface Product {
   product_name: string;
   pcs_per_box: number;
   unit_price: number;
+  mrp_price?: number;
+  previous_mrp?: number;
+  mrp_updated_at?: string;
+  mrp_updated_by?: string;
+  mrp_history?: MRPHistoryEntry[];
+  stock_box_qty?: number;
+  stock_loose_pcs?: number;
+  total_stock_pcs?: number;
+  reserved_stock_pcs?: number;
+  segment?: 'FMCG' | 'FMEG';
 }
 
 export interface OrderItem {
@@ -147,6 +218,36 @@ export interface Order {
   items?: OrderItem[];
   hold_reason?: string;
   hold_remarks?: string;
+  approved_by_name?: string;
+  approved_at?: string;
+  invoice_number?: string;
+  invoice_date?: string;
+  invoice_amount?: number;
+  return_request?: ReturnRequest;
+}
+
+export type ReturnType = 'REPLACEMENT' | 'DAMAGED_RETURN';
+
+export interface ReturnRequestItem {
+  order_item_id: string;
+  product_name: string;
+  requested_qty_pcs: number;
+  replaced_qty_pcs?: number;
+  damaged_returned_qty_pcs?: number;
+}
+
+export interface ReturnRequest {
+  id: string;
+  order_id: string;
+  return_type: ReturnType;
+  reason: string;
+  status: 'PENDING_ADMIN_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DISPATCH_PROCESSED';
+  requested_by_name: string;
+  requested_at: string;
+  approved_by_name?: string;
+  approved_at?: string;
+  items: ReturnRequestItem[];
+  dispatch_notes?: string;
 }
 
 export interface HoldReason {
@@ -180,4 +281,23 @@ export interface NotificationItem {
   dispatch_id?: string;
   is_read: boolean;
   created_at: string;
+}
+
+export type DateRangeType = 'ALL_DATES' | 'TODAY' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR' | 'CUSTOM';
+
+export interface GlobalFilterState {
+  segment: 'ALL' | 'FMCG' | 'FMCD';
+  companyId: string;
+  status: string;
+  salespersonId: string;
+  agencyId: string;
+  areaId: string;
+  city: string;
+  zoneId?: string;
+  productId: string;
+  mrpRange: 'ALL' | 'UNDER_50' | '50_500' | '500_5000' | 'ABOVE_5000';
+  dateRangeType: DateRangeType;
+  startDate?: string;
+  endDate?: string;
+  isActive: boolean;
 }

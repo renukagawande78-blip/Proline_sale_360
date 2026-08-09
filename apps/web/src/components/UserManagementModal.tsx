@@ -1,17 +1,48 @@
 import React, { useState } from 'react';
-import { X, Key, ShieldCheck, Check, Search, Sliders, ToggleLeft, ToggleRight, Layers, Plus, UserCheck } from 'lucide-react';
+import { X, Key, ShieldCheck, Check, Search, Sliders, ToggleLeft, ToggleRight, Layers, Plus, UserCheck, UserPlus, Edit, Phone, Mail, Building, Lock } from 'lucide-react';
 import { useAuth, getDefaultPermissions } from '../context/AuthContext';
-import { PermissionControl, PermissionGroup } from '../types';
+import { PermissionControl, RoleName, User } from '../types';
+import { MOCK_COMPANIES } from '../lib/supabase';
 
 interface UserManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+const ALL_ROLES: { role: RoleName; label: string }[] = [
+  { role: 'SYSTEM_ADMIN', label: 'System Admin (Full Company & Order Operations)' },
+  { role: 'ACCOUNTS', label: 'Accounts & Finance Manager' },
+  { role: 'DISPATCH_MANAGER', label: 'Warehouse & Dispatch Manager' },
+  { role: 'AREA_SALES_MANAGER', label: 'Area Sales Manager (ASM)' },
+  { role: 'SALES_PERSON', label: 'Sales Person / Field Executive' },
+  { role: 'SALES_ADMIN', label: 'Sales Admin' },
+  { role: 'BILLING', label: 'Billing Clerk' },
+  { role: 'SUPER_ADMIN', label: 'Super Admin (Chirag Sir Executive)' }
+];
+
+const MASTER_BRANDS = [
+  { handle: 'All', name: 'All Brands (Unrestricted)' },
+  { handle: 'Pringod', name: 'Priyagold (Pringod)' },
+  { handle: 'RCPL', name: 'RCPL' },
+  { handle: 'Orion', name: 'Orion' },
+  { handle: 'Gandour', name: 'Gandour' },
+  { handle: 'HPPL', name: 'HPPL' },
+  { handle: 'Whirlpool', name: 'Whirlpool' },
+  { handle: 'Daikin', name: 'Daikin' },
+  { handle: 'Cruise', name: 'Cruise' },
+  { handle: 'Mogu', name: 'Mogu Mogu' },
+  { handle: 'Heli', name: 'Heli' },
+  { handle: 'Waiwai', name: 'Waiwai' },
+  { handle: 'PRAN', name: 'PRAN' },
+  { handle: 'AK', name: 'AK Group' }
+];
+
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
   const { 
     users, 
     permissionGroups, 
+    createUser,
+    updateUser,
     updateUserPassword, 
     updateUserPermissions, 
     assignUserPermissionGroup,
@@ -19,13 +50,39 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     updatePermissionGroup 
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'groups' | 'permissions' | 'users'>('groups');
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [newPassword, setNewPassword] = useState('');
+  const [activeTab, setActiveTab] = useState<'users' | 'groups' | 'permissions'>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // New Permission Group Form
+  // User Registration & Editing Form State
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+
+  const [formData, setFormData] = useState<{
+    full_name: string;
+    email: string;
+    phone: string;
+    role_name: RoleName;
+    permission_group_id: string;
+    password: string;
+    active: boolean;
+    company_handles: string[];
+  }>({
+    full_name: '',
+    email: '',
+    phone: '+91 ',
+    role_name: 'SALES_PERSON',
+    permission_group_id: 'pg_sales_person',
+    password: '1234',
+    active: true,
+    company_handles: ['Pringod']
+  });
+
+  // Password reset inline state
+  const [passwordResetUserId, setPasswordResetUserId] = useState<string | null>(null);
+  const [inlineNewPassword, setInlineNewPassword] = useState('');
+
+  // Permission Group Form State
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDesc, setNewGroupDesc] = useState('');
@@ -33,12 +90,112 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
   if (!isOpen) return null;
 
-  const handlePasswordChange = (userId: string) => {
-    if (!newPassword.trim()) return;
-    updateUserPassword(userId, newPassword.trim());
+  const handleOpenRegisterForm = () => {
+    setEditingUserId(null);
+    setFormData({
+      full_name: '',
+      email: '',
+      phone: '+91 ',
+      role_name: 'SALES_PERSON',
+      permission_group_id: permissionGroups[0]?.id || 'pg_sales_person',
+      password: '1234',
+      active: true,
+      company_handles: ['Pringod']
+    });
+    setIsRegisterOpen(true);
+  };
+
+  const handleOpenEditForm = (user: User) => {
+    setEditingUserId(user.id);
+    const existingHandles = user.company_handle 
+      ? user.company_handle.split(',').map(s => s.trim()) 
+      : ['All'];
+      
+    setFormData({
+      full_name: user.full_name,
+      email: user.email || '',
+      phone: user.phone || '+91 ',
+      role_name: user.role_name,
+      permission_group_id: user.permission_group_id || permissionGroups[0]?.id || '',
+      password: user.password || '1234',
+      active: user.active !== false,
+      company_handles: existingHandles
+    });
+    setIsRegisterOpen(true);
+  };
+
+  const handleToggleBrandHandle = (handle: string) => {
+    setFormData(prev => {
+      let current = [...prev.company_handles];
+      if (handle === 'All') {
+        return { ...prev, company_handles: ['All'] };
+      }
+      current = current.filter(h => h !== 'All');
+      if (current.includes(handle)) {
+        current = current.filter(h => h !== handle);
+      } else {
+        current.push(handle);
+      }
+      if (current.length === 0) current = ['All'];
+      return { ...prev, company_handles: current };
+    });
+  };
+
+  const handleSubmitUserForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.full_name.trim()) return;
+
+    const groupObj = permissionGroups.find(g => g.id === formData.permission_group_id);
+    const companyHandleStr = formData.company_handles.join(', ');
+
+    if (editingUserId) {
+      // Update existing user
+      updateUser(editingUserId, {
+        full_name: formData.full_name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        role_name: formData.role_name,
+        permission_group_id: formData.permission_group_id,
+        permission_group_name: groupObj?.group_name,
+        company_handle: companyHandleStr,
+        password: formData.password.trim(),
+        active: formData.active
+      });
+      setSuccessMsg(`User profile for "${formData.full_name}" updated successfully!`);
+    } else {
+      // Register brand new user
+      createUser({
+        full_name: formData.full_name.trim(),
+        email: formData.email.trim() || `${formData.full_name.toLowerCase().replace(/\s+/g, '')}@proline.com`,
+        phone: formData.phone.trim(),
+        role_name: formData.role_name,
+        permission_group_id: formData.permission_group_id,
+        permission_group_name: groupObj?.group_name,
+        company_handle: companyHandleStr,
+        password: formData.password.trim() || '1234',
+        active: formData.active,
+        permissions: groupObj ? { ...groupObj.permissions } : getDefaultPermissions(formData.role_name)
+      });
+      setSuccessMsg(`New user "${formData.full_name}" registered & mapped successfully!`);
+    }
+
+    setIsRegisterOpen(false);
+    setTimeout(() => setSuccessMsg(null), 3000);
+  };
+
+  const handleToggleAccountActive = (user: User) => {
+    const nextStatus = user.active === false;
+    updateUser(user.id, { active: nextStatus });
+    setSuccessMsg(`User ${user.full_name} is now ${nextStatus ? '🟢 ACTIVE' : '🔴 INACTIVE'}!`);
+    setTimeout(() => setSuccessMsg(null), 2500);
+  };
+
+  const handleSaveInlinePassword = (userId: string) => {
+    if (!inlineNewPassword.trim()) return;
+    updateUserPassword(userId, inlineNewPassword.trim());
     setSuccessMsg(`Password updated successfully!`);
-    setSelectedUserId(null);
-    setNewPassword('');
+    setPasswordResetUserId(null);
+    setInlineNewPassword('');
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
@@ -90,7 +247,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     const roleMatch = u.role_name.toLowerCase().includes(q);
     const groupMatch = (u.permission_group_name || '').toLowerCase().includes(q);
     const companyMatch = (u.company_handle || '').toLowerCase().includes(q);
-    return nameMatch || roleMatch || groupMatch || companyMatch;
+    const emailMatch = (u.email || '').toLowerCase().includes(q);
+    const phoneMatch = (u.phone || '').toLowerCase().includes(q);
+    return nameMatch || roleMatch || groupMatch || companyMatch || emailMatch || phoneMatch;
   });
 
   const PERMISSION_CONFIG: { key: keyof PermissionControl; label: string; desc: string; category: string }[] = [
@@ -113,7 +272,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
   return (
     <div className="modal-overlay">
-      <div className="modal-card" style={{ maxWidth: 1250, width: '96vw' }}>
+      <div className="modal-card" style={{ maxWidth: 1300, width: '97vw', maxHeight: '92vh', overflowY: 'auto' }}>
         
         {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.75rem' }}>
@@ -121,10 +280,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
             <ShieldCheck color="#38bdf8" size={26} />
             <div>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
-                Permission Master & Group Authority Control Console
+                User Management, Brand Mapping & Access Authority Console
               </h2>
               <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                Define Permission Groups (Add, View, Cancel, Delete Order) & Assign 31 Team Members
+                Register Team Users, Map Master Brands, Assign System Roles & Permission Groups, Change Passwords & Manage Active/Inactive Accounts
               </p>
             </div>
           </div>
@@ -133,49 +292,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
           </button>
         </div>
 
-        {/* Tab Navigation Toolbar */}
+        {/* Navigation Toolbar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', background: '#0f172a', padding: 4, borderRadius: 10, border: '1px solid #334155' }}>
             <button 
-              onClick={() => setActiveTab('groups')}
-              style={{
-                padding: '0.45rem 1rem',
-                borderRadius: 8,
-                border: 'none',
-                background: activeTab === 'groups' ? '#38bdf8' : 'transparent',
-                color: activeTab === 'groups' ? '#0f172a' : '#94a3b8',
-                fontWeight: 800,
-                fontSize: '0.825rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem'
-              }}
-            >
-              <Layers size={16} /> 1. Permission Group Master ({permissionGroups.length})
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('permissions')}
-              style={{
-                padding: '0.45rem 1rem',
-                borderRadius: 8,
-                border: 'none',
-                background: activeTab === 'permissions' ? '#38bdf8' : 'transparent',
-                color: activeTab === 'permissions' ? '#0f172a' : '#94a3b8',
-                fontWeight: 800,
-                fontSize: '0.825rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem'
-              }}
-            >
-              <Sliders size={16} /> 2. User Permission Matrix (Yes / No)
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('users')}
+              onClick={() => { setActiveTab('users'); setIsRegisterOpen(false); }}
               style={{
                 padding: '0.45rem 1rem',
                 borderRadius: 8,
@@ -190,19 +311,67 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 gap: '0.4rem'
               }}
             >
-              <UserCheck size={16} /> 3. Assign Group & Passwords ({users.length})
+              <UserCheck size={16} /> 1. Team User Directory ({users.length})
+            </button>
+
+            <button 
+              onClick={() => { setActiveTab('groups'); setIsRegisterOpen(false); }}
+              style={{
+                padding: '0.45rem 1rem',
+                borderRadius: 8,
+                border: 'none',
+                background: activeTab === 'groups' ? '#38bdf8' : 'transparent',
+                color: activeTab === 'groups' ? '#0f172a' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.825rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
+            >
+              <Layers size={16} /> 2. Permission Groups ({permissionGroups.length})
+            </button>
+
+            <button 
+              onClick={() => { setActiveTab('permissions'); setIsRegisterOpen(false); }}
+              style={{
+                padding: '0.45rem 1rem',
+                borderRadius: 8,
+                border: 'none',
+                background: activeTab === 'permissions' ? '#38bdf8' : 'transparent',
+                color: activeTab === 'permissions' ? '#0f172a' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.825rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
+            >
+              <Sliders size={16} /> 3. Permission Matrix
             </button>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.45rem 0.85rem', gap: '0.5rem', flex: 1, maxWidth: 360 }}>
-            <Search size={16} color="#38bdf8" />
-            <input 
-              type="text"
-              placeholder="Search member, group, or role..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              style={{ background: 'transparent', border: 'none', color: 'white', width: '100%', outline: 'none', fontSize: '0.85rem' }}
-            />
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flex: 1, maxWidth: 500 }}>
+            <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.45rem 0.85rem', gap: '0.5rem', width: '100%' }}>
+              <Search size={16} color="#38bdf8" />
+              <input 
+                type="text"
+                placeholder="Search by name, email, mobile, brand, or role..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ background: 'transparent', border: 'none', color: 'white', width: '100%', outline: 'none', fontSize: '0.85rem' }}
+              />
+            </div>
+            
+            <button 
+              className="btn btn-primary"
+              onClick={handleOpenRegisterForm}
+              style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', fontWeight: 800, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              <UserPlus size={16} /> Register New User
+            </button>
           </div>
         </div>
 
@@ -212,7 +381,311 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
           </div>
         )}
 
-        {/* TAB 1: PERMISSION GROUP MASTER */}
+        {/* User Registration & Edit Form Card */}
+        {isRegisterOpen && (
+          <form onSubmit={handleSubmitUserForm} style={{ background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 12, padding: '1.25rem', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.5rem' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <UserPlus size={18} /> {editingUserId ? 'Edit User Profile & Brand Mappings' : 'Register New Team Member & Map Brands'}
+              </h3>
+              <button type="button" onClick={() => setIsRegisterOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+              {/* Full Name */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fbbf24', display: 'block', marginBottom: 4 }}>
+                  FULL PERSON NAME *
+                </label>
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="e.g. Rohan Sharma"
+                  value={formData.full_name} 
+                  onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                  style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', padding: '0.55rem', borderRadius: 6, color: 'white', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fbbf24', display: 'block', marginBottom: 4 }}>
+                  EMAIL ADDRESS *
+                </label>
+                <input 
+                  type="email" 
+                  required 
+                  placeholder="rohan@priyagold.com"
+                  value={formData.email} 
+                  onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', padding: '0.55rem', borderRadius: 6, color: 'white', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              {/* Mobile Phone */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fbbf24', display: 'block', marginBottom: 4 }}>
+                  MOBILE PHONE NUMBER
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="+91 98765 43210"
+                  value={formData.phone} 
+                  onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', padding: '0.55rem', borderRadius: 6, color: 'white', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fbbf24', display: 'block', marginBottom: 4 }}>
+                  LOGIN PASSWORD *
+                </label>
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="1234"
+                  value={formData.password} 
+                  onChange={e => setFormData({ ...formData, password: e.target.value })}
+                  style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', padding: '0.55rem', borderRadius: 6, color: '#fbbf24', fontWeight: 700, fontSize: '0.85rem' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+              {/* System Role */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                  ASSIGN SYSTEM ROLE
+                </label>
+                <select
+                  value={formData.role_name}
+                  onChange={e => setFormData({ ...formData, role_name: e.target.value as RoleName })}
+                  style={{ width: '100%', background: '#1e293b', border: '1px solid #38bdf8', padding: '0.55rem', borderRadius: 6, color: '#38bdf8', fontWeight: 700, fontSize: '0.825rem' }}
+                >
+                  {ALL_ROLES.map(r => (
+                    <option key={r.role} value={r.role}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Permission Group */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                  ASSIGN PERMISSION GROUP
+                </label>
+                <select
+                  value={formData.permission_group_id}
+                  onChange={e => setFormData({ ...formData, permission_group_id: e.target.value })}
+                  style={{ width: '100%', background: '#1e293b', border: '1px solid #34d399', padding: '0.55rem', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem' }}
+                >
+                  {permissionGroups.map(g => (
+                    <option key={g.id} value={g.id}>{g.group_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Account Status Toggle */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                  ACCOUNT ACCESS STATUS
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, active: !formData.active })}
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem',
+                    borderRadius: 6,
+                    border: formData.active ? '1px solid #10b981' : '1px solid #f43f5e',
+                    background: formData.active ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                    color: formData.active ? '#34d399' : '#f43f5e',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  {formData.active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                  {formData.active ? '🟢 ACTIVE ACCOUNT (Can Login)' : '🔴 INACTIVE ACCOUNT (Suspended)'}
+                </button>
+              </div>
+            </div>
+
+            {/* Multi-Brand Mapping Grid */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#fbbf24', display: 'block', marginBottom: '0.5rem' }}>
+                MAP BRAND COMPANIES (CHECK ALL THAT USER CAN VIEW & MANAGE)
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {MASTER_BRANDS.map(b => {
+                  const isChecked = formData.company_handles.includes(b.handle);
+                  return (
+                    <button
+                      type="button"
+                      key={b.handle}
+                      onClick={() => handleToggleBrandHandle(b.handle)}
+                      style={{
+                        padding: '0.35rem 0.75rem',
+                        borderRadius: 20,
+                        border: isChecked ? '1px solid #38bdf8' : '1px solid #334155',
+                        background: isChecked ? 'rgba(56, 189, 248, 0.2)' : '#1e293b',
+                        color: isChecked ? '#38bdf8' : '#94a3b8',
+                        fontSize: '0.775rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                      }}
+                    >
+                      {isChecked && <Check size={14} />} {b.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button type="button" className="btn btn-outline" onClick={() => setIsRegisterOpen(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" style={{ fontWeight: 800 }}>
+                <Check size={16} /> {editingUserId ? 'Save User Updates' : 'Register & Create User'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* TAB 1: TEAM USER DIRECTORY & MANAGEMENT */}
+        {activeTab === 'users' && (
+          <div className="data-table-container" style={{ maxHeight: 460, overflowY: 'auto' }}>
+            <table className="data-table" style={{ fontSize: '0.8rem' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 50 }}>S.NO</th>
+                  <th>User Person Name & Contact</th>
+                  <th>System Role</th>
+                  <th>Mapped Brand Companies</th>
+                  <th>Permission Group</th>
+                  <th>Account Status</th>
+                  <th>Password</th>
+                  <th style={{ textAlign: 'center' }}>Admin Operations</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.map((u, idx) => {
+                  const isActive = u.active !== false;
+                  return (
+                    <tr key={u.id}>
+                      <td><strong style={{ color: '#38bdf8' }}>{u.sno || idx + 1}</strong></td>
+                      <td>
+                        <strong style={{ color: '#f8fafc', display: 'block', fontSize: '0.85rem' }}>{u.full_name}</strong>
+                        <span style={{ fontSize: '0.725rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.2rem', marginTop: 1 }}>
+                          <Mail size={11} /> {u.email || 'N/A'} {u.phone ? ` | 📱 ${u.phone}` : ''}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="role-pill" style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: 4, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700 }}>
+                          {u.role_name.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 700, background: 'rgba(52, 211, 153, 0.1)', padding: '0.2rem 0.5rem', borderRadius: 6, border: '1px solid rgba(52, 211, 153, 0.2)' }}>
+                          {u.company_handle || 'All Brands'}
+                        </span>
+                      </td>
+                      <td>
+                        <select
+                          value={u.permission_group_id || ''}
+                          onChange={e => assignUserPermissionGroup(u.id, e.target.value)}
+                          style={{ padding: '0.35rem 0.5rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontSize: '0.75rem', fontWeight: 700 }}
+                        >
+                          <option value="" disabled>Select Group...</option>
+                          {permissionGroups.map(g => (
+                            <option key={g.id} value={g.id}>{g.group_name}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <button
+                          onClick={() => handleToggleAccountActive(u)}
+                          style={{
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: 4,
+                            border: isActive ? '1px solid #10b981' : '1px solid #f43f5e',
+                            background: isActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                            color: isActive ? '#34d399' : '#f43f5e',
+                            fontSize: '0.7rem',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {isActive ? '🟢 ACTIVE' : '🔴 INACTIVE'}
+                        </button>
+                      </td>
+                      <td>
+                        <code style={{ background: '#0f172a', padding: '0.2rem 0.5rem', borderRadius: 4, color: '#fbbf24', fontWeight: 800 }}>{u.password || '1234'}</code>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                          <button 
+                            className="btn btn-outline"
+                            onClick={() => handleOpenEditForm(u)}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem' }}
+                            title="Edit User Info & Mappings"
+                          >
+                            <Edit size={13} /> Edit
+                          </button>
+
+                          {passwordResetUserId === u.id ? (
+                            <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                              <input 
+                                type="text" 
+                                value={inlineNewPassword}
+                                onChange={e => setInlineNewPassword(e.target.value)}
+                                placeholder="New pass..."
+                                style={{ padding: '0.25rem 0.4rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 4, color: 'white', fontSize: '0.75rem', width: 85 }}
+                              />
+                              <button 
+                                className="btn btn-success" 
+                                onClick={() => handleSaveInlinePassword(u.id)}
+                                style={{ padding: '0.25rem 0.4rem', fontSize: '0.7rem' }}
+                              >
+                                Save
+                              </button>
+                              <button 
+                                className="btn btn-outline" 
+                                onClick={() => setPasswordResetUserId(null)}
+                                style={{ padding: '0.25rem 0.3rem', fontSize: '0.7rem' }}
+                              >
+                                X
+                              </button>
+                            </div>
+                          ) : (
+                            <button 
+                              className="btn btn-primary" 
+                              onClick={() => { setPasswordResetUserId(u.id); setInlineNewPassword(u.password || '1234'); }}
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem' }}
+                              title="Reset Password"
+                            >
+                              <Key size={13} /> Pass
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* TAB 2: PERMISSION GROUP MASTER */}
         {activeTab === 'groups' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -248,7 +721,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>DESCRIPTION</label>
                     <input 
                       type="text" 
-                      placeholder="Describe what members of this group can do..." 
+                      placeholder="e.g. Can create orders, view products, but cannot delete" 
                       value={newGroupDesc} 
                       onChange={e => setNewGroupDesc(e.target.value)}
                       style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', padding: '0.5rem', borderRadius: 6, color: 'white' }}
@@ -257,189 +730,127 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 </div>
 
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', display: 'block', marginBottom: 8 }}>SELECT GROUP CONTROLS (YES / NO):</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.6rem' }}>
-                    {PERMISSION_CONFIG.map(p => {
-                      const val = newGroupPerms[p.key];
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 6 }}>TOGGLE DEFAULT PERMISSIONS FOR THIS GROUP</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.5rem' }}>
+                    {PERMISSION_CONFIG.map(item => {
+                      const active = !!newGroupPerms[item.key];
                       return (
-                        <button
-                          type="button"
-                          key={p.key}
-                          onClick={() => setNewGroupPerms(prev => ({ ...prev, [p.key]: !prev[p.key] }))}
+                        <div 
+                          key={item.key}
+                          onClick={() => setNewGroupPerms(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
                           style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            background: val ? 'rgba(16, 185, 129, 0.2)' : '#1e293b',
-                            border: val ? '1px solid #10b981' : '1px solid #334155',
+                            background: active ? 'rgba(56, 189, 248, 0.15)' : '#1e293b',
+                            border: active ? '1px solid #38bdf8' : '1px solid #334155',
                             padding: '0.4rem 0.65rem',
                             borderRadius: 6,
-                            color: 'white',
-                            fontSize: '0.775rem',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
                           }}
                         >
-                          <span>{p.label}</span>
-                          <span style={{ fontWeight: 800, color: val ? '#34d399' : '#fb7185' }}>{val ? 'YES' : 'NO'}</span>
-                        </button>
+                          <span style={{ fontSize: '0.775rem', color: active ? '#f8fafc' : '#94a3b8', fontWeight: active ? 700 : 500 }}>{item.label}</span>
+                          {active ? <ToggleRight size={18} color="#38bdf8" /> : <ToggleLeft size={18} color="#64748b" />}
+                        </div>
                       );
                     })}
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                   <button type="button" className="btn btn-outline" onClick={() => setIsCreatingGroup(false)}>Cancel</button>
                   <button type="submit" className="btn btn-primary">Save Permission Group</button>
                 </div>
               </form>
             )}
 
-            {/* Permission Groups Table */}
-            <div className="data-table-container" style={{ maxHeight: 420, overflowY: 'auto' }}>
-              <table className="data-table" style={{ fontSize: '0.825rem' }}>
-                <thead>
-                  <tr>
-                    <th>Group Name</th>
-                    <th>Description</th>
-                    <th style={{ textAlign: 'center' }}>Add Order</th>
-                    <th style={{ textAlign: 'center' }}>View Order</th>
-                    <th style={{ textAlign: 'center' }}>Cancel Order</th>
-                    <th style={{ textAlign: 'center' }}>Delete Order (Admin Only)</th>
-                    <th style={{ textAlign: 'center' }}>Assigned Members</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {permissionGroups.map(g => {
-                    const assignedUsers = users.filter(u => u.permission_group_id === g.id || u.permission_group_name === g.group_name);
-                    const perms = g.permissions;
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '1rem', maxHeight: 420, overflowY: 'auto' }}>
+              {permissionGroups.map(group => (
+                <div key={group.id} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#38bdf8' }}>{group.group_name}</h4>
+                    {group.is_system && (
+                      <span style={{ fontSize: '0.65rem', background: '#334155', color: '#94a3b8', padding: '0.1rem 0.4rem', borderRadius: 4, fontWeight: 700 }}>
+                        SYSTEM MASTER
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.75rem' }}>{group.description}</p>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginBottom: '0.75rem' }}>
+                    {PERMISSION_CONFIG.slice(0, 8).map(item => {
+                      const enabled = !!group.permissions[item.key];
+                      return (
+                        <div 
+                          key={item.key} 
+                          onClick={() => handleToggleGroupPermission(group.id, item.key)}
+                          style={{ 
+                            fontSize: '0.725rem', 
+                            color: enabled ? '#34d399' : '#64748b', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '0.3rem',
+                            cursor: 'pointer',
+                            background: enabled ? 'rgba(52, 211, 153, 0.1)' : 'transparent',
+                            padding: '0.25rem 0.4rem',
+                            borderRadius: 4
+                          }}
+                        >
+                          {enabled ? <Check size={12} /> : <X size={12} />} {item.label}
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                    return (
-                      <tr key={g.id}>
-                        <td>
-                          <div style={{ fontWeight: 800, color: '#38bdf8' }}>{g.group_name}</div>
-                          {g.is_system && <span style={{ fontSize: '0.65rem', color: '#34d399', fontWeight: 700 }}>System Standard</span>}
-                        </td>
-                        <td style={{ color: '#94a3b8', fontSize: '0.775rem' }}>{g.description}</td>
-                        
-                        {/* Add Order */}
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleGroupPermission(g.id, 'add_order')}
-                            style={{ background: perms.add_order ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.15)', border: perms.add_order ? '1px solid #10b981' : '1px solid rgba(244, 63, 94, 0.4)', color: perms.add_order ? '#34d399' : '#fb7185', padding: '0.2rem 0.5rem', borderRadius: 4, fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer' }}
-                          >
-                            {perms.add_order ? 'YES' : 'NO'}
-                          </button>
-                        </td>
-
-                        {/* View Order */}
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleGroupPermission(g.id, 'view_order')}
-                            style={{ background: perms.view_order ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.15)', border: perms.view_order ? '1px solid #10b981' : '1px solid rgba(244, 63, 94, 0.4)', color: perms.view_order ? '#34d399' : '#fb7185', padding: '0.2rem 0.5rem', borderRadius: 4, fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer' }}
-                          >
-                            {perms.view_order ? 'YES' : 'NO'}
-                          </button>
-                        </td>
-
-                        {/* Cancel Order */}
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleGroupPermission(g.id, 'cancel_order')}
-                            style={{ background: perms.cancel_order ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.15)', border: perms.cancel_order ? '1px solid #10b981' : '1px solid rgba(244, 63, 94, 0.4)', color: perms.cancel_order ? '#34d399' : '#fb7185', padding: '0.2rem 0.5rem', borderRadius: 4, fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer' }}
-                          >
-                            {perms.cancel_order ? 'YES' : 'NO'}
-                          </button>
-                        </td>
-
-                        {/* Delete Order */}
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleGroupPermission(g.id, 'delete_order')}
-                            style={{ background: perms.delete_order ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.15)', border: perms.delete_order ? '1px solid #10b981' : '1px solid rgba(244, 63, 94, 0.4)', color: perms.delete_order ? '#34d399' : '#fb7185', padding: '0.2rem 0.5rem', borderRadius: 4, fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer' }}
-                          >
-                            {perms.delete_order ? 'YES (Admin)' : 'NO'}
-                          </button>
-                        </td>
-
-                        {/* Members count */}
-                        <td style={{ textAlign: 'center' }}>
-                          <span style={{ background: '#0f172a', border: '1px solid #334155', padding: '0.25rem 0.6rem', borderRadius: 6, fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8' }}>
-                            {assignedUsers.length} Users
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                  <div style={{ fontSize: '0.725rem', color: '#fbbf24', borderTop: '1px solid #1e293b', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Assigned Users:</span>
+                    <strong>{users.filter(u => u.permission_group_id === group.id).length} Users</strong>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* TAB 2: GRANULAR USER PERMISSION MATRIX */}
+        {/* TAB 3: PERMISSION MATRIX */}
         {activeTab === 'permissions' && (
-          <div className="data-table-container" style={{ maxHeight: 460, overflowY: 'auto' }}>
-            <table className="data-table" style={{ fontSize: '0.8rem' }}>
+          <div className="data-table-container" style={{ maxHeight: 440, overflowY: 'auto' }}>
+            <table className="data-table" style={{ fontSize: '0.775rem' }}>
               <thead>
                 <tr>
-                  <th style={{ minWidth: 170, position: 'sticky', left: 0, zIndex: 10, background: '#0f172a' }}>User & Group</th>
+                  <th style={{ minWidth: 160 }}>User Name & Role</th>
                   {PERMISSION_CONFIG.map(p => (
-                    <th key={p.key} title={p.desc} style={{ textTransform: 'none', whiteSpace: 'normal', minWidth: 110, textAlign: 'center' }}>
-                      <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.775rem' }}>{p.label}</div>
-                    </th>
+                    <th key={p.key} style={{ textAlign: 'center', fontSize: '0.7rem' }}>{p.label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.map(u => {
                   const perms = u.permissions || getDefaultPermissions(u.role_name);
-                  const isSystemAdmin = u.role_name === 'SYSTEM_ADMIN' || u.role_name === 'SUPER_ADMIN';
-
                   return (
                     <tr key={u.id}>
-                      <td style={{ position: 'sticky', left: 0, zIndex: 5, background: '#1e293b', borderRight: '1px solid #334155' }}>
-                        <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.85rem' }}>{u.full_name}</div>
-                        <div style={{ fontSize: '0.675rem', color: '#38bdf8', fontWeight: 700 }}>{u.permission_group_name || u.role_name.replace(/_/g, ' ')}</div>
-                        <div style={{ fontSize: '0.65rem', color: '#34d399' }}>Brand: {u.company_handle || 'All'}</div>
+                      <td>
+                        <strong style={{ color: '#f8fafc', display: 'block' }}>{u.full_name}</strong>
+                        <span style={{ fontSize: '0.675rem', color: '#38bdf8' }}>{u.role_name.replace(/_/g, ' ')}</span>
                       </td>
-
                       {PERMISSION_CONFIG.map(p => {
-                        const isAllowed = isSystemAdmin ? true : (perms[p.key] ?? false);
-
+                        const isGranted = !!perms[p.key];
                         return (
                           <td key={p.key} style={{ textAlign: 'center' }}>
                             <button
-                              type="button"
-                              disabled={isSystemAdmin}
                               onClick={() => handleToggleUserPermission(u.id, p.key)}
                               style={{
-                                background: isAllowed ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.15)',
-                                color: isAllowed ? '#34d399' : '#fb7185',
-                                border: isAllowed ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(244, 63, 94, 0.4)',
-                                padding: '0.25rem 0.6rem',
-                                borderRadius: 6,
-                                fontWeight: 800,
-                                fontSize: '0.725rem',
-                                cursor: isSystemAdmin ? 'not-allowed' : 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                transition: 'all 0.15s ease'
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: 2
                               }}
-                              title={isAllowed ? `Permission YES: Click to toggle NO` : `Permission NO: Click to toggle YES`}
+                              title={`Click to ${isGranted ? 'Revoke' : 'Grant'} ${p.label} for ${u.full_name}`}
                             >
-                              {isAllowed ? (
-                                <>
-                                  <ToggleRight size={14} color="#34d399" /> YES
-                                </>
+                              {isGranted ? (
+                                <span style={{ color: '#34d399', fontWeight: 800, fontSize: '0.75rem', background: 'rgba(52, 211, 153, 0.15)', padding: '0.1rem 0.4rem', borderRadius: 4 }}>YES</span>
                               ) : (
-                                <>
-                                  <ToggleLeft size={14} color="#fb7185" /> NO
-                                </>
+                                <span style={{ color: '#64748b', fontWeight: 600, fontSize: '0.75rem', background: '#0f172a', padding: '0.1rem 0.4rem', borderRadius: 4 }}>NO</span>
                               )}
                             </button>
                           </td>
@@ -453,94 +864,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
           </div>
         )}
 
-        {/* TAB 3: USER DIRECTORY & GROUP ASSIGNMENT */}
-        {activeTab === 'users' && (
-          <div className="data-table-container" style={{ maxHeight: 440, overflowY: 'auto' }}>
-            <table className="data-table" style={{ fontSize: '0.825rem' }}>
-              <thead>
-                <tr>
-                  <th style={{ width: 60 }}>S.NO</th>
-                  <th>User Name</th>
-                  <th>System Role</th>
-                  <th>Assigned Permission Group</th>
-                  <th>Company Handle</th>
-                  <th>Password</th>
-                  <th>Admin Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((u, idx) => (
-                  <tr key={u.id}>
-                    <td><strong style={{ color: '#38bdf8' }}>{u.sno || idx + 1}</strong></td>
-                    <td><strong style={{ color: '#f8fafc' }}>{u.full_name}</strong></td>
-                    <td>
-                      <span className="role-pill" style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: 4, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700 }}>
-                        {u.role_name.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td>
-                      <select
-                        value={u.permission_group_id || ''}
-                        onChange={e => assignUserPermissionGroup(u.id, e.target.value)}
-                        style={{ padding: '0.35rem 0.5rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontSize: '0.775rem', fontWeight: 700 }}
-                      >
-                        <option value="" disabled>Select Group...</option>
-                        {permissionGroups.map(g => (
-                          <option key={g.id} value={g.id}>{g.group_name}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <span style={{ fontSize: '0.775rem', color: '#34d399', fontWeight: 600 }}>
-                        {u.company_handle || 'All'}
-                      </span>
-                    </td>
-                    <td><code style={{ background: '#0f172a', padding: '0.2rem 0.5rem', borderRadius: 4, color: '#fbbf24', fontWeight: 700 }}>{u.password || '1234'}</code></td>
-                    <td>
-                      {selectedUserId === u.id ? (
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <input 
-                            type="text" 
-                            value={newPassword}
-                            onChange={e => setNewPassword(e.target.value)}
-                            placeholder="New password..."
-                            style={{ padding: '0.3rem 0.5rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 4, color: 'white', fontSize: '0.8rem', width: 110 }}
-                          />
-                          <button 
-                            className="btn btn-success" 
-                            onClick={() => handlePasswordChange(u.id)}
-                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
-                          >
-                            Save
-                          </button>
-                          <button 
-                            className="btn btn-outline" 
-                            onClick={() => setSelectedUserId(null)}
-                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem' }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <button 
-                          className="btn btn-primary" 
-                          onClick={() => { setSelectedUserId(u.id); setNewPassword(u.password || '1234'); }}
-                          style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
-                        >
-                          <Key size={13} /> Edit Password
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', borderTop: '1px solid #334155', paddingTop: '0.75rem' }}>
+          <div style={{ fontSize: '0.775rem', color: '#94a3b8' }}>
+            Total Registered Users: <strong>{users.length} Users</strong> | Active Accounts: <strong style={{ color: '#34d399' }}>{users.filter(u => u.active !== false).length} Active</strong> | Inactive: <strong style={{ color: '#f43f5e' }}>{users.filter(u => u.active === false).length} Inactive</strong>
           </div>
-        )}
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem' }}>
-          <div style={{ fontSize: '0.775rem', color: '#94a3b8' }}>Total Active Team Members: <strong>{users.length} Users</strong> | Groups: <strong>{permissionGroups.length} Masters</strong></div>
-          <button className="btn btn-outline" onClick={onClose}>Close Permission Control Center</button>
+          <button className="btn btn-outline" onClick={onClose}>Close Console</button>
         </div>
       </div>
     </div>

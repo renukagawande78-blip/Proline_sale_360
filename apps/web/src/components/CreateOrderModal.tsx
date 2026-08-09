@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare, UserCheck } from 'lucide-react';
-import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, isCompanyAllowedForUser } from '../lib/supabase';
+import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare, UserCheck, Layers } from 'lucide-react';
+import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, isCompanyAllowedForUser, resolveSegmentForUser } from '../lib/supabase';
 import { Order, OrderItem, Agency, Product } from '../types';
 import { useAuth } from '../context/AuthContext';
 
@@ -151,10 +151,19 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
 
 interface SearchableProductSelectProps {
   selectedProductId: string;
+  selectedCompanyId: string;
+  selectedSegment: string;
+  userCompanyHandle?: string;
   onSelectProduct: (productId: string) => void;
 }
 
-export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({ selectedProductId, onSelectProduct }) => {
+export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({ 
+  selectedProductId, 
+  selectedCompanyId,
+  selectedSegment,
+  userCompanyHandle,
+  onSelectProduct 
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -172,10 +181,28 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
   }, []);
 
   const filteredProducts = MOCK_PRODUCTS.filter(p => {
+    // 1. Company Brand Filter: if specific company selected, match company_id. If 'ALL', match userCompanyHandle scope!
+    let matchesCompany = true;
+    if (selectedCompanyId && selectedCompanyId !== 'ALL') {
+      matchesCompany = p.company_id === selectedCompanyId;
+    } else {
+      const parentCompany = MOCK_COMPANIES.find(c => c.id === p.company_id);
+      matchesCompany = isCompanyAllowedForUser(parentCompany?.company_name, userCompanyHandle);
+    }
+
+    // 2. Segment Filter: if FMCG or FMEG selected, match segment
+    let matchesSegment = true;
+    if (selectedSegment && selectedSegment !== 'ALL') {
+      const parentCompany = MOCK_COMPANIES.find(c => c.id === p.company_id);
+      matchesSegment = (parentCompany?.segment === selectedSegment) || (p.segment === selectedSegment);
+    }
+
+    // 3. Search Query Match
     const q = searchQuery.toLowerCase();
     const nameMatch = p.product_name.toLowerCase().includes(q);
     const codeMatch = p.product_code.toLowerCase().includes(q);
-    return nameMatch || codeMatch;
+
+    return matchesCompany && matchesSegment && (nameMatch || codeMatch);
   });
 
   return (
@@ -218,14 +245,14 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
             borderRadius: 8,
             boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
             padding: '0.5rem',
-            width: 320
+            width: 340
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.6rem', marginBottom: '0.5rem', gap: '0.4rem' }}>
             <Search size={14} color="#38bdf8" />
             <input 
               type="text" 
-              placeholder="Search SKU name or product code..."
+              placeholder="Search product name or code..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               autoFocus
@@ -233,12 +260,14 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
             />
           </div>
 
-          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 210, overflowY: 'auto' }}>
             {filteredProducts.length === 0 ? (
-              <div style={{ padding: '0.75rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>No matching SKU found</div>
+              <div style={{ padding: '0.75rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>No matching products for this brand & segment</div>
             ) : (
               filteredProducts.map(p => {
                 const isSelected = p.id === selectedProductId;
+                const parentCompany = MOCK_COMPANIES.find(c => c.id === p.company_id);
+
                 return (
                   <div
                     key={p.id}
@@ -269,8 +298,8 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                       <div style={{ fontSize: '0.825rem', fontWeight: 700, color: isSelected ? '#38bdf8' : '#f8fafc' }}>
                         {p.product_name}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>
-                        Code: {p.product_code} | Pack: {p.pcs_per_box} pcs/box | MRP: ₹{p.unit_price}
+                      <div style={{ fontSize: '0.7rem', color: '#34d399', marginTop: 2, fontWeight: 600 }}>
+                        Brand: {parentCompany?.company_name || 'General'} | Pack: {p.pcs_per_box} pcs/box | MRP: ₹{p.unit_price}
                       </div>
                     </div>
                     {isSelected && <Check size={16} color="#38bdf8" />}
@@ -294,10 +323,6 @@ interface CreateOrderModalProps {
 export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, onSubmitOrder }) => {
   const { currentUser, users } = useAuth();
 
-  const allowedCompanies = MOCK_COMPANIES.filter(c => 
-    isCompanyAllowedForUser(c.company_name, currentUser?.company_handle)
-  );
-
   const salesTeamMembers = users.filter(u => 
     u.role_name === 'SALES_PERSON' || 
     u.role_name === 'AREA_SALES_MANAGER' || 
@@ -311,10 +336,24 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                        currentUser?.role_name === 'SALES_ADMIN' || 
                        currentUser?.role_name === 'AREA_SALES_MANAGER';
 
-  const [companyId, setCompanyId] = useState(allowedCompanies[0]?.id || MOCK_COMPANIES[0].id);
+  const activeUserSegment = resolveSegmentForUser(currentUser);
+  const [selectedSegment, setSelectedSegment] = useState<'ALL' | 'FMCG' | 'FMCD'>(activeUserSegment);
+  const [salespersonId, setSalespersonId] = useState(currentUser?.id || salesTeamMembers[0]?.id || 'u12');
+  
+  // Active Salesperson & assigned brand handle scope
+  const activeSalesperson = users.find(u => u.id === salespersonId) || currentUser;
+  const activeSalespersonHandle = activeSalesperson?.company_handle || currentUser?.company_handle || 'All';
+
+  // Brands allowed for active salesperson & segment filter
+  const allowedBrandsForActiveSalesperson = MOCK_COMPANIES.filter(c => {
+    const matchesBrand = isCompanyAllowedForUser(c.company_name, activeSalespersonHandle);
+    const matchesSegment = selectedSegment === 'ALL' || c.segment === selectedSegment;
+    return matchesBrand && matchesSegment;
+  });
+
+  const [companyId, setCompanyId] = useState<string>('ALL'); // Default to 'ALL' Brands!
   const [agencyId, setAgencyId] = useState(MOCK_AGENCIES[0].id);
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
-  const [salespersonId, setSalespersonId] = useState(currentUser?.id || salesTeamMembers[0]?.id || 'u12');
   const [remarks, setRemarks] = useState('');
   const [items, setItems] = useState<Partial<OrderItem>[]>([
     {
@@ -328,8 +367,6 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   ]);
 
   if (!isOpen) return null;
-
-  const activeSalesperson = users.find(u => u.id === salespersonId) || currentUser;
 
   const handleProductChange = (index: number, productId: string) => {
     const prod = MOCK_PRODUCTS.find(p => p.id === productId);
@@ -427,7 +464,10 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   };
 
   const handleSubmit = (status: 'DRAFT' | 'SUBMITTED') => {
-    const selectedCompany = MOCK_COMPANIES.find(c => c.id === companyId);
+    const selectedCompany = companyId === 'ALL' 
+      ? { id: 'ALL', company_name: selectedSegment === 'ALL' ? 'Multi-Brand' : `${selectedSegment} Multi-Brand`, company_code: 'PRG' }
+      : MOCK_COMPANIES.find(c => c.id === companyId);
+    
     const selectedAgency = MOCK_AGENCIES.find(a => a.id === agencyId);
 
     // Format Order Number: BrandCode-DDMMYYYY-Seq (e.g., PRG-08082026-001 or FMCG-08082026-001)
@@ -464,7 +504,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       id: generatedOrderNumber,
       order_number: generatedOrderNumber,
       order_date: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      company_id: companyId,
+      company_id: companyId === 'ALL' ? 'c01' : companyId,
       company_name: selectedCompany?.company_name,
       agency_id: agencyId,
       agency_name: selectedAgency?.agency_name,
@@ -489,8 +529,8 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
   return (
     <div className="modal-overlay">
-      <div className="modal-card" style={{ maxWidth: 1100 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
+      <div className="modal-card" style={{ maxWidth: 1150, width: '95vw' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>Create Agency Order</h2>
             <p style={{ fontSize: '0.825rem', color: '#94a3b8' }}>
@@ -505,48 +545,37 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           </button>
         </div>
 
-        {/* Form Fields Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr 1.25fr', gap: '1rem', marginBottom: '1.5rem' }}>
+        {/* Form Fields Grid: Segment, Salesperson, Company/Brand (with All Option), Agency, Delivery */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.5fr 1.5fr 1.5fr 1.1fr', gap: '0.85rem', marginBottom: '1.25rem' }}>
+          
+          {/* 1. SEGMENT */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>SEGMENT</label>
+            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>SEGMENT</label>
             <select 
-              value={companyId} 
-              onChange={e => setCompanyId(e.target.value)}
-              style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
+              value={selectedSegment} 
+              onChange={e => {
+                setSelectedSegment(e.target.value as any);
+                setCompanyId('ALL');
+              }}
+              style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#38bdf8', fontWeight: 700, fontSize: '0.825rem' }}
             >
-              {allowedCompanies.map(c => (
-                <option key={c.id} value={c.id}>{c.company_name}</option>
-              ))}
+              <option value="ALL">All Segments (FMCG & FMCD)</option>
+              <option value="FMCG">FMCG (Fast-Moving Consumer Goods)</option>
+              <option value="FMCD">FMCD (Fast-Moving Consumer Durables)</option>
             </select>
           </div>
 
+          {/* 2. SALESPERSON / FIELD EXEC */}
           <div>
-            <SearchableAgencySelect 
-              selectedAgencyId={agencyId}
-              onSelectAgency={setAgencyId}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DELIVERY TYPE</label>
-            <select 
-              value={deliveryType} 
-              onChange={e => setDeliveryType(e.target.value as 'F.O.R' | 'Self Pickup')}
-              style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
-            >
-              <option value="F.O.R">F.O.R</option>
-              <option value="Self Pickup">Self Pickup</option>
-            </select>
-          </div>
-
-          {/* Salesperson / Field Exec Field */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>SALESPERSON / EXEC</label>
+            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>SALESPERSON / EXEC</label>
             {isAdminOrASM ? (
               <select
                 value={salespersonId}
-                onChange={e => setSalespersonId(e.target.value)}
-                style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontWeight: 700 }}
+                onChange={e => {
+                  setSalespersonId(e.target.value);
+                  setCompanyId('ALL');
+                }}
+                style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem' }}
               >
                 {salesTeamMembers.map(u => (
                   <option key={u.id} value={u.id}>
@@ -555,27 +584,75 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                 ))}
               </select>
             ) : (
-              <div style={{ padding: '0.6rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <UserCheck size={16} color="#34d399" />
                 <span>{currentUser?.full_name} (Self)</span>
               </div>
             )}
           </div>
+
+          {/* 3. COMPANY / BRAND HANDLE (With 'All Brands' Option) */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>COMPANY / BRAND</label>
+            <select 
+              value={companyId} 
+              onChange={e => setCompanyId(e.target.value)}
+              style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, fontSize: '0.825rem' }}
+            >
+              <option value="ALL">All Brands ({allowedBrandsForActiveSalesperson.length})</option>
+              {allowedBrandsForActiveSalesperson.map(c => (
+                <option key={c.id} value={c.id}>{c.company_name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 4. AGENCY / B2B PARTY */}
+          <div>
+            <SearchableAgencySelect 
+              selectedAgencyId={agencyId}
+              onSelectAgency={setAgencyId}
+            />
+          </div>
+
+          {/* 5. DELIVERY TYPE */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DELIVERY TYPE</label>
+            <select 
+              value={deliveryType} 
+              onChange={e => setDeliveryType(e.target.value as 'F.O.R' | 'Self Pickup')}
+              style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, fontSize: '0.825rem' }}
+            >
+              <option value="F.O.R">F.O.R</option>
+              <option value="Self Pickup">Self Pickup</option>
+            </select>
+          </div>
+
+        </div>
+
+        {/* Salesperson Assigned Brands Info Banner */}
+        <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.5rem 0.85rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.775rem' }}>
+          <div>
+            <span style={{ color: '#94a3b8' }}>Assigned Brand Handles for <strong>{activeSalesperson?.full_name}</strong>: </span>
+            <strong style={{ color: '#34d399' }}>{activeSalespersonHandle}</strong>
+          </div>
+          <div style={{ color: '#38bdf8', fontWeight: 600 }}>
+            Active Selection: <strong>{companyId === 'ALL' ? 'All Assigned Brands' : MOCK_COMPANIES.find(c => c.id === companyId)?.company_name}</strong>
+          </div>
         </div>
 
         {/* Order Items Table */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 700 }}>Order Line Items</h3>
             <button onClick={addItemRow} className="btn btn-outline" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
-              <Plus size={14} /> Add Product
+              <Plus size={14} /> Add Product Line
             </button>
           </div>
 
           <table className="data-table" style={{ fontSize: '0.825rem' }}>
             <thead>
               <tr>
-                <th style={{ width: 280 }}>Product</th>
+                <th style={{ width: 320 }}>Product / SKU Selection</th>
                 <th style={{ textAlign: 'center' }}>MRP</th>
                 <th style={{ textAlign: 'center' }}>BOX</th>
                 <th style={{ textAlign: 'center' }}>PCS</th>
@@ -591,6 +668,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                   <td>
                     <SearchableProductSelect 
                       selectedProductId={item.product_id}
+                      selectedCompanyId={companyId}
+                      selectedSegment={selectedSegment}
+                      userCompanyHandle={activeSalespersonHandle}
                       onSelectProduct={(productId) => handleProductChange(index, productId)}
                     />
                   </td>
@@ -645,7 +725,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Order Remarks */}
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ORDER LEVEL REMARKS / NOTES</label>
           <input 
             type="text"
