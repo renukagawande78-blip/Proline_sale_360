@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Search, Plus, ShieldCheck, Ban, Trash2, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { MOCK_COMPANIES } from '../lib/supabase';
-import { Order } from '../types';
+import { Order, PermissionControl } from '../types';
+import { PermissionDeniedModal } from '../components/PermissionDeniedModal';
 
 interface OrdersPageProps {
   orders: Order[];
@@ -24,13 +25,60 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
   const { currentUser, hasPermission } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
 
-  const canAddOrder = hasPermission('add_order') || hasPermission('order_entry') || role === 'SALES_PERSON' || role === 'SYSTEM_ADMIN';
-  const canCancelOrder = hasPermission('cancel_order') || role === 'SALES_PERSON' || role === 'SALES_ADMIN' || role === 'SYSTEM_ADMIN';
-  const canDeleteOrder = hasPermission('delete_order') || role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN';
+  const canAddOrder = hasPermission('add_order') || hasPermission('order_entry');
+  const canCancelOrder = hasPermission('cancel_order');
+  const canDeleteOrder = hasPermission('delete_order');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+
+  // Permission Denied Modal State
+  const [deniedModal, setDeniedModal] = useState<{ isOpen: boolean; actionName: string; key: keyof PermissionControl }>({
+    isOpen: false,
+    actionName: '',
+    key: 'add_order'
+  });
+
+  const triggerPermissionDenied = (actionName: string, key: keyof PermissionControl) => {
+    setDeniedModal({
+      isOpen: true,
+      actionName,
+      key
+    });
+  };
+
+  const handleCreateOrderClick = () => {
+    if (canAddOrder) {
+      onOpenCreateOrder();
+    } else {
+      triggerPermissionDenied('Add Sales Order / Order Entry', 'add_order');
+    }
+  };
+
+  const handleConfirmCancel = (order: Order) => {
+    if (!canCancelOrder) {
+      triggerPermissionDenied(`Cancel Sales Order ${order.order_number}`, 'cancel_order');
+      return;
+    }
+    if (window.confirm(`Are you sure you want to cancel Sales Order ${order.order_number}?`)) {
+      if (onCancelOrder) {
+        onCancelOrder(order.id);
+      }
+    }
+  };
+
+  const handleConfirmDelete = (order: Order) => {
+    if (!canDeleteOrder) {
+      triggerPermissionDenied(`Delete Sales Order ${order.order_number}`, 'delete_order');
+      return;
+    }
+    if (window.confirm(`⚠️ PERMANENT DELETE WARNING: Delete Sales Order ${order.order_number}? This action can only be done by System Admin.`)) {
+      if (onDeleteOrder) {
+        onDeleteOrder(order.id);
+      }
+    }
+  };
 
   const filteredOrders = orders.filter(o => {
     const matchesSearch = o.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -40,22 +88,6 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
 
     return matchesSearch && matchesCompany && matchesStatus;
   });
-
-  const handleConfirmCancel = (order: Order) => {
-    if (window.confirm(`Are you sure you want to cancel Sales Order ${order.order_number}?`)) {
-      if (onCancelOrder) {
-        onCancelOrder(order.id);
-      }
-    }
-  };
-
-  const handleConfirmDelete = (order: Order) => {
-    if (window.confirm(`⚠️ PERMANENT DELETE WARNING: Delete Sales Order ${order.order_number}? This action can only be done by System Admin.`)) {
-      if (onDeleteOrder) {
-        onDeleteOrder(order.id);
-      }
-    }
-  };
 
   return (
     <div className="page-body">
@@ -67,11 +99,9 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
           </p>
         </div>
 
-        {canAddOrder && (
-          <button className="btn btn-primary" onClick={onOpenCreateOrder}>
-            <Plus size={16} /> Create Agency Order
-          </button>
-        )}
+        <button className="btn btn-primary" onClick={handleCreateOrderClick}>
+          <Plus size={16} /> Create Agency Order
+        </button>
       </div>
 
       {/* Advanced Filter Toolbar */}
@@ -180,29 +210,27 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                       </button>
                     )}
 
-                    {/* Cancel Order Action (Sales Person, Sales Admin, Admin) */}
-                    {canCancelOrder && order.status !== 'CANCELLED' && order.status !== 'DISPATCHED' && order.status !== 'COMPLETED' && (
+                    {/* Cancel Order Action */}
+                    {order.status !== 'CANCELLED' && order.status !== 'DISPATCHED' && order.status !== 'COMPLETED' && (
                       <button 
                         className="btn btn-outline"
                         onClick={() => handleConfirmCancel(order)}
-                        style={{ padding: '0.35rem 0.55rem', fontSize: '0.75rem', borderColor: '#f59e0b', color: '#fbbf24' }}
-                        title="Cancel Order"
+                        style={{ padding: '0.35rem 0.55rem', fontSize: '0.75rem', borderColor: canCancelOrder ? '#f59e0b' : '#64748b', color: canCancelOrder ? '#fbbf24' : '#64748b' }}
+                        title={canCancelOrder ? "Cancel Order" : "Cancel Order (Permission NO: Click to request access)"}
                       >
                         <Ban size={13} /> Cancel
                       </button>
                     )}
 
                     {/* Delete Order Action (Admin Only!) */}
-                    {canDeleteOrder && (
-                      <button 
-                        className="btn btn-danger"
-                        onClick={() => handleConfirmDelete(order)}
-                        style={{ padding: '0.35rem 0.55rem', fontSize: '0.75rem' }}
-                        title="Delete Order (Admin Only)"
-                      >
-                        <Trash2 size={13} /> Delete
-                      </button>
-                    )}
+                    <button 
+                      className="btn btn-danger"
+                      onClick={() => handleConfirmDelete(order)}
+                      style={{ padding: '0.35rem 0.55rem', fontSize: '0.75rem', background: canDeleteOrder ? '#e11d48' : 'rgba(244, 63, 94, 0.2)', opacity: canDeleteOrder ? 1 : 0.6 }}
+                      title={canDeleteOrder ? "Delete Order (Admin Only)" : "Delete Order (Restricted: Click to request Admin permission)"}
+                    >
+                      <Trash2 size={13} /> Delete
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -210,6 +238,14 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Permission Denied & Admin Request Modal */}
+      <PermissionDeniedModal 
+        isOpen={deniedModal.isOpen}
+        actionName={deniedModal.actionName}
+        requiredPermissionKey={deniedModal.key}
+        onClose={() => setDeniedModal({ ...deniedModal, isOpen: false })}
+      />
     </div>
   );
 };
