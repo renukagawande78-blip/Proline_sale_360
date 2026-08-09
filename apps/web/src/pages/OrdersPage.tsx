@@ -162,6 +162,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
               <th>Order Date</th>
               <th>Company</th>
               <th>Agency / Party</th>
+              <th>Salesperson / Exec</th>
               <th>Boxes / Loose</th>
               <th>Total PCS</th>
               <th>Order Total (₹)</th>
@@ -176,6 +177,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                 <td>{order.order_date}</td>
                 <td>{order.company_name}</td>
                 <td>{order.agency_name}</td>
+                <td><span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24' }}>{order.salesperson_name || 'Field Exec'}</span></td>
                 <td>{order.total_box_qty} Boxes / {order.total_loose_pcs} Loose</td>
                 <td><span style={{ fontWeight: 800, color: '#34d399' }}>{order.total_qty_pcs}</span></td>
                 <td>₹{order.total_amount.toLocaleString()}</td>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare } from 'lucide-react';
+import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare, UserCheck } from 'lucide-react';
 import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, isCompanyAllowedForUser } from '../lib/supabase';
 import { Order, OrderItem, Agency, Product } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -49,68 +49,57 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: '100%',
-          padding: '0.6rem 0.85rem',
+          padding: '0.55rem 0.75rem',
           background: '#0f172a',
-          border: isOpen ? '1px solid #38bdf8' : '1px solid #334155',
+          border: '1px solid #334155',
           borderRadius: 6,
           color: 'white',
           fontWeight: 600,
           fontSize: '0.85rem',
           cursor: 'pointer',
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '0.5rem'
+          alignItems: 'center'
         }}
       >
-        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {formatAgencyLabel(selectedAgency)}
         </span>
-        <ChevronDown size={16} color="#38bdf8" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease', flexShrink: 0 }} />
+        <ChevronDown size={16} color="#94a3b8" />
       </div>
 
-      {/* Dropdown Box with Search Bar */}
+      {/* Search Dropdown Popup */}
       {isOpen && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 4px)',
-          left: 0,
-          right: 0,
-          background: '#1e293b',
-          border: '1px solid #334155',
-          borderRadius: 8,
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.7), 0 0 15px rgba(56, 189, 248, 0.1)',
-          zIndex: 100,
-          overflow: 'hidden'
-        }}>
-          {/* Inner Search Bar */}
-          <div style={{ padding: '0.6rem', background: '#0f172a', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Search size={16} color="#38bdf8" />
+        <div 
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 999,
+            marginTop: 4,
+            background: '#1e293b',
+            border: '1px solid #38bdf8',
+            borderRadius: 8,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+            padding: '0.5rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.6rem', marginBottom: '0.5rem', gap: '0.4rem' }}>
+            <Search size={14} color="#38bdf8" />
             <input 
-              type="text"
-              placeholder="Search Party Name, Area, or City..."
+              type="text" 
+              placeholder="Search agency name, city, or area..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               autoFocus
-              style={{
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                color: 'white',
-                fontSize: '0.825rem',
-                width: '100%',
-                fontWeight: 600
-              }}
+              style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%', fontSize: '0.8rem' }}
             />
           </div>
 
-          {/* List of Agencies */}
-          <div style={{ maxHeight: 210, overflowY: 'auto', padding: '0.35rem' }}>
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
             {filteredAgencies.length === 0 ? (
-              <div style={{ padding: '0.85rem', color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center' }}>
-                No agency / party matches search
-              </div>
+              <div style={{ padding: '0.75rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>No matching agency found</div>
             ) : (
               filteredAgencies.map(a => {
                 const isSelected = a.id === selectedAgencyId;
@@ -184,82 +173,69 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
 
   const filteredProducts = MOCK_PRODUCTS.filter(p => {
     const q = searchQuery.toLowerCase();
-    return p.product_name.toLowerCase().includes(q) || p.product_code.toLowerCase().includes(q);
+    const nameMatch = p.product_name.toLowerCase().includes(q);
+    const codeMatch = p.product_code.toLowerCase().includes(q);
+    return nameMatch || codeMatch;
   });
 
   return (
-    <div style={{ position: 'relative', width: '100%', minWidth: 280 }} ref={dropdownRef}>
-      {/* Selected Product Trigger */}
+    <div style={{ position: 'relative' }} ref={dropdownRef}>
+      {/* Selected Box Trigger */}
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: '100%',
-          padding: '0.5rem 0.75rem',
+          padding: '0.55rem 0.75rem',
           background: '#0f172a',
-          border: isOpen ? '1px solid #38bdf8' : '1px solid #334155',
+          border: '1px solid #334155',
           borderRadius: 6,
           color: 'white',
           fontWeight: 600,
           fontSize: '0.825rem',
           cursor: 'pointer',
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '0.5rem'
+          alignItems: 'center'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
-          <span style={{ fontWeight: 700, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {selectedProduct.product_name}
-          </span>
-          <span style={{ fontSize: '0.7rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '0.1rem 0.4rem', borderRadius: 4, flexShrink: 0 }}>
-            {selectedProduct.pcs_per_box} pcs/box
-          </span>
-        </div>
-        <ChevronDown size={16} color="#38bdf8" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease', flexShrink: 0 }} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {selectedProduct.product_name}
+        </span>
+        <ChevronDown size={14} color="#94a3b8" />
       </div>
 
-      {/* Dropdown Menu with Search Bar */}
+      {/* Search Dropdown Popup */}
       {isOpen && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 4px)',
-          left: 0,
-          width: 360,
-          background: '#1e293b',
-          border: '1px solid #334155',
-          borderRadius: 8,
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.8), 0 0 20px rgba(56, 189, 248, 0.15)',
-          zIndex: 200,
-          overflow: 'hidden'
-        }}>
-          {/* Inner Search Box */}
-          <div style={{ padding: '0.55rem', background: '#0f172a', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Search size={16} color="#38bdf8" />
+        <div 
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 999,
+            marginTop: 4,
+            background: '#1e293b',
+            border: '1px solid #38bdf8',
+            borderRadius: 8,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+            padding: '0.5rem',
+            width: 320
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.6rem', marginBottom: '0.5rem', gap: '0.4rem' }}>
+            <Search size={14} color="#38bdf8" />
             <input 
-              type="text"
-              placeholder="Search product by name or SKU code..."
+              type="text" 
+              placeholder="Search SKU name or product code..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               autoFocus
-              style={{
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                color: 'white',
-                fontSize: '0.825rem',
-                width: '100%',
-                fontWeight: 600
-              }}
+              style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%', fontSize: '0.8rem' }}
             />
           </div>
 
-          {/* Product Items List */}
-          <div style={{ maxHeight: 220, overflowY: 'auto', padding: '0.35rem' }}>
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
             {filteredProducts.length === 0 ? (
-              <div style={{ padding: '0.85rem', color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center' }}>
-                No products match search
-              </div>
+              <div style={{ padding: '0.75rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>No matching SKU found</div>
             ) : (
               filteredProducts.map(p => {
                 const isSelected = p.id === selectedProductId;
@@ -316,15 +292,29 @@ interface CreateOrderModalProps {
 }
 
 export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, onSubmitOrder }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, users } = useAuth();
 
   const allowedCompanies = MOCK_COMPANIES.filter(c => 
     isCompanyAllowedForUser(c.company_name, currentUser?.company_handle)
   );
 
+  const salesTeamMembers = users.filter(u => 
+    u.role_name === 'SALES_PERSON' || 
+    u.role_name === 'AREA_SALES_MANAGER' || 
+    u.role_name === 'SALES_ADMIN' ||
+    u.role_name === 'SYSTEM_ADMIN' ||
+    u.role_name === 'SUPER_ADMIN'
+  );
+
+  const isAdminOrASM = currentUser?.role_name === 'SYSTEM_ADMIN' || 
+                       currentUser?.role_name === 'SUPER_ADMIN' || 
+                       currentUser?.role_name === 'SALES_ADMIN' || 
+                       currentUser?.role_name === 'AREA_SALES_MANAGER';
+
   const [companyId, setCompanyId] = useState(allowedCompanies[0]?.id || MOCK_COMPANIES[0].id);
   const [agencyId, setAgencyId] = useState(MOCK_AGENCIES[0].id);
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
+  const [salespersonId, setSalespersonId] = useState(currentUser?.id || salesTeamMembers[0]?.id || 'u12');
   const [remarks, setRemarks] = useState('');
   const [items, setItems] = useState<Partial<OrderItem>[]>([
     {
@@ -338,6 +328,8 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   ]);
 
   if (!isOpen) return null;
+
+  const activeSalesperson = users.find(u => u.id === salespersonId) || currentUser;
 
   const handleProductChange = (index: number, productId: string) => {
     const prod = MOCK_PRODUCTS.find(p => p.id === productId);
@@ -397,29 +389,29 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     setItems(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Compute Order Totals
-  const processedItems: OrderItem[] = items.map((item, idx) => {
-    const prod = MOCK_PRODUCTS.find(p => p.id === item.product_id);
+  // Auto Calculations
+  const processedItems = items.map((item, idx) => {
+    const prod = MOCK_PRODUCTS.find(p => p.id === item.product_id) || MOCK_PRODUCTS[0];
     const boxQty = item.box_qty || 0;
     const loosePcs = item.loose_pcs || 0;
-    const pcsPerBox = item.pcs_per_box || 24;
-    const totalPcs = (boxQty * pcsPerBox) + loosePcs;
-    const unitPrice = item.unit_price || 0;
-    const totalPrice = totalPcs * unitPrice;
+    const pcsPerBox = prod.pcs_per_box || 24;
+    const totalQtyPcs = (boxQty * pcsPerBox) + loosePcs;
+    const unitPrice = item.unit_price || prod.unit_price;
+    const totalPrice = totalQtyPcs * unitPrice;
 
     return {
-      id: 'item_' + idx,
-      order_id: '',
-      product_id: item.product_id || '',
-      product_name: prod?.product_name || 'Selected Product',
+      id: `item-${idx + 1}`,
+      product_id: prod.id,
+      product_name: prod.product_name,
+      product_code: prod.product_code,
       pcs_per_box: pcsPerBox,
       box_qty: boxQty,
       loose_pcs: loosePcs,
-      total_qty_pcs: totalPcs,
+      total_qty_pcs: totalQtyPcs,
+      dispatched_qty_pcs: 0,
+      pending_qty_pcs: totalQtyPcs,
       unit_price: unitPrice,
       total_price: totalPrice,
-      dispatched_qty_pcs: 0,
-      pending_qty_pcs: totalPcs,
       remark: item.remark || ''
     };
   });
@@ -438,8 +430,8 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     const selectedCompany = MOCK_COMPANIES.find(c => c.id === companyId);
     const selectedAgency = MOCK_AGENCIES.find(a => a.id === agencyId);
 
-    // Format Order Number: BrandCode-DDMMYYYY-Seq (e.g., PRO-08082026-001 or FMCG-08082026-001)
-    const brandCode = selectedCompany?.company_code || 'PRO';
+    // Format Order Number: BrandCode-DDMMYYYY-Seq (e.g., PRG-08082026-001 or FMCG-08082026-001)
+    const brandCode = selectedCompany?.company_code || 'PRG';
     const now = new Date();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -449,7 +441,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
     const generatedOrderNumber = `${brandCode}-${dateStr}-${seqStr}`;
 
-    // Format Product Item ID: OrderID/Product3Letters-Index (e.g., PRO-08082026-001/PRY-1)
+    // Format Product Item ID: OrderID/Product3Letters-Index (e.g., PRG-08082026-001/PRY-1)
     const itemsWithFormattedIds: OrderItem[] = processedItems.map((item, idx) => {
       const p3 = getProduct3LetterPrefix(item.product_name || 'PRD');
       const itemId = `${generatedOrderNumber}/${p3}-${idx + 1}`;
@@ -459,6 +451,14 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         order_id: generatedOrderNumber
       };
     });
+
+    const finalSalespersonName = isAdminOrASM 
+      ? (activeSalesperson?.full_name || 'Amit Kumar')
+      : (currentUser?.full_name || 'Amit Kumar');
+
+    const finalSalespersonId = isAdminOrASM 
+      ? (activeSalesperson?.id || currentUser?.id || 'u12')
+      : (currentUser?.id || 'u12');
 
     const newOrder: Order = {
       id: generatedOrderNumber,
@@ -470,8 +470,8 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       agency_name: selectedAgency?.agency_name,
       area_id: selectedAgency?.area_id || '',
       area_name: selectedAgency?.area_name || 'Delhi NCR Territory',
-      salesperson_id: 'e7777777-7777-7777-7777-777777777777',
-      salesperson_name: 'Amit Kumar',
+      salesperson_id: finalSalespersonId,
+      salesperson_name: finalSalespersonName,
       asm_id: 'e6666666-6666-6666-6666-666666666666',
       status: status,
       total_box_qty: totalBoxQty,
@@ -489,19 +489,24 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
   return (
     <div className="modal-overlay">
-      <div className="modal-card" style={{ maxWidth: 1020 }}>
+      <div className="modal-card" style={{ maxWidth: 1100 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>Create Agency Order</h2>
-            <p style={{ fontSize: '0.825rem', color: '#94a3b8' }}>Salesperson B2B Order Entry with Box / PCS auto-calculation</p>
+            <p style={{ fontSize: '0.825rem', color: '#94a3b8' }}>
+              {isAdminOrASM 
+                ? `System Admin / ASM Order Entry on Behalf of Field Sales Executive`
+                : `Field Sales Executive Self Order Entry (${currentUser?.full_name})`
+              }
+            </p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
             <X size={20} />
           </button>
         </div>
 
-        {/* Form Fields */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+        {/* Form Fields Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr 1.25fr', gap: '1rem', marginBottom: '1.5rem' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>SEGMENT</label>
             <select 
@@ -533,6 +538,29 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
               <option value="Self Pickup">Self Pickup</option>
             </select>
           </div>
+
+          {/* Salesperson / Field Exec Field */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>SALESPERSON / EXEC</label>
+            {isAdminOrASM ? (
+              <select
+                value={salespersonId}
+                onChange={e => setSalespersonId(e.target.value)}
+                style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontWeight: 700 }}
+              >
+                {salesTeamMembers.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.full_name} ({u.role_name.replace(/_/g, ' ')})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div style={{ padding: '0.6rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <UserCheck size={16} color="#34d399" />
+                <span>{currentUser?.full_name} (Self)</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Order Items Table */}
@@ -547,7 +575,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           <table className="data-table" style={{ fontSize: '0.825rem' }}>
             <thead>
               <tr>
-                <th style={{ width: 300 }}>Product</th>
+                <th style={{ width: 280 }}>Product</th>
                 <th style={{ textAlign: 'center' }}>MRP</th>
                 <th style={{ textAlign: 'center' }}>BOX</th>
                 <th style={{ textAlign: 'center' }}>PCS</th>
@@ -560,48 +588,53 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <tbody>
               {processedItems.map((item, index) => (
                 <tr key={index}>
-                  <td style={{ padding: '0.5rem 0.5rem' }}>
+                  <td>
                     <SearchableProductSelect 
                       selectedProductId={item.product_id}
-                      onSelectProduct={id => handleProductChange(index, id)}
+                      onSelectProduct={(productId) => handleProductChange(index, productId)}
                     />
                   </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span style={{ fontWeight: 700, color: '#f8fafc' }}>₹{item.unit_price}</span>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
+                  <td style={{ textAlign: 'center', fontWeight: 600 }}>₹{item.unit_price}</td>
+                  <td>
                     <input 
                       type="number" 
-                      value={item.box_qty} 
+                      min="0"
+                      value={item.box_qty}
                       onChange={e => handleQuantityChange(index, 'box_qty', parseInt(e.target.value) || 0)}
-                      style={{ width: 65, padding: '0.45rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', textAlign: 'center', fontWeight: 700 }}
+                      style={{ width: 60, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
                     />
                   </td>
-                  <td style={{ textAlign: 'center' }}>
+                  <td>
                     <input 
                       type="number" 
-                      value={item.loose_pcs} 
+                      min="0"
+                      value={item.loose_pcs}
                       onChange={e => handleQuantityChange(index, 'loose_pcs', parseInt(e.target.value) || 0)}
-                      style={{ width: 65, padding: '0.45rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', textAlign: 'center', fontWeight: 700 }}
+                      style={{ width: 60, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
                     />
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <span style={{ fontWeight: 800, color: '#34d399', fontSize: '0.9rem' }}>{item.total_qty_pcs}</span>
+                    <span style={{ display: 'block', fontSize: '0.675rem', color: '#94a3b8' }}>({item.box_qty}B + {item.loose_pcs}L)</span>
                   </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.9rem' }}>₹{item.total_price.toLocaleString()}</span>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>
+                    ₹{item.total_price.toLocaleString()}
                   </td>
                   <td>
                     <input 
                       type="text" 
-                      value={item.remark || ''} 
-                      onChange={e => handleRemarkChange(index, e.target.value)}
                       placeholder="Line remark..."
-                      style={{ width: '100%', padding: '0.4rem 0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.775rem' }}
+                      value={item.remark}
+                      onChange={e => handleRemarkChange(index, e.target.value)}
+                      style={{ width: '100%', padding: '0.35rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', fontSize: '0.775rem' }}
                     />
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button onClick={() => removeItemRow(index)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer' }} title="Delete row">
+                    <button 
+                      onClick={() => removeItemRow(index)}
+                      disabled={items.length <= 1}
+                      style={{ background: 'none', border: 'none', color: items.length <= 1 ? '#475569' : '#f43f5e', cursor: items.length <= 1 ? 'not-allowed' : 'pointer' }}
+                    >
                       <Trash2 size={16} />
                     </button>
                   </td>
@@ -611,38 +644,40 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           </table>
         </div>
 
-        {/* Calculation Summary Box */}
-        <div style={{ background: '#0f172a', padding: '1rem', borderRadius: 8, border: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#38bdf8', fontWeight: 700 }}>
-            <Calculator size={18} />
-            <span>Order Summary:</span>
-          </div>
-          <div style={{ display: 'flex', gap: '2rem', fontSize: '0.9rem' }}>
-            <div>Boxes: <span style={{ fontWeight: 800 }}>{totalBoxQty}</span></div>
-            <div>Loose PCS: <span style={{ fontWeight: 800 }}>{totalLoosePcs}</span></div>
-            <div>Total PCS: <span style={{ fontWeight: 800, color: '#34d399' }}>{totalQtyPcs}</span></div>
-            <div>Total Value: <span style={{ fontWeight: 800, color: '#38bdf8' }}>₹{totalAmount.toLocaleString()}</span></div>
-          </div>
-        </div>
-
-        {/* Overall Order Remarks */}
+        {/* Order Remarks */}
         <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: 6 }}>
-            <MessageSquare size={15} color="#38bdf8" /> ORDER REMARKS / SPECIAL INSTRUCTIONS
-          </label>
+          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ORDER LEVEL REMARKS / NOTES</label>
           <input 
-            type="text" 
-            value={remarks} 
+            type="text"
+            placeholder="Special delivery instructions or order notes..."
+            value={remarks}
             onChange={e => setRemarks(e.target.value)}
-            placeholder="Special delivery instructions, urgency notes, batch preferences..."
-            style={{ width: '100%', padding: '0.65rem 0.85rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.85rem' }}
+            style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.85rem' }}
           />
         </div>
 
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-          <button className="btn btn-outline" onClick={() => handleSubmit('DRAFT')}>Save as Draft</button>
-          <button className="btn btn-primary" onClick={() => handleSubmit('SUBMITTED')}>Submit Order to Admin</button>
+        {/* Order Total & Action Buttons */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', padding: '1rem 1.25rem', borderRadius: 8, border: '1px solid #334155' }}>
+          <div>
+            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+              Total Volume: <strong style={{ color: 'white' }}>{totalBoxQty} Boxes / {totalLoosePcs} Loose ({totalQtyPcs} PCS)</strong>
+            </div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#34d399' }}>
+              Order Value: ₹{totalAmount.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.725rem', color: '#38bdf8', marginTop: 2 }}>
+              Booked Salesperson: <strong>{isAdminOrASM ? (activeSalesperson?.full_name || 'Amit Kumar') : (currentUser?.full_name || 'Amit Kumar')}</strong>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button className="btn btn-outline" onClick={() => handleSubmit('DRAFT')}>
+              Save as Draft
+            </button>
+            <button className="btn btn-primary" onClick={() => handleSubmit('SUBMITTED')}>
+              Submit Order
+            </button>
+          </div>
         </div>
       </div>
     </div>
