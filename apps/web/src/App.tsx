@@ -168,6 +168,26 @@ const MainLayout: React.FC = () => {
     }
   };
 
+  const handleCancelOrder = (orderId: string) => {
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
+    addNotification({
+      title: `Order Cancelled`,
+      message: `Sales order ${orderId} has been cancelled.`,
+      event_type: 'ORDER_CANCELLED',
+      order_id: orderId
+    });
+  };
+
+  const handleDeleteOrder = (orderId: string) => {
+    setOrders(prev => prev.filter(o => o.id !== orderId));
+    addNotification({
+      title: `Order Deleted (Admin Action)`,
+      message: `Sales order removed permanently by System Admin.`,
+      event_type: 'ORDER_DELETED',
+      order_id: orderId
+    });
+  };
+
   return (
     <div className="app-container">
       <Sidebar 
@@ -197,6 +217,8 @@ const MainLayout: React.FC = () => {
             onOpenCreateOrder={() => setIsCreateOpen(true)}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
             onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
+            onCancelOrder={handleCancelOrder}
+            onDeleteOrder={handleDeleteOrder}
           />
         )}
 
@@ -206,6 +228,8 @@ const MainLayout: React.FC = () => {
             onOpenCreateOrder={() => setIsCreateOpen(true)}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
             onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
+            onCancelOrder={handleCancelOrder}
+            onDeleteOrder={handleDeleteOrder}
           />
         )}
 

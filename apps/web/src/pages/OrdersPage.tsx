@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, ShieldCheck } from 'lucide-react';
+import { Search, Plus, ShieldCheck, Ban, Trash2, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { MOCK_COMPANIES } from '../lib/supabase';
 import { Order } from '../types';
@@ -9,16 +9,24 @@ interface OrdersPageProps {
   onOpenCreateOrder: () => void;
   onSelectOrderForApproval: (order: Order) => void;
   onViewInvoice?: (order: Order) => void;
+  onCancelOrder?: (orderId: string) => void;
+  onDeleteOrder?: (orderId: string) => void;
 }
 
 export const OrdersPage: React.FC<OrdersPageProps> = ({
   orders,
   onOpenCreateOrder,
   onSelectOrderForApproval,
-  onViewInvoice
+  onViewInvoice,
+  onCancelOrder,
+  onDeleteOrder
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
+
+  const canAddOrder = hasPermission('add_order') || hasPermission('order_entry') || role === 'SALES_PERSON' || role === 'SYSTEM_ADMIN';
+  const canCancelOrder = hasPermission('cancel_order') || role === 'SALES_PERSON' || role === 'SALES_ADMIN' || role === 'SYSTEM_ADMIN';
+  const canDeleteOrder = hasPermission('delete_order') || role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('ALL');
@@ -33,17 +41,37 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
     return matchesSearch && matchesCompany && matchesStatus;
   });
 
+  const handleConfirmCancel = (order: Order) => {
+    if (window.confirm(`Are you sure you want to cancel Sales Order ${order.order_number}?`)) {
+      if (onCancelOrder) {
+        onCancelOrder(order.id);
+      }
+    }
+  };
+
+  const handleConfirmDelete = (order: Order) => {
+    if (window.confirm(`⚠️ PERMANENT DELETE WARNING: Delete Sales Order ${order.order_number}? This action can only be done by System Admin.`)) {
+      if (onDeleteOrder) {
+        onDeleteOrder(order.id);
+      }
+    }
+  };
+
   return (
     <div className="page-body">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Sales Orders Console</h1>
-          <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>View and manage multi-company B2B sales orders</p>
+          <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+            View, Add, Cancel, or Delete multi-company B2B sales orders based on active Permission Group
+          </p>
         </div>
 
-        <button className="btn btn-primary" onClick={onOpenCreateOrder}>
-          <Plus size={16} /> Create Agency Order
-        </button>
+        {canAddOrder && (
+          <button className="btn btn-primary" onClick={onOpenCreateOrder}>
+            <Plus size={16} /> Create Agency Order
+          </button>
+        )}
       </div>
 
       {/* Advanced Filter Toolbar */}
@@ -84,6 +112,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
             <option value="APPROVED">APPROVED</option>
             <option value="HELD">HELD</option>
             <option value="DISPATCHED">DISPATCHED</option>
+            <option value="CANCELLED">CANCELLED</option>
             <option value="COMPLETED">COMPLETED</option>
           </select>
         </div>
@@ -102,7 +131,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
               <th>Total PCS</th>
               <th>Order Total (₹)</th>
               <th>Status</th>
-              <th>Actions</th>
+              <th style={{ textAlign: 'center' }}>Actions Authority</th>
             </tr>
           </thead>
           <tbody>
@@ -117,24 +146,29 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                 <td>₹{order.total_amount.toLocaleString()}</td>
                 <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
                 <td>
-                  <div style={{ display: 'flex', gap: '0.4rem' }}>
-                    {(role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN') && (order.status === 'SUBMITTED' || order.status === 'HELD') ? (
+                  <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    {/* View Details */}
+                    <button 
+                      className="btn btn-outline"
+                      onClick={() => onSelectOrderForApproval(order)}
+                      style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                      title="View Details"
+                    >
+                      <FileText size={13} /> View
+                    </button>
+
+                    {/* Account Check Approval */}
+                    {(role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN' || role === 'SALES_ADMIN') && (order.status === 'SUBMITTED' || order.status === 'HELD') && (
                       <button 
                         className="btn btn-warning"
                         onClick={() => onSelectOrderForApproval(order)}
                         style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
                       >
-                        <ShieldCheck size={14} /> Account Check
-                      </button>
-                    ) : (
-                      <button 
-                        className="btn btn-outline"
-                        onClick={() => onSelectOrderForApproval(order)}
-                        style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
-                      >
-                        Details
+                        <ShieldCheck size={13} /> Check
                       </button>
                     )}
+
+                    {/* Invoice */}
                     {onViewInvoice && (
                       <button 
                         className="btn btn-primary"
@@ -143,6 +177,30 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                         title="Print / Download Invoice"
                       >
                         Invoice
+                      </button>
+                    )}
+
+                    {/* Cancel Order Action (Sales Person, Sales Admin, Admin) */}
+                    {canCancelOrder && order.status !== 'CANCELLED' && order.status !== 'DISPATCHED' && order.status !== 'COMPLETED' && (
+                      <button 
+                        className="btn btn-outline"
+                        onClick={() => handleConfirmCancel(order)}
+                        style={{ padding: '0.35rem 0.55rem', fontSize: '0.75rem', borderColor: '#f59e0b', color: '#fbbf24' }}
+                        title="Cancel Order"
+                      >
+                        <Ban size={13} /> Cancel
+                      </button>
+                    )}
+
+                    {/* Delete Order Action (Admin Only!) */}
+                    {canDeleteOrder && (
+                      <button 
+                        className="btn btn-danger"
+                        onClick={() => handleConfirmDelete(order)}
+                        style={{ padding: '0.35rem 0.55rem', fontSize: '0.75rem' }}
+                        title="Delete Order (Admin Only)"
+                      >
+                        <Trash2 size={13} /> Delete
                       </button>
                     )}
                   </div>

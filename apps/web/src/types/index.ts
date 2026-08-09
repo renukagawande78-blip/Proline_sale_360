@@ -21,7 +21,11 @@ export type OrderStatus =
   | 'CANCELLED';
 
 export interface PermissionControl {
-  order_entry: boolean;                 // Order Entry / Add Sale
+  add_order: boolean;                   // Add Order / Order Entry
+  view_order: boolean;                  // View Order
+  cancel_order: boolean;                // Cancel Order
+  delete_order: boolean;                // Delete Order (Admin / System Admin Only)
+  order_entry?: boolean;                // Alias for add_order
   party_view: boolean;                  // Party / Agency View
   new_party: boolean;                   // New Party Creation
   product_mgmt: boolean;                // Product Master Management
@@ -35,6 +39,14 @@ export interface PermissionControl {
   user_authority: boolean;              // User Passwords & Authority
 }
 
+export interface PermissionGroup {
+  id: string;
+  group_name: string;
+  description: string;
+  permissions: PermissionControl;
+  is_system?: boolean;
+}
+
 export interface User {
   id: string;
   sno?: number;
@@ -42,6 +54,8 @@ export interface User {
   full_name: string;
   phone?: string;
   role_name: RoleName;
+  permission_group_id?: string;
+  permission_group_name?: string;
   company_handle?: string;
   password?: string;
   active?: boolean;
