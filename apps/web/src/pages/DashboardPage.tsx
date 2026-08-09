@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShoppingCart, Clock, CheckCircle2, AlertTriangle, Truck, TrendingUp } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { isCompanyAllowedForUser } from '../lib/supabase';
 import { Order } from '../types';
 
 interface DashboardPageProps {
@@ -16,7 +17,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ orders = [], onOpe
 
   const canCreateOrder = hasPermission('order_entry') || hasPermission('company_order_form') || role === 'SALES_PERSON' || role === 'SYSTEM_ADMIN';
 
-  const safeOrders = orders || [];
+  // Filter orders by assigned brand handle scope
+  const safeOrders = (orders || []).filter(o => 
+    isCompanyAllowedForUser(o.company_name, currentUser?.company_handle)
+  );
 
   const totalOrders = safeOrders.length;
   const pendingOrders = safeOrders.filter(o => o.status === 'SUBMITTED').length;
@@ -34,7 +38,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ orders = [], onOpe
             Welcome back, {fullName}
           </h1>
           <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: 4 }}>
-            Role Context: <strong style={{ color: '#38bdf8' }}>{role ? role.replace(/_/g, ' ') : ''}</strong> | Multi-Company B2B Order Console
+            Role Context: <strong style={{ color: '#38bdf8' }}>{role ? role.replace(/_/g, ' ') : ''}</strong> | Brand Scope: <strong style={{ color: '#34d399' }}>{currentUser?.company_handle === 'All' ? 'All 13 Brands' : currentUser?.company_handle}</strong>
           </p>
         </div>
 
@@ -53,7 +57,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ orders = [], onOpe
             <ShoppingCart size={20} color="#38bdf8" />
           </div>
           <div className="kpi-value">{totalOrders}</div>
-          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Across all companies</span>
+          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>In your brand scope</span>
         </div>
 
         <div className="kpi-card">
@@ -106,7 +110,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ orders = [], onOpe
       <div className="data-table-container">
         <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Recent Operational Orders</h2>
-          <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 700 }}>Realtime Sync Active</span>
+          <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 700 }}>Realtime Brand Scope Sync</span>
         </div>
 
         <table className="data-table">

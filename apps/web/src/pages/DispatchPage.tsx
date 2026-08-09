@@ -1,6 +1,8 @@
 import React from 'react';
 import { Truck, CheckCircle, Clock } from 'lucide-react';
 import { Order } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { isCompanyAllowedForUser } from '../lib/supabase';
 
 interface DispatchPageProps {
   orders: Order[];
@@ -8,13 +10,20 @@ interface DispatchPageProps {
 }
 
 export const DispatchPage: React.FC<DispatchPageProps> = ({ orders, onOpenDispatchModal }) => {
-  const approvedOrders = orders.filter(o => o.status === 'APPROVED' || o.status === 'PARTIALLY_DISPATCHED');
+  const { currentUser } = useAuth();
+
+  const approvedOrders = orders.filter(o => 
+    (o.status === 'APPROVED' || o.status === 'PARTIALLY_DISPATCHED') &&
+    isCompanyAllowedForUser(o.company_name, currentUser?.company_handle)
+  );
 
   return (
     <div className="page-body">
       <div style={{ marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Dispatch Operations Management</h1>
-        <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Queue for approved orders ready for full or partial warehouse dispatch</p>
+        <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+          Queue for approved orders ready for full or partial warehouse dispatch | Brand Scope: <strong style={{ color: '#34d399' }}>{currentUser?.company_handle === 'All' ? 'All 13 Brands' : currentUser?.company_handle}</strong>
+        </p>
       </div>
 
       <div className="data-table-container">
@@ -38,33 +47,41 @@ export const DispatchPage: React.FC<DispatchPageProps> = ({ orders, onOpenDispat
             </tr>
           </thead>
           <tbody>
-            {approvedOrders.map(order => {
-              const totalOrdered = order.total_qty_pcs;
-              const totalDispatched = order.items?.reduce((acc, i) => acc + (i.dispatched_qty_pcs || 0), 0) || 0;
-              const totalPending = totalOrdered - totalDispatched;
+            {approvedOrders.length === 0 ? (
+              <tr>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                  No orders currently in dispatch queue for your brand scope.
+                </td>
+              </tr>
+            ) : (
+              approvedOrders.map(order => {
+                const totalOrdered = order.total_qty_pcs || 0;
+                const totalDispatched = order.items?.reduce((acc, i) => acc + (i.dispatched_qty_pcs || 0), 0) || 0;
+                const pendingPcs = totalOrdered - totalDispatched;
 
-              return (
-                <tr key={order.id}>
-                  <td><strong style={{ color: '#38bdf8' }}>{order.order_number}</strong></td>
-                  <td>{order.order_date}</td>
-                  <td>{order.agency_name}</td>
-                  <td>{order.company_name}</td>
-                  <td>{totalOrdered}</td>
-                  <td><span style={{ color: '#34d399', fontWeight: 700 }}>{totalDispatched}</span></td>
-                  <td><span style={{ color: '#fbbf24', fontWeight: 800 }}>{totalPending}</span></td>
-                  <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
-                  <td>
-                    <button 
-                      className="btn btn-primary"
-                      onClick={() => onOpenDispatchModal(order)}
-                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
-                    >
-                      <Truck size={14} /> Process Dispatch
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+                return (
+                  <tr key={order.id}>
+                    <td><strong style={{ color: '#38bdf8' }}>{order.order_number}</strong></td>
+                    <td>{order.order_date}</td>
+                    <td>{order.agency_name}</td>
+                    <td>{order.company_name}</td>
+                    <td><span style={{ fontWeight: 800, color: '#f8fafc' }}>{totalOrdered}</span></td>
+                    <td><span style={{ fontWeight: 800, color: '#34d399' }}>{totalDispatched}</span></td>
+                    <td><span style={{ fontWeight: 800, color: pendingPcs > 0 ? '#fbbf24' : '#94a3b8' }}>{pendingPcs}</span></td>
+                    <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
+                    <td>
+                      <button 
+                        className="btn btn-primary"
+                        onClick={() => onOpenDispatchModal(order)}
+                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
+                      >
+                        <Truck size={14} /> Dispatch
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>

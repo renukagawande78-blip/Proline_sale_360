@@ -1,18 +1,26 @@
 import React, { useState } from 'react';
 import { BarChart3, PieChart, TrendingUp, Calendar, Truck, Download, FileSpreadsheet } from 'lucide-react';
 import { Order } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { isCompanyAllowedForUser } from '../lib/supabase';
 
 interface ReportsPageProps {
   orders: Order[];
 }
 
 export const ReportsPage: React.FC<ReportsPageProps> = ({ orders }) => {
+  const { currentUser } = useAuth();
   const [lastOrderDays, setLastOrderDays] = useState<'7' | '15' | '21' | '30'>('15');
   const [isExporting, setIsExporting] = useState(false);
 
+  // Scoped Orders by Brand Scope Handle
+  const scopedOrders = orders.filter(o => 
+    isCompanyAllowedForUser(o.company_name, currentUser?.company_handle)
+  );
+
   // Fill Rate Calculation
-  const totalOrdered = orders.reduce((sum, o) => sum + o.total_qty_pcs, 0);
-  const totalDispatched = orders.reduce((sum, o) => sum + (o.items?.reduce((acc, i) => acc + i.dispatched_qty_pcs, 0) || 0), 0);
+  const totalOrdered = scopedOrders.reduce((sum, o) => sum + o.total_qty_pcs, 0);
+  const totalDispatched = scopedOrders.reduce((sum, o) => sum + (o.items?.reduce((acc, i) => acc + i.dispatched_qty_pcs, 0) || 0), 0);
   const fillRatePercent = totalOrdered > 0 ? ((totalDispatched / totalOrdered) * 100).toFixed(1) : '94.5';
 
   // Excel / CSV Export Handler
@@ -43,7 +51,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ orders }) => {
           'Order Remarks'
         ];
 
-        rows = orders.map(o => [
+        rows = scopedOrders.map(o => [
           o.order_number,
           o.order_date,
           o.company_name || 'FMCG',
@@ -60,7 +68,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ orders }) => {
       } else if (reportType === 'AGENCY') {
         filename = `Proline_Agency_Activity_Report_${todayStr}`;
         headers = ['Agency Name', 'Last Order Date', 'Segment', 'Delivery Type', 'Status', 'Total Value (INR)'];
-        rows = orders.map(o => [
+        rows = scopedOrders.map(o => [
           o.agency_name || 'Agency Party',
           o.order_date,
           o.company_name || 'FMCG',
@@ -72,7 +80,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ orders }) => {
         filename = `Proline_Brand_Dispatch_Volume_${todayStr}`;
         headers = ['Order Number', 'Product Line Item ID', 'Product Description', 'Box Qty', 'Loose PCS', 'Total PCS', 'Line Amount (INR)'];
         
-        orders.forEach(o => {
+        scopedOrders.forEach(o => {
           o.items?.forEach(item => {
             rows.push([
               o.order_number,

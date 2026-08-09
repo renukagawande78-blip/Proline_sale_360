@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Plus, ShieldCheck, Ban, Trash2, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { MOCK_COMPANIES } from '../lib/supabase';
+import { MOCK_COMPANIES, isCompanyAllowedForUser } from '../lib/supabase';
 import { Order, PermissionControl } from '../types';
 import { PermissionDeniedModal } from '../components/PermissionDeniedModal';
 
@@ -80,13 +80,18 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
     }
   };
 
+  const allowedCompanies = MOCK_COMPANIES.filter(c => 
+    isCompanyAllowedForUser(c.company_name, currentUser?.company_handle)
+  );
+
   const filteredOrders = orders.filter(o => {
+    const matchesBrandScope = isCompanyAllowedForUser(o.company_name, currentUser?.company_handle);
     const matchesSearch = o.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (o.agency_name && o.agency_name.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesCompany = selectedCompany === 'ALL' || o.company_id === selectedCompany;
     const matchesStatus = selectedStatus === 'ALL' || o.status === selectedStatus;
 
-    return matchesSearch && matchesCompany && matchesStatus;
+    return matchesBrandScope && matchesSearch && matchesCompany && matchesStatus;
   });
 
   return (
@@ -95,7 +100,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Sales Orders Console</h1>
           <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-            View, Add, Cancel, or Delete multi-company B2B sales orders based on active Permission Group
+            View, Add, Cancel, or Delete multi-company B2B sales orders | Brand Scope: <strong style={{ color: '#34d399' }}>{currentUser?.company_handle === 'All' ? 'All 13 Brands' : currentUser?.company_handle}</strong>
           </p>
         </div>
 
@@ -124,7 +129,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
             style={{ padding: '0.55rem 0.75rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.85rem' }}
           >
             <option value="ALL">All Segments</option>
-            {MOCK_COMPANIES.map(c => (
+            {allowedCompanies.map(c => (
               <option key={c.id} value={c.id}>{c.company_name}</option>
             ))}
           </select>

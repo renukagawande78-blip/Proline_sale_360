@@ -6,6 +6,17 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder_k
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+export const isCompanyAllowedForUser = (companyNameOrCode?: string, userCompanyHandle?: string): boolean => {
+  if (!userCompanyHandle || userCompanyHandle === 'All') return true;
+  const allowedBrands = userCompanyHandle.split(',').map(b => b.trim().toLowerCase());
+  const target = (companyNameOrCode || '').toLowerCase().trim();
+  
+  return allowedBrands.some(allowed => {
+    if (!allowed) return false;
+    return target.includes(allowed) || allowed.includes(target);
+  });
+};
+
 // Master Brand Companies
 export const MOCK_COMPANIES: Company[] = [
   { id: 'c01', company_code: 'PRG', company_name: 'Pringod (Priyagold)' },

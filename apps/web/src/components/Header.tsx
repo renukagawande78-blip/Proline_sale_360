@@ -176,6 +176,11 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenUse
             <div style={{ fontWeight: 700, fontSize: '0.825rem', color: '#f8fafc' }}>{currentUser.full_name}</div>
           </div>
           <span className="role-pill" style={{ marginLeft: 4 }}>{(currentUser.role_name || '').replace(/_/g, ' ')}</span>
+          
+          {/* Brand Data Scope Indicator */}
+          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.12)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.2rem 0.55rem', borderRadius: 6 }}>
+            🏢 Scope: {currentUser.company_handle === 'All' ? 'All 13 Brands' : currentUser.company_handle}
+          </span>
         </div>
 
         {/* 3-DOT MENU BUTTON & POPUP DROPDOWN */}

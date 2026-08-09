@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare } from 'lucide-react';
-import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS } from '../lib/supabase';
+import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, isCompanyAllowedForUser } from '../lib/supabase';
 import { Order, OrderItem, Agency, Product } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface SearchableAgencySelectProps {
   selectedAgencyId: string;
@@ -315,7 +316,13 @@ interface CreateOrderModalProps {
 }
 
 export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, onSubmitOrder }) => {
-  const [companyId, setCompanyId] = useState(MOCK_COMPANIES[0].id);
+  const { currentUser } = useAuth();
+
+  const allowedCompanies = MOCK_COMPANIES.filter(c => 
+    isCompanyAllowedForUser(c.company_name, currentUser?.company_handle)
+  );
+
+  const [companyId, setCompanyId] = useState(allowedCompanies[0]?.id || MOCK_COMPANIES[0].id);
   const [agencyId, setAgencyId] = useState(MOCK_AGENCIES[0].id);
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
   const [remarks, setRemarks] = useState('');
@@ -502,7 +509,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
               onChange={e => setCompanyId(e.target.value)}
               style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
             >
-              {MOCK_COMPANIES.map(c => (
+              {allowedCompanies.map(c => (
                 <option key={c.id} value={c.id}>{c.company_name}</option>
               ))}
             </select>
