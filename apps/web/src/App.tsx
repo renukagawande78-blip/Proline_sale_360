@@ -17,12 +17,13 @@ import { OrderInvoiceModal } from './components/OrderInvoiceModal';
 import { GlobalFilterModal } from './components/GlobalFilterModal';
 import { ReturnRequestModal } from './components/ReturnRequestModal';
 import { ProcessReturnModal } from './components/ProcessReturnModal';
+import { PODVerificationModal } from './components/PODVerificationModal';
 import { ZoneMasterModal } from './components/ZoneMasterModal';
 import { RegisterAgencyModal } from './components/RegisterAgencyModal';
 import { LoginPage } from './components/LoginPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
-import { INITIAL_ORDERS, MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS } from './lib/supabase';
+import { INITIAL_ORDERS, MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, MOCK_HOLD_REASONS } from './lib/supabase';
 import { Order, GlobalFilterState, Agency, Product } from './types';
 
 // Error Boundary Component
@@ -75,13 +76,29 @@ const MainLayout: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  React.useEffect(() => {
+    if (!currentUser) return;
+    const isChiragOrHarshad = (currentUser.full_name || '').toLowerCase().includes('chirag') || (currentUser.full_name || '').toLowerCase().includes('harshad');
+    if (isChiragOrHarshad || currentUser.role_name === 'SUPER_ADMIN') return;
+
+    if (currentUser.role_name === 'DISPATCH_MANAGER') {
+      setCurrentTab('dispatch');
+    } else if (currentUser.role_name === 'BILLING' || currentUser.role_name === 'ACCOUNTS') {
+      setCurrentTab('accounts');
+    } else if (currentUser.role_name === 'SALES_ADMIN' || currentUser.role_name === 'SALES_PERSON' || currentUser.role_name === 'AREA_SALES_MANAGER') {
+      setCurrentTab('orders');
+    }
+  }, [currentUser?.id, currentUser?.role_name]);
+
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [orderToEdit, setOrderToEdit] = useState<Order | null>(null);
   const [selectedOrderForApproval, setSelectedOrderForApproval] = useState<Order | null>(null);
   const [selectedOrderForDispatch, setSelectedOrderForDispatch] = useState<Order | null>(null);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
   const [selectedOrderForReturnRequest, setSelectedOrderForReturnRequest] = useState<Order | null>(null);
   const [selectedOrderForProcessReturn, setSelectedOrderForProcessReturn] = useState<Order | null>(null);
+  const [selectedOrderForPOD, setSelectedOrderForPOD] = useState<Order | null>(null);
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
   const [isZoneMasterOpen, setIsZoneMasterOpen] = useState(false);
   const [isRegisterAgencyOpen, setIsRegisterAgencyOpen] = useState(false);
@@ -190,33 +207,65 @@ const MainLayout: React.FC = () => {
   });
 
   // Handlers
-  const handleCreateOrder = (newOrder: Order) => {
-    setOrders(prev => [newOrder, ...prev]);
+  const handleOpenEditOrder = (order: Order) => {
+    setOrderToEdit(order);
+    setIsCreateOpen(true);
+  };
+
+  const handleCreateOrder = (orderData: Order) => {
+    setOrders(prev => {
+      const exists = prev.some(o => o.id === orderData.id);
+      if (exists) {
+        return prev.map(o => o.id === orderData.id ? { ...o, ...orderData } : o);
+      }
+      return [orderData, ...prev];
+    });
+    setIsCreateOpen(false);
+    const isEditing = !!orderToEdit;
+    setOrderToEdit(null);
     addNotification({
-      title: `New Order Created: ${newOrder.order_number}`,
-      message: `B2B Order for ${newOrder.agency_name} (${newOrder.total_qty_pcs} PCS). Created by ${newOrder.salesperson_name}.`,
-      event_type: 'ORDER_SUBMITTED',
-      order_id: newOrder.id
+      title: isEditing ? `Order Modified: ${orderData.order_number}` : `New Order Created: ${orderData.order_number}`,
+      message: isEditing 
+        ? `Order updated before approval by ${orderData.salesperson_name}.`
+        : `B2B Order for ${orderData.agency_name} (${orderData.total_qty_pcs} PCS). Created by ${orderData.salesperson_name}.`,
+      event_type: isEditing ? 'ORDER_HELD' : 'ORDER_SUBMITTED',
+      order_id: orderData.id
     });
   };
 
-  const handleApproveOrder = (orderId: string, remarks: string) => {
+  const handleApproveOrder = (orderId: string, remarks: string, approvalDetails?: any) => {
     const approverName = currentUser ? `${currentUser.full_name} (${currentUser.role_name === 'SUPER_ADMIN' ? 'Super Admin' : 'System Admin'})` : 'System Admin';
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
-    setOrders(prev => prev.map(o => o.id === orderId ? { 
-      ...o, 
-      status: 'APPROVED',
-      approved_by_name: approverName,
-      approved_at: timestamp
-    } : o));
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        const isWaitForStock = approvalDetails?.inventory_status === 'WAIT_FOR_STOCK';
+        const newStatus = isWaitForStock ? 'WAIT_FOR_STOCK' : 'APPROVED';
+        return { 
+          ...o, 
+          status: newStatus,
+          approved_by_name: approverName,
+          approved_at: timestamp,
+          payment_type: approvalDetails?.payment_type || o.payment_type || 'CREDIT',
+          payment_receipt_no: approvalDetails?.payment_receipt_no || o.payment_receipt_no,
+          financial_approval_by: approverName,
+          priority: approvalDetails?.priority || o.priority || 'MEDIUM',
+          inventory_status: approvalDetails?.inventory_status || 'IN_STOCK',
+          credit_days: approvalDetails?.payment_type === 'ADVANCE' ? 0 : (approvalDetails?.credit_days || o.credit_days || 30)
+        };
+      }
+      return o;
+    }));
 
     const target = orders.find(o => o.id === orderId);
     if (target) {
+      const isWait = approvalDetails?.inventory_status === 'WAIT_FOR_STOCK';
       addNotification({
-        title: `Order Approved: ${target.order_number}`,
-        message: `Approved by ${approverName}. Transferred to Dispatch Queue.`,
-        event_type: 'ORDER_APPROVED',
+        title: isWait ? `⚠️ Wait for Stock Alert: ${target.order_number}` : `Order Approved: ${target.order_number}`,
+        message: isWait 
+          ? `Sales Admin requested Wait for Stock. Alert sent to Salesman (${target.salesperson_name}).`
+          : `Approved by ${approverName}. Priority: ${approvalDetails?.priority || 'MEDIUM'}. Transferred to Billing / Dispatch Queue.`,
+        event_type: isWait ? 'WAIT_FOR_STOCK' : 'ORDER_APPROVED',
         order_id: target.id
       });
     }
@@ -224,17 +273,97 @@ const MainLayout: React.FC = () => {
   };
 
   const handleHoldOrder = (orderId: string, reasonId: string, remarks: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'HELD' } : o));
+    const reasonObj = MOCK_HOLD_REASONS.find(r => r.id === reasonId);
+    const holdReasonText = reasonObj ? reasonObj.reason_description : 'Super Admin Hold Directive';
+    const heldByName = currentUser ? `${currentUser.full_name} (${currentUser.role_name === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin'})` : 'Super Admin (Chirag / Harshad)';
+
+    setOrders(prev => prev.map(o => o.id === orderId ? { 
+      ...o, 
+      previous_status_before_hold: o.status !== 'HELD' ? o.status : o.previous_status_before_hold || 'SUBMITTED',
+      status: 'HELD', 
+      hold_reason: holdReasonText,
+      hold_remarks: remarks || 'Executive directive hold applied.'
+    } : o));
+
     const target = orders.find(o => o.id === orderId);
     if (target) {
       addNotification({
         title: `Order Placed on Hold: ${target.order_number}`,
-        message: `Held due to credit/overdue policy check. Remarks: ${remarks || 'Check required'}`,
+        message: `Placed on Hold by ${heldByName}. Reason: ${holdReasonText}. Remarks: ${remarks || 'Check required'}`,
         event_type: 'ORDER_HELD',
         order_id: target.id
       });
     }
     setSelectedOrderForApproval(null);
+  };
+
+  const handleReleaseHold = (orderId: string) => {
+    const target = orders.find(o => o.id === orderId);
+    if (!target) return;
+    const restoredStatus = target.previous_status_before_hold || 'SUBMITTED';
+    const releaserName = currentUser ? `${currentUser.full_name} (${currentUser.role_name === 'SUPER_ADMIN' ? 'Super Admin' : 'Accounts Admin'})` : 'Super Admin';
+
+    setOrders(prev => prev.map(o => o.id === orderId ? {
+      ...o,
+      status: restoredStatus,
+      hold_reason: undefined,
+      hold_remarks: undefined
+    } : o));
+
+    addNotification({
+      title: `▶️ Hold Released: ${target.order_number}`,
+      message: `Hold released by ${releaserName}. Order resumed from exact pending stage (${restoredStatus}).`,
+      event_type: 'HOLD_RELEASED',
+      order_id: target.id
+    });
+  };
+
+  const handleConfirmPOD = (orderId: string, podStatus: 'CLEAN' | 'ISSUE_RAISED', issueType?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN', details?: string) => {
+    setOrders(prev => prev.map(o => o.id === orderId ? {
+      ...o,
+      status: podStatus === 'CLEAN' ? 'DELIVERED' : 'POD_ISSUE_RAISED',
+      pod_status: podStatus,
+      pod_issue_type: issueType,
+      pod_issue_details: details
+    } : o));
+  };
+
+  const handleResolveException = (orderId: string, action: 'CREATE_GRN' | 'REATTEMPT_DELIVERY', grnNumber?: string, grnValue?: number) => {
+    const target = orders.find(o => o.id === orderId);
+    if (!target) return;
+
+    if (action === 'CREATE_GRN') {
+      const autoGrn = grnNumber || `GRN-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      setOrders(prev => prev.map(o => o.id === orderId ? {
+        ...o,
+        status: 'COMPLETED',
+        grn_number: autoGrn,
+        grn_value: grnValue || o.total_amount
+      } : o));
+
+      addNotification({
+        title: `✅ Admin Exception Resolved (GRN Created): ${target.order_number}`,
+        message: `Sales Admin / Chirag Sir generated GRN ${autoGrn} for ₹${(grnValue || target.total_amount).toLocaleString()}. Order marked COMPLETED.`,
+        event_type: 'GRN_CREATED',
+        order_id: target.id
+      });
+    } else {
+      setOrders(prev => prev.map(o => o.id === orderId ? {
+        ...o,
+        status: 'APPROVED',
+        priority: 'HIGH',
+        pod_status: undefined,
+        pod_issue_type: undefined,
+        pod_issue_details: undefined
+      } : o));
+
+      addNotification({
+        title: `🚨 Reattempt Delivery Dispatched: ${target.order_number}`,
+        message: `Delivery exception resolved by Sales Admin. Order re-routed back to Stage 5 Dispatch Team with HIGH PRIORITY flag.`,
+        event_type: 'REATTEMPT_DELIVERY',
+        order_id: target.id
+      });
+    }
   };
 
   const handleRejectOrder = (orderId: string, remarks: string) => {
@@ -410,7 +539,8 @@ const MainLayout: React.FC = () => {
         {currentTab === 'orders' && (
           <OrdersPage 
             orders={globallyFilteredOrders} 
-            onOpenCreateOrder={() => setIsCreateOpen(true)}
+            onOpenCreateOrder={() => { setOrderToEdit(null); setIsCreateOpen(true); }}
+            onOpenEditOrder={handleOpenEditOrder}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
             onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
             onCancelOrder={handleCancelOrder}
@@ -422,7 +552,8 @@ const MainLayout: React.FC = () => {
         {currentTab === 'approvals' && (
           <OrdersPage 
             orders={globallyFilteredOrders.filter(o => o.status === 'SUBMITTED' || o.status === 'HELD')} 
-            onOpenCreateOrder={() => setIsCreateOpen(true)}
+            onOpenCreateOrder={() => { setOrderToEdit(null); setIsCreateOpen(true); }}
+            onOpenEditOrder={handleOpenEditOrder}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
             onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
             onCancelOrder={handleCancelOrder}
@@ -445,6 +576,7 @@ const MainLayout: React.FC = () => {
             onOpenDispatchModal={(o) => setSelectedOrderForDispatch(o)}
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onOpenProcessReturnModal={(o) => setSelectedOrderForProcessReturn(o)}
+            onOpenPODModal={(o) => setSelectedOrderForPOD(o)}
           />
         )}
 
@@ -466,12 +598,14 @@ const MainLayout: React.FC = () => {
             orders={orders}
             onOpenProcessReturnModal={(o) => setSelectedOrderForProcessReturn(o)}
             onSelectOrder={(o) => setSelectedOrderForApproval(o)}
+            onResolveException={handleResolveException}
           />
         )}
 
         {currentTab === 'tracker' && (
           <OrderTrackerView
             orders={orders}
+            onReleaseHold={handleReleaseHold}
           />
         )}
       </div>
@@ -479,7 +613,8 @@ const MainLayout: React.FC = () => {
       {/* Global Modals */}
       <CreateOrderModal 
         isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
+        orderToEdit={orderToEdit}
+        onClose={() => { setIsCreateOpen(false); setOrderToEdit(null); }}
         onSubmitOrder={handleCreateOrder}
       />
 
@@ -550,6 +685,13 @@ const MainLayout: React.FC = () => {
             event_type: 'AGENCY_REGISTERED'
           });
         }}
+      />
+
+      <PODVerificationModal
+        order={selectedOrderForPOD}
+        isOpen={!!selectedOrderForPOD}
+        onClose={() => setSelectedOrderForPOD(null)}
+        onConfirmPOD={handleConfirmPOD}
       />
     </div>
   );

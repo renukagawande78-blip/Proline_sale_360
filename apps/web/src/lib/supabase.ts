@@ -6,14 +6,21 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder_k
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export const isCompanyAllowedForUser = (companyNameOrCode?: string, userCompanyHandle?: string): boolean => {
+export const isCompanyAllowedForUser = (companyNameOrCode?: string, userCompanyHandle?: string, companyCode?: string): boolean => {
   if (!userCompanyHandle || userCompanyHandle === 'All') return true;
   const allowedBrands = userCompanyHandle.split(',').map(b => b.trim().toLowerCase());
-  const target = (companyNameOrCode || '').toLowerCase().trim();
+  const targetName = (companyNameOrCode || '').toLowerCase().trim();
+  const targetCode = (companyCode || '').toLowerCase().trim();
   
   return allowedBrands.some(allowed => {
     if (!allowed) return false;
-    return target.includes(allowed) || allowed.includes(target);
+    return (
+      targetName.includes(allowed) || 
+      allowed.includes(targetName) ||
+      (targetCode && (targetCode === allowed || allowed.includes(targetCode))) ||
+      (allowed.includes('priyagold') && targetName.includes('pringod')) ||
+      (allowed.includes('pringod') && targetName.includes('priyagold'))
+    );
   });
 };
 
@@ -154,19 +161,19 @@ export const updateAgencyFinancials = (agencyId: string, updated: Partial<Agency
 
 // Master Brand Companies
 export const MOCK_COMPANIES: Company[] = [
-  { id: 'c01', company_code: 'PRG', company_name: 'Pringod (Priyagold)', segment: 'FMCG' },
-  { id: 'c02', company_code: 'RCPL', company_name: 'RCPL', segment: 'FMCG' },
-  { id: 'c03', company_code: 'ORN', company_name: 'Orion', segment: 'FMCG' },
-  { id: 'c04', company_code: 'GND', company_name: 'Gandour', segment: 'FMCG' },
-  { id: 'c05', company_code: 'HPP', company_name: 'HPPL', segment: 'FMCG' },
-  { id: 'c06', company_code: 'WPL', company_name: 'Whirlpool', segment: 'FMCD' },
-  { id: 'c07', company_code: 'DKN', company_name: 'Daikin', segment: 'FMCD' },
-  { id: 'c08', company_code: 'CRS', company_name: 'Cruise', segment: 'FMCD' },
-  { id: 'c09', company_code: 'MOG', company_name: 'Mogu Mogu', segment: 'FMCG' },
-  { id: 'c10', company_code: 'HEL', company_name: 'Heli', segment: 'FMCG' },
-  { id: 'c11', company_code: 'WAI', company_name: 'Waiwai', segment: 'FMCG' },
-  { id: 'c12', company_code: 'PRN', company_name: 'PRAN', segment: 'FMCG' },
-  { id: 'c13', company_code: 'AK', company_name: 'AK Group', segment: 'FMCD' }
+  { id: 'c01', company_code: 'PG', company_name: 'Pringod (Priyagold)', segment: 'FMCG' },
+  { id: 'c02', company_code: 'RC', company_name: 'RCPL', segment: 'FMCG' },
+  { id: 'c03', company_code: 'OR', company_name: 'Orion', segment: 'FMCG' },
+  { id: 'c04', company_code: 'GD', company_name: 'Gandour', segment: 'FMCG' },
+  { id: 'c05', company_code: 'HP', company_name: 'HPPL', segment: 'FMCG' },
+  { id: 'c06', company_code: 'WP', company_name: 'Whirlpool', segment: 'FMCD' },
+  { id: 'c07', company_code: 'DK', company_name: 'Daikin', segment: 'FMCD' },
+  { id: 'c08', company_code: 'CR', company_name: 'Cruise', segment: 'FMCD' },
+  { id: 'c09', company_code: 'MG', company_name: 'Mogu Mogu', segment: 'FMCG' },
+  { id: 'c10', company_code: 'HL', company_name: 'Heli', segment: 'FMCG' },
+  { id: 'c11', company_code: 'WI', company_name: 'Waiwai', segment: 'FMCG' },
+  { id: 'c12', company_code: 'PR', company_name: 'PRAN', segment: 'FMCG' },
+  { id: 'c13', company_code: 'AK', company_name: 'AKAI', segment: 'FMCD' }
 ];
 
 export const resolveSegmentForUser = (user?: { company_handle?: string; role_name?: string } | null): 'ALL' | 'FMCG' | 'FMCD' => {
@@ -965,6 +972,18 @@ export const registerNewProduct = (newProd: {
   return productRecord;
 };
 
+export const generateNewBarcodeSKUCode = (companyIdOrCode?: string, productName?: string): string => {
+  const company = MOCK_COMPANIES.find(c => c.id === companyIdOrCode || c.company_code === companyIdOrCode);
+  const brandCode = company?.company_code || (companyIdOrCode ? companyIdOrCode.substring(0, 3).toUpperCase() : 'SKU');
+  
+  const p3 = productName && productName.trim()
+    ? productName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() 
+    : 'GEN';
+    
+  const random8Digits = Math.floor(89010000 + Math.random() * 89999);
+  return `BAR-${brandCode}-${p3}-${random8Digits}`;
+};
+
 export const registerNewAgency = (newAgencyData: {
   agency_name: string;
   agency_code?: string;
@@ -1054,6 +1073,7 @@ export const updateAgencyDetails = (
 };
 
 export const MOCK_HOLD_REASONS: HoldReason[] = [
+  { id: 'eb000000-0000-0000-0000-000000000000', reason_code: 'SUPER_ADMIN_EXECUTIVE_HOLD', reason_description: 'Super Admin Executive Hold (Chirag / Harshad Direct Directive)' },
   { id: 'eb111111-1111-1111-1111-111111111111', reason_code: 'OVERDUE_PAYMENT', reason_description: 'Overdue Payment Pending' },
   { id: 'eb222222-2222-2222-2222-222222222222', reason_code: 'CREDIT_LIMIT_EXCEEDED', reason_description: 'Credit Limit Exceeded' },
   { id: 'eb333333-3333-3333-3333-333333333333', reason_code: 'ADVANCE_REQUIRED', reason_description: 'Advance Payment Required' },

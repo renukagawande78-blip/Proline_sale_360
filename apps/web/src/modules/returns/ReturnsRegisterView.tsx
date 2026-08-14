@@ -25,6 +25,7 @@ interface ReturnsRegisterViewProps {
   orders: Order[];
   onOpenProcessReturnModal?: (order: Order) => void;
   onSelectOrder?: (order: Order) => void;
+  onResolveException?: (orderId: string, action: 'CREATE_GRN' | 'REATTEMPT_DELIVERY', grnNumber?: string, grnValue?: number) => void;
 }
 
 type ReturnStatusFilter = 'ALL' | 'PENDING_ADMIN_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DISPATCH_PROCESSED';
@@ -48,22 +49,31 @@ function getActiveStep(status: string): number {
 export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
   orders,
   onOpenProcessReturnModal,
-  onSelectOrder
+  onSelectOrder,
+  onResolveException
 }) => {
   const { currentUser } = useAuth();
   const role = currentUser?.role_name || '';
-  const isDispatch = ['DISPATCH_MANAGER', 'SYSTEM_ADMIN', 'SUPER_ADMIN', 'SALES_ADMIN'].includes(role);
+  const isDispatch = ['DISPATCH_MANAGER', 'SUPER_ADMIN', 'SALES_ADMIN'].includes(role);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ReturnStatusFilter>('ALL');
   const [typeFilter, setTypeFilter] = useState<ReturnTypeFilter>('ALL');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // All orders with a return request visible to this user
+  // Stage 7 Exception Desk State
+  const [selectedExceptionOrder, setSelectedExceptionOrder] = useState<Order | null>(null);
+  const [exceptionAction, setExceptionAction] = useState<'CREATE_GRN' | 'REATTEMPT_DELIVERY'>('CREATE_GRN');
+  const [grnNumberInput, setGrnNumberInput] = useState('');
+  const [grnValueInput, setGrnValueInput] = useState<number>(0);
+
+  // All orders with a return request or delivery exception visible to this user
   const returnOrders = orders.filter(o => {
     const accessible = isCompanyAllowedForUser(o.company_name, currentUser?.company_handle);
-    return accessible && !!o.return_request;
+    return accessible && (!!o.return_request || o.status === 'POD_ISSUE_RAISED');
   });
+
+  const podExceptionOrders = orders.filter(o => o.status === 'POD_ISSUE_RAISED');
 
   const filtered = returnOrders.filter(o => {
     const rr = o.return_request!;
@@ -140,6 +150,42 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
           );
         })}
       </div>
+
+      {/* Stage 7: Admin Exception Desk Banner */}
+      {podExceptionOrders.length > 0 && (
+        <div style={{ background: 'rgba(244, 63, 94, 0.12)', border: '1px solid #f43f5e', borderRadius: 14, padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fb7185', fontWeight: 900, fontSize: '0.95rem' }}>
+                <AlertTriangle size={18} /> STAGE 7: ADMIN EXCEPTION DESK — {podExceptionOrders.length} DELIVERY EXCEPTION(S) PENDING RESOLUTION
+              </div>
+              <p style={{ fontSize: '0.775rem', color: '#cbd5e1', marginTop: 4 }}>
+                Delivery exceptions reported by Driver/Sales Admin. Option A: Create GRN to complete order. Option B: Reattempt delivery to Stage 5 with High Priority alert.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {podExceptionOrders.map(ex => (
+                <button
+                  key={ex.id}
+                  onClick={() => setSelectedExceptionOrder(ex)}
+                  style={{
+                    padding: '0.45rem 0.85rem',
+                    background: '#f43f5e',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 8,
+                    fontSize: '0.775rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Resolve Order {ex.order_number}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: '0.85rem', marginBottom: '1.5rem' }}>
@@ -500,6 +546,119 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
           </tbody>
         </table>
       </div>
+      {/* Stage 7: Exception Resolution Modal */}
+      {selectedExceptionOrder && (
+        <div className="modal-overlay">
+          <div className="modal-card" style={{ maxWidth: 520 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.65rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertTriangle size={20} color="#fb7185" />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>
+                  Stage 7: Admin Exception Resolution
+                </h3>
+              </div>
+              <button onClick={() => setSelectedExceptionOrder(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.85rem', marginBottom: '1.25rem', fontSize: '0.8rem' }}>
+              <div>Order No: <strong style={{ color: '#38bdf8' }}>{selectedExceptionOrder.order_number}</strong> | Agency: <strong style={{ color: '#f8fafc' }}>{selectedExceptionOrder.agency_name}</strong></div>
+              <div style={{ color: '#fb7185', marginTop: 4, fontWeight: 700 }}>
+                Exception Type: {selectedExceptionOrder.pod_issue_type || 'POD_ISSUE_RAISED'} ({selectedExceptionOrder.pod_issue_details || 'Issue reported during delivery drop'})
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#94a3b8', marginBottom: '0.5rem' }}>
+                SELECT RESOLUTION OPTION
+              </label>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setExceptionAction('CREATE_GRN')}
+                  style={{
+                    padding: '0.75rem',
+                    borderRadius: 8,
+                    border: exceptionAction === 'CREATE_GRN' ? '2px solid #34d399' : '1px solid #334155',
+                    background: exceptionAction === 'CREATE_GRN' ? 'rgba(52,211,153,0.15)' : '#0f172a',
+                    color: exceptionAction === 'CREATE_GRN' ? '#34d399' : '#94a3b8',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Option A: Create GRN & Complete Order
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setExceptionAction('REATTEMPT_DELIVERY')}
+                  style={{
+                    padding: '0.75rem',
+                    borderRadius: 8,
+                    border: exceptionAction === 'REATTEMPT_DELIVERY' ? '2px solid #f59e0b' : '1px solid #334155',
+                    background: exceptionAction === 'REATTEMPT_DELIVERY' ? 'rgba(245,158,11,0.15)' : '#0f172a',
+                    color: exceptionAction === 'REATTEMPT_DELIVERY' ? '#fbbf24' : '#94a3b8',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Option B: Reattempt Delivery (Stage 5 Alert)
+                </button>
+              </div>
+
+              {exceptionAction === 'CREATE_GRN' ? (
+                <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.85rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>
+                    GRN NUMBER (Mandatory)*
+                  </label>
+                  <input
+                    type="text"
+                    value={grnNumberInput}
+                    onChange={e => setGrnNumberInput(e.target.value)}
+                    placeholder="e.g. GRN-2026-8811"
+                    style={{ width: '100%', padding: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 700, marginBottom: '0.65rem' }}
+                  />
+
+                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>
+                    GRN SETTLEMENT VALUE (₹)*
+                  </label>
+                  <input
+                    type="number"
+                    value={grnValueInput || selectedExceptionOrder.total_amount}
+                    onChange={e => setGrnValueInput(Number(e.target.value))}
+                    placeholder="GRN Amount"
+                    style={{ width: '100%', padding: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 700 }}
+                  />
+                </div>
+              ) : (
+                <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid #f59e0b', borderRadius: 8, padding: '0.85rem', color: '#fbbf24', fontSize: '0.775rem' }}>
+                  🚨 <strong>High Priority Reattempt:</strong> Order will be re-routed back to <strong>Stage 5 (Dispatch Team)</strong> with a High Priority alert flag for re-dispatch.
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button className="btn btn-outline" onClick={() => setSelectedExceptionOrder(null)}>Cancel</button>
+              <button
+                className={exceptionAction === 'CREATE_GRN' ? 'btn btn-success' : 'btn btn-warning'}
+                onClick={() => {
+                  if (onResolveException) {
+                    onResolveException(selectedExceptionOrder.id, exceptionAction, grnNumberInput, grnValueInput);
+                  }
+                  setSelectedExceptionOrder(null);
+                }}
+                style={{ fontWeight: 800 }}
+              >
+                {exceptionAction === 'CREATE_GRN' ? 'Create GRN & Mark Order Completed' : 'Re-route to Stage 5 Dispatch Team'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

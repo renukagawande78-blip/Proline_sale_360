@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Building2, Tag, Layers, Zap, ShoppingBag } from 'lucide-react';
+import { Building2, Tag, Layers, Zap, ShoppingBag, FileSpreadsheet, Edit3, Trash2 } from 'lucide-react';
 import { Company, SegmentType } from '../../types';
+import { useAuth } from '../../context/AuthContext';
+import { downloadSampleCSV } from '../../lib/masterImportExport';
+import { BulkImportModal } from '../../components/BulkImportModal';
 
 interface BrandsMasterViewProps {
   companies: Company[];
@@ -8,9 +11,28 @@ interface BrandsMasterViewProps {
 }
 
 export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, searchQuery }) => {
+  const { currentUser } = useAuth();
+  const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
   const [selectedSegment, setSelectedSegment] = useState<'ALL' | SegmentType>('ALL');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
 
-  const filteredCompanies = companies.filter(c => {
+  const handleDeleteBrand = (companyId: string, companyName: string) => {
+    if (window.confirm(`Are you sure you want to delete Brand Master "${companyName}"? This action is restricted to Super Admin authority.`)) {
+      setLocalCompanies(prev => prev.filter(c => c.id !== companyId));
+    }
+  };
+
+  const handleEditBrand = (c: Company) => {
+    const newName = window.prompt(`Update Brand / Company Name for ${c.company_code}:`, c.company_name);
+    if (newName && newName.trim()) {
+      setLocalCompanies(prev => prev.map(item => item.id === c.id ? { ...item, company_name: newName.trim() } : item));
+    }
+  };
+
+  const activeCompanies = localCompanies.length > 0 ? localCompanies : companies;
+
+  const filteredCompanies = activeCompanies.filter(c => {
     if (selectedSegment !== 'ALL' && c.segment !== selectedSegment) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -40,7 +62,47 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
         border: '1px solid #1e293b'
       }}>
         {/* Segmented Filter Pills */}
-        <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b' }}>
+        <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            title="Upload CSV sheet for bulk importing brand master records"
+            style={{
+              padding: '0.45rem 0.85rem',
+              borderRadius: '8px',
+              border: '1px solid rgba(2, 132, 199, 0.4)',
+              background: 'rgba(2, 132, 199, 0.15)',
+              color: '#38bdf8',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
+          >
+            <FileSpreadsheet size={14} /> 📥 Import Sheet (.CSV)
+          </button>
+
+          <button
+            onClick={() => downloadSampleCSV('companies')}
+            title="Download sample sheet for bulk uploading brands"
+            style={{
+              padding: '0.45rem 0.85rem',
+              borderRadius: '8px',
+              border: '1px solid #38bdf8',
+              background: 'rgba(56, 189, 248, 0.12)',
+              color: '#38bdf8',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              marginRight: '0.5rem'
+            }}
+          >
+            <FileSpreadsheet size={14} /> Download Sample Sheet (.CSV)
+          </button>
           <button
             onClick={() => setSelectedSegment('ALL')}
             style={{
@@ -114,6 +176,7 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
               <th>Industry Segment</th>
               <th>Segment Description</th>
               <th>Status</th>
+              <th style={{ textAlign: 'center' }}>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -146,12 +209,38 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
                     </span>
                   </td>
                   <td><span className="status-badge status-APPROVED">ACTIVE</span></td>
+                  <td style={{ textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                      <button
+                        className="btn btn-outline"
+                        onClick={() => handleEditBrand(c)}
+                        style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                      >
+                        <Edit3 size={13} /> Edit Brand
+                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => handleDeleteBrand(c.id, c.company_name)}
+                          title="Super Admin Authority: Delete brand master record"
+                          style={{ padding: '0.3rem 0.55rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      <BulkImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        masterType="companies"
+      />
     </div>
   );
 };

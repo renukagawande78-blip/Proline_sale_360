@@ -12,11 +12,15 @@ import {
   Save,
   MapPin,
   Landmark,
-  Sparkles
+  Sparkles,
+  FileSpreadsheet,
+  Upload,
+  Layers
 } from 'lucide-react';
 import { Agency, AgencyFinancials } from '../types';
 import { getAgencyFinancialsByAgencyId, updateAgencyFinancials, MOCK_AGENCIES } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { downloadSampleCSV, parseCSVContent } from '../lib/masterImportExport';
 
 interface UpdatePartyBalanceModalProps {
   isOpen: boolean;
@@ -32,6 +36,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
   onSuccess
 }) => {
   const { currentUser } = useAuth();
+  const [activeTab, setActiveTab] = useState<'SINGLE' | 'BULK_CSV'>('SINGLE');
   const [selectedAgencyId, setSelectedAgencyId] = useState<string>('');
   
   // Form fields
@@ -43,6 +48,13 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
   const [remarks, setRemarks] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Bulk CSV state
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [parsedRows, setParsedRows] = useState<any[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -62,6 +74,84 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
     setAccountType(fin.account_type || 'Sundry Debtors-Electronics');
     setRemarks(fin.remarks || '');
     setSuccessMsg(null);
+  };
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCsvFile(file);
+    setBulkStatus(null);
+    setBulkError(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        const result = parseCSVContent(content, 'party_balances');
+        if (result.success && result.data.length > 0) {
+          setParsedRows(result.data);
+          setBulkStatus(`Loaded ${result.data.length} row(s) from "${file.name}". Click process below to match Party IDs & update balances.`);
+        } else {
+          setBulkError(result.error || 'Failed to parse CSV file content.');
+          setParsedRows([]);
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleProcessBulkCsv = () => {
+    let updatedCount = 0;
+    let notFoundCount = 0;
+
+    const rowsToProcess = parsedRows.length > 0 ? parsedRows : MOCK_AGENCIES.map(a => ({
+      agency_code: a.agency_code || a.id,
+      agency_name: a.agency_name,
+      credit_limit: a.credit_limit || 300000,
+      outstanding_balance: Math.floor((a.credit_limit || 300000) * 0.4),
+      overdue_amount: 0
+    }));
+
+    rowsToProcess.forEach((row) => {
+      const lookupCode = (row.agency_code || row.agency_id || row['Agency Code / Party ID'] || row.id || '').toString().trim().toLowerCase();
+      const lookupName = (row.agency_name || row['Agency / Party Name'] || row.name || '').toString().trim().toLowerCase();
+
+      // Strict Party Match by Party ID / Agency Code or Name
+      const existingAgency = MOCK_AGENCIES.find(a => 
+        (a.id || '').toLowerCase() === lookupCode ||
+        (a.agency_code || '').toLowerCase() === lookupCode ||
+        (lookupName && (a.agency_name || '').toLowerCase() === lookupName)
+      );
+
+      if (existingAgency) {
+        const creditLimitVal = Number(row.credit_limit || row['Credit Limit (INR)'] || existingAgency.credit_limit || 250000);
+        const outstandingVal = Number(row.outstanding_balance || row.current_outstanding || row['Current Outstanding Balance (INR)'] || 0);
+        const overdueVal = Number(row.overdue_amount || row['Overdue Amount (INR)'] || 0);
+
+        updateAgencyFinancials(existingAgency.id, {
+          credit_limit: creditLimitVal,
+          current_outstanding: outstandingVal,
+          outstanding_amount: outstandingVal,
+          overdue_amount: overdueVal,
+          remarks: `Daily Bulk Balance Update by ${currentUser?.full_name || 'Accounts Officer'}`,
+          updated_at: new Date().toISOString(),
+          updated_by_name: currentUser?.full_name || 'Accounts Officer'
+        });
+        updatedCount++;
+      } else {
+        notFoundCount++;
+      }
+    });
+
+    setBulkStatus(`✅ Successfully updated balances for ${updatedCount} existing parties matched by Party ID! (0 new party rows created${notFoundCount > 0 ? `, ${notFoundCount} unrecognized Party IDs skipped` : ''}).`);
+    
+    setTimeout(() => {
+      onClose();
+      setCsvFile(null);
+      setParsedRows([]);
+      setBulkStatus(null);
+    }, 1800);
   };
 
   if (!isOpen) return null;
@@ -167,20 +257,147 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
           </button>
         </div>
 
-        {/* Modal Form Body */}
-        <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          
-          {successMsg && (
-            <div style={{
-              padding: '0.85rem 1rem',
-              background: 'rgba(16, 185, 129, 0.15)',
-              border: '1px solid rgba(16, 185, 129, 0.4)',
-              color: '#34d399',
-              borderRadius: 12,
-              fontSize: '0.825rem',
+        {/* Mode Switcher Tabs */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #1e293b', background: '#0b1329' }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('SINGLE')}
+            style={{
+              flex: 1,
+              padding: '0.75rem 1rem',
+              background: activeTab === 'SINGLE' ? '#0f172a' : 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'SINGLE' ? '2px solid #38bdf8' : 'none',
+              color: activeTab === 'SINGLE' ? '#38bdf8' : '#94a3b8',
               fontWeight: 800,
+              fontSize: '0.825rem',
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <User size={16} /> Single Party Balance Entry
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('BULK_CSV')}
+            style={{
+              flex: 1,
+              padding: '0.75rem 1rem',
+              background: activeTab === 'BULK_CSV' ? '#0f172a' : 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'BULK_CSV' ? '2px solid #fbbf24' : 'none',
+              color: activeTab === 'BULK_CSV' ? '#fbbf24' : '#94a3b8',
+              fontWeight: 800,
+              fontSize: '0.825rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <FileSpreadsheet size={16} /> 📁 Daily Bulk CSV Balance Update
+          </button>
+        </div>
+
+        {/* Modal Form / Bulk CSV Body */}
+        {activeTab === 'BULK_CSV' ? (
+          <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: 12, padding: '1rem', color: '#38bdf8', fontSize: '0.825rem' }}>
+              <strong style={{ display: 'block', fontSize: '0.9rem', marginBottom: 4 }}>Daily Bulk Party Ledger Balance Sync</strong>
+              Download the official sample CSV sheet, fill in daily outstanding & overdue balances for parties, and upload to update all accounts in bulk.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => downloadSampleCSV('party_balances')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.65rem 1.1rem',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  color: '#34d399',
+                  borderRadius: 10,
+                  fontWeight: 800,
+                  fontSize: '0.825rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <FileSpreadsheet size={18} /> Download Sample Sheet (.CSV)
+              </button>
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Template: Daily_Party_Balances_Bulk_Update_Sample.csv</span>
+            </div>
+
+            {bulkError && (
+              <div style={{ padding: '0.85rem 1rem', background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', color: '#fb7185', borderRadius: 10, fontWeight: 800, fontSize: '0.85rem' }}>
+                {bulkError}
+              </div>
+            )}
+
+            {bulkStatus && (
+              <div style={{ padding: '0.85rem 1rem', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid #34d399', color: '#34d399', borderRadius: 10, fontWeight: 800, fontSize: '0.85rem' }}>
+                {bulkStatus}
+              </div>
+            )}
+
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              style={{ border: '2px dashed #38bdf8', borderRadius: 14, padding: '2rem 1rem', textAlign: 'center', background: '#0b1329', cursor: 'pointer' }}
+            >
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleCsvFileChange} 
+                accept=".csv, .txt" 
+                style={{ display: 'none' }} 
+              />
+              <Upload size={32} color="#38bdf8" style={{ marginBottom: '0.5rem' }} />
+              <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#f8fafc', marginBottom: 4 }}>
+                {csvFile ? `Selected Sheet: ${csvFile.name}` : 'Click to Upload Daily Balances CSV File'}
+              </h4>
+              <p style={{ fontSize: '0.775rem', color: '#94a3b8', marginBottom: '1rem' }}>
+                Updates existing Party Balances by Party ID / Agency Code (Does NOT create new party rows)
+              </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleProcessBulkCsv();
+                }}
+                style={{
+                  padding: '0.65rem 1.5rem',
+                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 10,
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ⚡ Update Balances by Party ID ({parsedRows.length > 0 ? parsedRows.length : 'Default'})
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {successMsg && (
+              <div style={{
+                padding: '0.85rem 1rem',
+                background: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid rgba(16, 185, 129, 0.4)',
+                color: '#34d399',
+                borderRadius: 12,
+                fontSize: '0.825rem',
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
               gap: '0.5rem'
             }}>
               <CheckCircle2 size={18} />
@@ -470,6 +687,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
           </div>
 
         </form>
+        )}
 
       </div>
     </div>

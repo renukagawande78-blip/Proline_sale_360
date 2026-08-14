@@ -54,9 +54,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems: { id: string; label: string; icon: any; permissionKey?: keyof PermissionControl; fallbackRoles: string[] }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, fallbackRoles: ['ALL'] },
     { id: 'orders', label: 'Sales Orders', icon: ShoppingCart, fallbackRoles: ['ALL'] },
-    { id: 'approvals', label: 'System Admin Approvals', icon: CheckCircle2, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'SALES_ADMIN'] },
-    { id: 'dispatch', label: 'Dispatch Management', icon: Truck, permissionKey: 'order_transfer_to_dispatch', fallbackRoles: ['SUPER_ADMIN', 'DISPATCH_MANAGER', 'SYSTEM_ADMIN', 'BILLING', 'SALES_ADMIN'] },
-    { id: 'accounts', label: 'Accounts & Billing', icon: Receipt, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'ACCOUNTS', 'BILLING', 'SYSTEM_ADMIN'] },
+    { id: 'approvals', label: 'Order Approvals', icon: CheckCircle2, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'SALES_ADMIN'] },
+    { id: 'dispatch', label: 'Dispatch Management', icon: Truck, permissionKey: 'order_transfer_to_dispatch', fallbackRoles: ['SUPER_ADMIN', 'DISPATCH_MANAGER', 'BILLING', 'SALES_ADMIN'] },
+    { id: 'accounts', label: 'Accounts & Billing', icon: Receipt, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'ACCOUNTS', 'BILLING'] },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, fallbackRoles: ['ALL'] },
     { id: 'returns', label: 'Returns & Damage', icon: PackageX, fallbackRoles: ['ALL'] },
     { id: 'tracker', label: 'Order Tracker', icon: ScanSearch, fallbackRoles: ['ALL'] },
@@ -65,7 +65,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const filteredNav = navItems.filter(item => {
-    if (role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN') return true;
+    const isChiragOrHarshad = (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
+    const isSuperAdminUser = role === 'SUPER_ADMIN' || isChiragOrHarshad;
+
+    // Dashboard is EXCLUSIVELY reserved for Super Admin
+    if (item.id === 'dashboard' && !isSuperAdminUser) {
+      return false;
+    }
+
+    if (isSuperAdminUser) return true;
+
+    // 1. Field Sales Exec / Area Sales Manager: ONLY sees Sales Orders, Track My Order, and Reports & Analytics
+    if (role === 'SALES_PERSON' || role === 'AREA_SALES_MANAGER') {
+      return item.id === 'orders' || item.id === 'tracker' || item.id === 'reports';
+    }
+
+    // 2. Sales Admin: Sees Sales Orders, Approvals, Tracker, Reports, Returns, Zones, and Masters (Hides Dashboard, Accounts & Dispatch)
+    if (role === 'SALES_ADMIN') {
+      if (item.id === 'dashboard' || item.id === 'accounts' || item.id === 'dispatch') {
+        return false;
+      }
+      return true;
+    }
+
+    // 3. Dispatch Manager: Sees Dispatch Management, Tracker, Reports, and Returns (Hides Dashboard, Sales Orders, Approvals, Accounts, Zones, Masters)
+    if (role === 'DISPATCH_MANAGER') {
+      if (item.id === 'dashboard' || item.id === 'orders' || item.id === 'approvals' || item.id === 'accounts' || item.id === 'zones' || item.id === 'masters') {
+        return false;
+      }
+      return true;
+    }
+
+    // 4. Billing & Accounts Personnel: Sees Accounts & Billing, Approvals, Tracker, Reports, Returns (Hides Dashboard, Sales Orders, Dispatch, Zones, Masters)
+    if (role === 'BILLING' || role === 'ACCOUNTS') {
+      if (item.id === 'dashboard' || item.id === 'orders' || item.id === 'dispatch' || item.id === 'zones' || item.id === 'masters') {
+        return false;
+      }
+      return true;
+    }
+
     if (item.fallbackRoles.includes('ALL')) return true;
     if (item.permissionKey && hasPermission(item.permissionKey)) return true;
     return item.fallbackRoles.includes(role);

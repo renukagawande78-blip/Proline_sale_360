@@ -12,7 +12,7 @@ import {
   Package
 } from 'lucide-react';
 import { Product } from '../types';
-import { updateProductStockAndDetails, MOCK_COMPANIES } from '../lib/supabase';
+import { updateProductStockAndDetails, MOCK_COMPANIES, generateNewBarcodeSKUCode } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
 interface UpdateProductStockModalProps {
@@ -200,9 +200,28 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', marginBottom: 6 }}>
-                SKU Item Code <span style={{ color: '#fb7185' }}>*</span>
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8' }}>
+                  SKU Code / Barcode <span style={{ color: '#fb7185' }}>*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setProductCode(generateNewBarcodeSKUCode(product?.company_id, productName))}
+                  style={{
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    color: '#38bdf8',
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: 6,
+                    fontSize: '0.675rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                  title="Regenerate barcode SKU code"
+                >
+                  ⚡ Regenerate Barcode
+                </button>
+              </div>
               <input
                 type="text"
                 value={productCode}

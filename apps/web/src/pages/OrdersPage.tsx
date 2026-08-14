@@ -5,6 +5,7 @@ import { Order } from '../types';
 interface OrdersPageProps {
   orders: Order[];
   onOpenCreateOrder: () => void;
+  onOpenEditOrder?: (order: Order) => void;
   onSelectOrderForApproval: (order: Order) => void;
   onViewInvoice?: (order: Order) => void;
   onCancelOrder?: (orderId: string) => void;

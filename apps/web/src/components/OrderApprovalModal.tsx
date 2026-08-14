@@ -9,7 +9,7 @@ interface OrderApprovalModalProps {
   order: Order | null;
   isOpen?: boolean;
   onClose: () => void;
-  onApprove: (orderId: string, remarks: string) => void;
+  onApprove: (orderId: string, remarks: string, approvalDetails?: any) => void;
   onHold: (orderId: string, reasonId: string, remarks: string) => void;
   onReject: (orderId: string, remarks: string) => void;
   onRequestAccountsClearance?: (orderId: string, queryMsg: string) => void;
@@ -32,8 +32,14 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
   const { addNotification } = useNotifications();
   const role = currentUser?.role_name || 'SALES_PERSON';
   
+  const isChiragAdmin = (currentUser?.full_name || '').toLowerCase().includes('chirag');
+  const isHarshadAdmin = (currentUser?.full_name || '').toLowerCase().includes('harshad');
+  const isSuperAdmin = role === 'SUPER_ADMIN' || isChiragAdmin || isHarshadAdmin;
+  const isAccountsUser = role === 'ACCOUNTS' || hasPermission('order_transfer_to_billing');
+  const canGrantAccountsApproval = isSuperAdmin || isAccountsUser;
+
   const accessPerm = order ? getOrderAccessPermission(order, currentUser) : { canExecuteActions: false, accessReason: '', isItemBrandOwner: false };
-  const canApproveOrHold = accessPerm.canExecuteActions && (role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN' || role === 'SALES_ADMIN' || role === 'ACCOUNTS' || hasPermission('order_transfer_to_billing'));
+  const canApproveOrHold = isSuperAdmin || (accessPerm.canExecuteActions && (role === 'SALES_ADMIN' || role === 'ACCOUNTS' || hasPermission('order_transfer_to_billing')));
 
   const [selectedHoldReason, setSelectedHoldReason] = useState<string>(MOCK_HOLD_REASONS[0].id);
   const [remarks, setRemarks] = useState('');
@@ -44,6 +50,12 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
   const [showQueryPanel, setShowQueryPanel] = useState(false);
   const [accountsApprovalStatus, setAccountsApprovalStatus] = useState<'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED'>('NONE');
 
+  // Stage 2 & 3 Diagram Flow Controls
+  const [paymentType, setPaymentType] = useState<'ADVANCE' | 'OVERDUE' | 'CREDIT'>(order?.payment_type || 'CREDIT');
+  const [paymentReceiptNo, setPaymentReceiptNo] = useState(order?.payment_receipt_no || '');
+  const [priority, setPriority] = useState<'HIGH' | 'MEDIUM' | 'LOW'>(order?.priority || 'MEDIUM');
+  const [inventoryStatus, setInventoryStatus] = useState<'IN_STOCK' | 'WAIT_FOR_STOCK'>(order?.inventory_status || 'IN_STOCK');
+
   if (!order || (isOpen !== undefined && !isOpen)) return null;
 
   const agencyFinancials = getAgencyFinancialsByAgencyId(order.agency_id);
@@ -53,10 +65,6 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
   const creditScore = agencyFinancials.credit_score || 90;
   const isCreditBreached = order.total_amount > availableCredit;
   const hasOverduePayment = (agencyFinancials.overdue_amount || 0) > 0;
-
-  const isChiragAdmin = (currentUser?.full_name || '').toLowerCase().includes('chirag');
-  const isAccountsUser = role === 'ACCOUNTS' || hasPermission('order_transfer_to_billing');
-  const canGrantAccountsApproval = isChiragAdmin || isAccountsUser || role === 'SUPER_ADMIN';
 
   const handleSendAccountsQuery = () => {
     if (!queryText.trim()) return;
@@ -174,8 +182,8 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
             <div style={{ fontWeight: 700, color: '#f8fafc', marginTop: 2 }}>{order.total_box_qty} Boxes / {order.total_loose_pcs} Loose ({order.total_qty_pcs} PCS)</div>
           </div>
           <div>
-            <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>GROSS ORDER AMOUNT</div>
-            <div style={{ fontWeight: 900, color: '#34d399', marginTop: 2, fontSize: '0.95rem' }}>₹{order.total_amount.toLocaleString()}</div>
+            <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>COSTING STAGE</div>
+            <div style={{ fontWeight: 800, color: '#38bdf8', marginTop: 2, fontSize: '0.8rem' }}>🔒 Next Phase (Billing)</div>
           </div>
         </div>
 
@@ -417,6 +425,71 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           </div>
         )}
 
+        {/* Stage 2 & Stage 3 Operational Audit Panel */}
+        {canApproveOrHold && (
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '0.85rem', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+              
+              {/* Stage 2: Payment Type Gate */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', marginBottom: 4 }}>
+                  STAGE 2: PAYMENT TYPE GATE
+                </label>
+                <select
+                  value={paymentType}
+                  onChange={e => setPaymentType(e.target.value as any)}
+                  style={{ width: '100%', padding: '0.45rem', background: '#1e293b', border: '1px solid #475569', borderRadius: 6, color: 'white', fontWeight: 700, fontSize: '0.8rem' }}
+                >
+                  <option value="ADVANCE">Advance Payment (Sales Admin Approved)</option>
+                  <option value="OVERDUE">Overdue Payment (Harshad Sir Approval)</option>
+                  <option value="CREDIT">Credit Order (Harshad / Chirag Sir Approval)</option>
+                </select>
+                {paymentType === 'ADVANCE' && (
+                  <input
+                    type="text"
+                    placeholder="Enter Payment Receipt No. (Mandatory)*"
+                    value={paymentReceiptNo}
+                    onChange={e => setPaymentReceiptNo(e.target.value)}
+                    style={{ width: '100%', marginTop: 6, padding: '0.4rem 0.5rem', background: '#1e293b', border: paymentReceiptNo ? '1px solid #10b981' : '1px solid #ef4444', borderRadius: 6, color: '#f8fafc', fontSize: '0.775rem' }}
+                  />
+                )}
+              </div>
+
+              {/* Stage 3: Order Priority */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#f59e0b', marginBottom: 4 }}>
+                  STAGE 3: ROUTING PRIORITY
+                </label>
+                <select
+                  value={priority}
+                  onChange={e => setPriority(e.target.value as any)}
+                  style={{ width: '100%', padding: '0.45rem', background: '#1e293b', border: '1px solid #475569', borderRadius: 6, color: 'white', fontWeight: 700, fontSize: '0.8rem' }}
+                >
+                  <option value="HIGH">🔴 High Priority (Pinned at top of Billing)</option>
+                  <option value="MEDIUM">🟡 Medium Priority</option>
+                  <option value="LOW">🟢 Low Priority</option>
+                </select>
+              </div>
+
+              {/* Stage 3: Inventory Stock Audit */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#a855f7', marginBottom: 4 }}>
+                  INVENTORY AUDIT ACTION
+                </label>
+                <select
+                  value={inventoryStatus}
+                  onChange={e => setInventoryStatus(e.target.value as any)}
+                  style={{ width: '100%', padding: '0.45rem', background: '#1e293b', border: '1px solid #475569', borderRadius: 6, color: 'white', fontWeight: 700, fontSize: '0.8rem' }}
+                >
+                  <option value="IN_STOCK">✅ Physical Stock Available (Approve for Billing)</option>
+                  <option value="WAIT_FOR_STOCK">⏳ Out of Stock (Wait for Stock — Alert Salesman)</option>
+                </select>
+              </div>
+
+            </div>
+          </div>
+        )}
+
         {/* Footer Actions */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           {!canApproveOrHold ? (
@@ -460,8 +533,11 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
               )}
 
               {/* Approve Button */}
-              <button className="btn btn-success" onClick={() => onApprove(order.id, remarks)}>
-                <CheckCircle size={16} /> Approve & Transfer to Dispatch
+              <button 
+                className="btn btn-success" 
+                onClick={() => onApprove(order.id, remarks, { payment_type: paymentType, payment_receipt_no: paymentReceiptNo, priority, inventory_status: inventoryStatus })}
+              >
+                <CheckCircle size={16} /> {inventoryStatus === 'WAIT_FOR_STOCK' ? 'Set Wait for Stock & Alert Salesman' : 'Approve & Route to Billing/Dispatch'}
               </button>
             </div>
           )}

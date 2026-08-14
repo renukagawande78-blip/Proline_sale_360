@@ -10,14 +10,13 @@ interface UserManagementModalProps {
 }
 
 const ALL_ROLES: { role: RoleName; label: string }[] = [
-  { role: 'SYSTEM_ADMIN', label: 'System Admin (Full Company & Order Operations)' },
+  { role: 'SUPER_ADMIN', label: 'Super Admin (Chirag & Harshad Executive Authority)' },
   { role: 'ACCOUNTS', label: 'Accounts & Finance Manager' },
   { role: 'DISPATCH_MANAGER', label: 'Warehouse & Dispatch Manager' },
   { role: 'AREA_SALES_MANAGER', label: 'Area Sales Manager (ASM)' },
   { role: 'SALES_PERSON', label: 'Sales Person / Field Executive' },
   { role: 'SALES_ADMIN', label: 'Sales Admin' },
-  { role: 'BILLING', label: 'Billing Clerk' },
-  { role: 'SUPER_ADMIN', label: 'Super Admin (Chirag Sir Executive)' }
+  { role: 'BILLING', label: 'Billing Clerk' }
 ];
 
 const MASTER_BRANDS = [
@@ -34,7 +33,7 @@ const MASTER_BRANDS = [
   { handle: 'Heli', name: 'Heli' },
   { handle: 'Waiwai', name: 'Waiwai' },
   { handle: 'PRAN', name: 'PRAN' },
-  { handle: 'AK', name: 'AK Group' }
+  { handle: 'AK', name: 'AKAI' }
 ];
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {

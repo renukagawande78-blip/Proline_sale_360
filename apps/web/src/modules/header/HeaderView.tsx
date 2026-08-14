@@ -48,11 +48,11 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
   const isFmcg = userSegment === 'FMCG';
   const isFmcd = userSegment === 'FMCD';
 
-  const isAdmin = activeUser.role_name === 'SUPER_ADMIN' || activeUser.role_name === 'SYSTEM_ADMIN';
-  const isChiragAdmin = (activeUser.full_name || '').toLowerCase().includes('chirag');
+  const isSuperAdmin = activeUser.role_name === 'SUPER_ADMIN' || (activeUser.full_name || '').toLowerCase().includes('chirag') || (activeUser.full_name || '').toLowerCase().includes('harshad');
+  const isAdmin = isSuperAdmin;
+  const isChiragAdmin = isSuperAdmin;
 
   const rolesList: { role: RoleName; label: string }[] = [
-    { role: 'SYSTEM_ADMIN', label: 'System Admin' },
     { role: 'SUPER_ADMIN', label: 'Super Admin' },
     { role: 'SALES_ADMIN', label: 'Sales Admin' },
     { role: 'SALES_PERSON', label: 'Field Sales Exec' },

@@ -11,15 +11,20 @@ import {
   CheckCircle2, 
   Sparkles,
   Edit3,
+  Trash2,
   Layers,
   ArrowRightLeft,
   X,
   Compass,
   Check,
-  Globe
+  Globe,
+  FileSpreadsheet
 } from 'lucide-react';
 import { ZoneMaster, Agency, ZoneRegion } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 import { MOCK_ZONES } from '../../lib/supabase';
+import { downloadSampleCSV } from '../../lib/masterImportExport';
+import { BulkImportModal } from '../../components/BulkImportModal';
 
 interface ZonesMasterViewProps {
   agencies: Agency[];
@@ -27,6 +32,8 @@ interface ZonesMasterViewProps {
 }
 
 export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, searchQuery }) => {
+  const { currentUser } = useAuth();
+  const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [activeRegionFilter, setActiveRegionFilter] = useState<'ALL' | ZoneRegion>('ALL');
   const [zonesList, setZonesList] = useState<ZoneMaster[]>(MOCK_ZONES);
@@ -34,6 +41,14 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
   const [newAreaInputs, setNewAreaInputs] = useState<Record<string, string>>({});
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const handleDeleteZone = (zoneId: string, zoneName: string) => {
+    if (window.confirm(`Are you sure you want to delete Zone Master "${zoneName}"? This action is restricted to Super Admin authority.`)) {
+      setZonesList(prev => prev.filter(z => z.id !== zoneId));
+      setSuccessNotice(`Zone "${zoneName}" deleted by Super Admin.`);
+    }
+  };
 
   // New Zone Creation Modal State
   const [isAddZoneModalOpen, setIsAddZoneModalOpen] = useState(false);
@@ -346,6 +361,46 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
           </button>
 
           <button
+            onClick={() => setIsImportModalOpen(true)}
+            title="Upload CSV sheet for bulk importing sales zones"
+            style={{
+              padding: '0.45rem 0.85rem',
+              borderRadius: '8px',
+              border: '1px solid rgba(2, 132, 199, 0.4)',
+              background: 'rgba(2, 132, 199, 0.15)',
+              color: '#38bdf8',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
+          >
+            <FileSpreadsheet size={14} /> 📥 Import Sheet (.CSV)
+          </button>
+
+          <button
+            onClick={() => downloadSampleCSV('zones')}
+            title="Download sample sheet for bulk uploading zones"
+            style={{
+              padding: '0.45rem 0.85rem',
+              borderRadius: '8px',
+              border: '1px solid #38bdf8',
+              background: 'rgba(56, 189, 248, 0.12)',
+              color: '#38bdf8',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
+          >
+            <FileSpreadsheet size={14} /> Download Sample Sheet (.CSV)
+          </button>
+
+          <button
             onClick={handleDownloadZoneCSV}
             style={{
               padding: '0.45rem 0.85rem',
@@ -503,29 +558,52 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
                 </div>
               </div>
 
-              {/* Action Button */}
-              <button
-                onClick={() => setSelectedZoneId(isSelected ? null : zone.id)}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem',
-                  borderRadius: '10px',
-                  border: isSelected ? 'none' : '1px solid #1e293b',
-                  background: isSelected ? 'linear-gradient(135deg, #38bdf8, #0284c7)' : '#0b1329',
-                  color: isSelected ? 'white' : '#38bdf8',
-                  fontWeight: 800,
-                  fontSize: '0.8rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.4rem',
-                  transition: 'all 0.2s ease',
-                  boxShadow: isSelected ? '0 4px 14px rgba(56, 189, 248, 0.4)' : 'none'
-                }}
-              >
-                {isSelected ? 'Close Mapped Parties Drawer' : 'Inspect Mapped Parties'} <ChevronRight size={15} />
-              </button>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
+                <button
+                  onClick={() => setSelectedZoneId(isSelected ? null : zone.id)}
+                  style={{
+                    flex: 1,
+                    padding: '0.6rem',
+                    borderRadius: '10px',
+                    border: isSelected ? 'none' : '1px solid #1e293b',
+                    background: isSelected ? 'linear-gradient(135deg, #38bdf8, #0284c7)' : '#0b1329',
+                    color: isSelected ? 'white' : '#38bdf8',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isSelected ? '0 4px 14px rgba(56, 189, 248, 0.4)' : 'none'
+                  }}
+                >
+                  {isSelected ? 'Close Mapped Parties Drawer' : 'Inspect Mapped Parties'} <ChevronRight size={15} />
+                </button>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => handleDeleteZone(zone.id, zone.zone_name)}
+                    title="Super Admin Authority: Delete zone master record"
+                    style={{
+                      padding: '0.6rem 0.75rem',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(244, 63, 94, 0.4)',
+                      background: 'rgba(244, 63, 94, 0.15)',
+                      color: '#fb7185',
+                      fontWeight: 800,
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.3rem'
+                    }}
+                  >
+                    <Trash2 size={15} /> Delete
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -714,6 +792,12 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
           </div>
         </div>
       )}
+
+      <BulkImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        masterType="zones"
+      />
 
     </div>
   );

@@ -141,7 +141,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <th>Company</th>
                 <th>Agency / Party</th>
                 <th>Total Volume</th>
-                <th>Gross Total</th>
+                <th>Total PCS</th>
                 <th>Status</th>
                 <th>Action</th>
               </tr>
@@ -153,7 +153,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <td>{order.company_name}</td>
                   <td>{order.agency_name}</td>
                   <td>{order.total_box_qty} Box / {order.total_loose_pcs} Pcs</td>
-                  <td><strong style={{ color: '#34d399' }}>₹{order.total_amount.toLocaleString()}</strong></td>
+                  <td><strong style={{ color: '#38bdf8' }}>{order.total_qty_pcs} Pcs</strong></td>
                   <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
                   <td>
                     <button 

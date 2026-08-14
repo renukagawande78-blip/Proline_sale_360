@@ -187,10 +187,10 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
       matchesCompany = p.company_id === selectedCompanyId;
     } else {
       const parentCompany = MOCK_COMPANIES.find(c => c.id === p.company_id);
-      matchesCompany = isCompanyAllowedForUser(parentCompany?.company_name, userCompanyHandle);
+      matchesCompany = isCompanyAllowedForUser(parentCompany?.company_name, userCompanyHandle, parentCompany?.company_code);
     }
 
-    // 2. Segment Filter: if FMCG or FMEG selected, match segment
+    // 2. Segment Filter: if FMCG or FMCD selected, match segment
     let matchesSegment = true;
     if (selectedSegment && selectedSegment !== 'ALL') {
       const parentCompany = MOCK_COMPANIES.find(c => c.id === p.company_id);
@@ -318,21 +318,20 @@ interface CreateOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmitOrder: (order: Order) => void;
+  orderToEdit?: Order | null;
 }
 
-export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, onSubmitOrder }) => {
+export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, onSubmitOrder, orderToEdit }) => {
   const { currentUser, users } = useAuth();
 
   const salesTeamMembers = users.filter(u => 
     u.role_name === 'SALES_PERSON' || 
     u.role_name === 'AREA_SALES_MANAGER' || 
     u.role_name === 'SALES_ADMIN' ||
-    u.role_name === 'SYSTEM_ADMIN' ||
     u.role_name === 'SUPER_ADMIN'
   );
 
-  const isAdminOrASM = currentUser?.role_name === 'SYSTEM_ADMIN' || 
-                       currentUser?.role_name === 'SUPER_ADMIN' || 
+  const isAdminOrASM = currentUser?.role_name === 'SUPER_ADMIN' || 
                        currentUser?.role_name === 'SALES_ADMIN' || 
                        currentUser?.role_name === 'AREA_SALES_MANAGER';
 
@@ -346,7 +345,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
   // Brands allowed for active salesperson & segment filter
   const allowedBrandsForActiveSalesperson = MOCK_COMPANIES.filter(c => {
-    const matchesBrand = isCompanyAllowedForUser(c.company_name, activeSalespersonHandle);
+    const matchesBrand = isCompanyAllowedForUser(c.company_name, activeSalespersonHandle, c.company_code);
     const matchesSegment = selectedSegment === 'ALL' || c.segment === selectedSegment;
     return matchesBrand && matchesSegment;
   });
@@ -355,16 +354,91 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   const [agencyId, setAgencyId] = useState(MOCK_AGENCIES[0].id);
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
   const [remarks, setRemarks] = useState('');
-  const [items, setItems] = useState<Partial<OrderItem>[]>([
+  const [items, setItems] = useState<Array<{
+    product_id: string;
+    pcs_per_box: number;
+    box_qty: number;
+    loose_pcs: number;
+    free_pcs: number;
+    unit_price: number;
+    remark?: string;
+  }>>([
     {
       product_id: MOCK_PRODUCTS[0].id,
       pcs_per_box: MOCK_PRODUCTS[0].pcs_per_box,
       box_qty: 10,
       loose_pcs: 5,
+      free_pcs: 0,
       unit_price: MOCK_PRODUCTS[0].unit_price,
       remark: ''
     }
   ]);
+
+  // Auto-sync company brand dropdown and product item list whenever selected Salesperson changes
+  useEffect(() => {
+    if (!isOpen || orderToEdit) return;
+
+    const activeSp = users.find(u => u.id === salespersonId) || currentUser;
+    if (!activeSp) return;
+
+    const spHandle = activeSp.company_handle || 'All';
+    const spSegment = resolveSegmentForUser(activeSp);
+
+    // 1. Auto-sync segment if salesperson is dedicated to a segment
+    if (spSegment !== 'ALL') {
+      setSelectedSegment(spSegment);
+    }
+
+    // 2. Reset companyId to 'ALL'
+    setCompanyId('ALL');
+
+    // 3. Ensure line items use products belonging to allowed brands for this salesperson
+    const allowedCompanyIds = MOCK_COMPANIES
+      .filter(c => isCompanyAllowedForUser(c.company_name, spHandle, c.company_code))
+      .map(c => c.id);
+
+    const validProducts = MOCK_PRODUCTS.filter(p => allowedCompanyIds.length === 0 || allowedCompanyIds.includes(p.company_id));
+
+    if (validProducts.length > 0) {
+      const defaultProd = validProducts[0];
+      setItems(prev => prev.map(item => {
+        const prod = MOCK_PRODUCTS.find(p => p.id === item.product_id);
+        const isProdValid = prod && (allowedCompanyIds.length === 0 || allowedCompanyIds.includes(prod.company_id));
+        if (!isProdValid) {
+          return {
+            ...item,
+            product_id: defaultProd.id,
+            pcs_per_box: defaultProd.pcs_per_box,
+            unit_price: defaultProd.unit_price
+          };
+        }
+        return item;
+      }));
+    }
+  }, [salespersonId, isOpen, orderToEdit, users, currentUser]);
+
+  useEffect(() => {
+    if (orderToEdit) {
+      setCompanyId(orderToEdit.company_id || 'ALL');
+      setAgencyId(orderToEdit.agency_id || MOCK_AGENCIES[0].id);
+      setDeliveryType(orderToEdit.delivery_type || 'F.O.R');
+      setRemarks(orderToEdit.remarks || '');
+      if (orderToEdit.salesperson_id) {
+        setSalespersonId(orderToEdit.salesperson_id);
+      }
+      if (orderToEdit.items && orderToEdit.items.length > 0) {
+        setItems(orderToEdit.items.map(item => ({
+          product_id: item.product_id,
+          pcs_per_box: item.pcs_per_box || 24,
+          box_qty: item.box_qty || 0,
+          loose_pcs: item.loose_pcs || 0,
+          free_pcs: item.free_pcs || 0,
+          unit_price: item.unit_price || 100,
+          remark: item.remark || ''
+        })));
+      }
+    }
+  }, [orderToEdit, isOpen]);
 
   if (!isOpen) return null;
 
@@ -384,7 +458,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     });
   };
 
-  const handleQuantityChange = (index: number, field: 'box_qty' | 'loose_pcs', val: number) => {
+  const handleQuantityChange = (index: number, field: 'box_qty' | 'loose_pcs' | 'free_pcs', val: number) => {
     setItems(prev => {
       const updated = [...prev];
       updated[index] = {
@@ -415,6 +489,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         pcs_per_box: firstProd.pcs_per_box,
         box_qty: 5,
         loose_pcs: 0,
+        free_pcs: 0,
         unit_price: firstProd.unit_price,
         remark: ''
       }
@@ -431,10 +506,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     const prod = MOCK_PRODUCTS.find(p => p.id === item.product_id) || MOCK_PRODUCTS[0];
     const boxQty = item.box_qty || 0;
     const loosePcs = item.loose_pcs || 0;
+    const freePcs = item.free_pcs || 0;
     const pcsPerBox = prod.pcs_per_box || 24;
-    const totalQtyPcs = (boxQty * pcsPerBox) + loosePcs;
+    const totalQtyPcs = (boxQty * pcsPerBox) + loosePcs + freePcs;
     const unitPrice = item.unit_price || prod.unit_price;
-    const totalPrice = totalQtyPcs * unitPrice;
+    const mrpPrice = prod.mrp_price || Math.round(unitPrice * 1.15);
+    const totalPrice = (boxQty * pcsPerBox + loosePcs) * unitPrice; // Free pcs not billed in base price
 
     return {
       id: `item-${idx + 1}`,
@@ -444,10 +521,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       pcs_per_box: pcsPerBox,
       box_qty: boxQty,
       loose_pcs: loosePcs,
+      free_pcs: freePcs,
       total_qty_pcs: totalQtyPcs,
       dispatched_qty_pcs: 0,
       pending_qty_pcs: totalQtyPcs,
       unit_price: unitPrice,
+      mrp_price: mrpPrice,
       total_price: totalPrice,
       remark: item.remark || ''
     };
@@ -455,6 +534,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
   const totalBoxQty = processedItems.reduce((acc, curr) => acc + curr.box_qty, 0);
   const totalLoosePcs = processedItems.reduce((acc, curr) => acc + curr.loose_pcs, 0);
+  const totalFreePcs = processedItems.reduce((acc, curr) => acc + (curr.free_pcs || 0), 0);
   const totalQtyPcs = processedItems.reduce((acc, curr) => acc + curr.total_qty_pcs, 0);
   const totalAmount = processedItems.reduce((acc, curr) => acc + curr.total_price, 0);
 
@@ -480,15 +560,17 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     const seqStr = String(Math.floor(1 + Math.random() * 999)).padStart(3, '0');
 
     const generatedOrderNumber = `${brandCode}-${dateStr}-${seqStr}`;
+    const finalOrderNumber = orderToEdit ? orderToEdit.order_number : generatedOrderNumber;
+    const finalOrderId = orderToEdit ? orderToEdit.id : generatedOrderNumber;
 
     // Format Product Item ID: OrderID/Product3Letters-Index (e.g., PRG-08082026-001/PRY-1)
     const itemsWithFormattedIds: OrderItem[] = processedItems.map((item, idx) => {
       const p3 = getProduct3LetterPrefix(item.product_name || 'PRD');
-      const itemId = `${generatedOrderNumber}/${p3}-${idx + 1}`;
+      const itemId = `${finalOrderNumber}/${p3}-${idx + 1}`;
       return {
         ...item,
         id: itemId,
-        order_id: generatedOrderNumber
+        order_id: finalOrderNumber
       };
     });
 
@@ -501,9 +583,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       : (currentUser?.id || 'u12');
 
     const newOrder: Order = {
-      id: generatedOrderNumber,
-      order_number: generatedOrderNumber,
-      order_date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      id: finalOrderId,
+      order_number: finalOrderNumber,
+      order_date: orderToEdit ? orderToEdit.order_date : new Date().toISOString().replace('T', ' ').substring(0, 16),
       company_id: companyId === 'ALL' ? 'c01' : companyId,
       company_name: selectedCompany?.company_name,
       agency_id: agencyId,
@@ -532,11 +614,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       <div className="modal-card" style={{ maxWidth: 1150, width: '95vw' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>Create Agency Order</h2>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
+              {orderToEdit ? `Edit Agency Order (${orderToEdit.order_number})` : 'Create Agency Order'}
+            </h2>
             <p style={{ fontSize: '0.825rem', color: '#94a3b8' }}>
-              {isAdminOrASM 
-                ? `System Admin / ASM Order Entry on Behalf of Field Sales Executive`
-                : `Field Sales Executive Self Order Entry (${currentUser?.full_name})`
+              {orderToEdit 
+                ? `Modify SKU Quantities, Schemes, or Delivery Instructions before Approval`
+                : (isAdminOrASM 
+                    ? `System Admin / ASM Order Entry on Behalf of Field Sales Executive`
+                    : `Field Sales Executive Self Order Entry (${currentUser?.full_name})`
+                  )
               }
             </p>
           </div>
@@ -652,12 +739,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           <table className="data-table" style={{ fontSize: '0.825rem' }}>
             <thead>
               <tr>
-                <th style={{ width: 320 }}>Product / SKU Selection</th>
-                <th style={{ textAlign: 'center' }}>MRP</th>
-                <th style={{ textAlign: 'center' }}>BOX</th>
-                <th style={{ textAlign: 'center' }}>PCS</th>
-                <th style={{ textAlign: 'center' }}>Total Qty</th>
-                <th style={{ textAlign: 'right' }}>Total Cost</th>
+                <th style={{ width: 300 }}>Product / SKU Selection</th>
+                <th style={{ textAlign: 'center' }}>MRP Price</th>
+                <th style={{ textAlign: 'center' }}>BOX Qty</th>
+                <th style={{ textAlign: 'center' }}>PCS Qty</th>
+                <th style={{ textAlign: 'center' }}>Free PCS</th>
+                <th style={{ textAlign: 'center' }}>Total Qty (Pcs)</th>
                 <th style={{ width: 140 }}>Remark</th>
                 <th style={{ textAlign: 'center' }}>Action</th>
               </tr>
@@ -674,14 +761,17 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                       onSelectProduct={(productId) => handleProductChange(index, productId)}
                     />
                   </td>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>₹{item.unit_price}</td>
+                  <td style={{ textAlign: 'center', fontWeight: 700, color: '#34d399' }}>
+                    ₹{item.mrp_price}
+                    <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>/ Pc</span>
+                  </td>
                   <td>
                     <input 
                       type="number" 
                       min="0"
                       value={item.box_qty}
                       onChange={e => handleQuantityChange(index, 'box_qty', parseInt(e.target.value) || 0)}
-                      style={{ width: 60, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
+                      style={{ width: 55, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
                     />
                   </td>
                   <td>
@@ -690,15 +780,21 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                       min="0"
                       value={item.loose_pcs}
                       onChange={e => handleQuantityChange(index, 'loose_pcs', parseInt(e.target.value) || 0)}
-                      style={{ width: 60, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
+                      style={{ width: 55, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
+                    />
+                  </td>
+                  <td>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={item.free_pcs || 0}
+                      onChange={e => handleQuantityChange(index, 'free_pcs', parseInt(e.target.value) || 0)}
+                      style={{ width: 55, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #fbbf24', borderRadius: 4, color: '#fbbf24', fontWeight: 800, margin: '0 auto', display: 'block' }}
                     />
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <span style={{ fontWeight: 800, color: '#34d399', fontSize: '0.9rem' }}>{item.total_qty_pcs}</span>
-                    <span style={{ display: 'block', fontSize: '0.675rem', color: '#94a3b8' }}>({item.box_qty}B + {item.loose_pcs}L)</span>
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>
-                    ₹{item.total_price.toLocaleString()}
+                    <span style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.925rem' }}>{item.total_qty_pcs} Pcs</span>
+                    <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>({item.box_qty}B + {item.loose_pcs}L + {item.free_pcs || 0}Free)</span>
                   </td>
                   <td>
                     <input 
@@ -736,16 +832,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           />
         </div>
 
-        {/* Order Total & Action Buttons */}
+        {/* Order Total Volume Summary & Action Buttons (Showing MRP, Hiding Total Cost) */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', padding: '1rem 1.25rem', borderRadius: 8, border: '1px solid #334155' }}>
           <div>
-            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-              Total Volume: <strong style={{ color: 'white' }}>{totalBoxQty} Boxes / {totalLoosePcs} Loose ({totalQtyPcs} PCS)</strong>
+            <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 700 }}>
+              Total Order Volume: <strong style={{ color: '#38bdf8' }}>{totalBoxQty} Boxes / {totalLoosePcs} Loose / {totalFreePcs} Free ({totalQtyPcs} Total PCS)</strong>
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#34d399' }}>
-              Order Value: ₹{totalAmount.toLocaleString()}
+            <div style={{ fontSize: '0.75rem', color: '#34d399', marginTop: 3 }}>
+              🏷️ Order MRP Standard Applied | 🔒 Order Costing Managed by Accounts Gate
             </div>
-            <div style={{ fontSize: '0.725rem', color: '#38bdf8', marginTop: 2 }}>
+            <div style={{ fontSize: '0.725rem', color: '#64748b', marginTop: 2 }}>
               Booked Salesperson: <strong>{isAdminOrASM ? (activeSalesperson?.full_name || 'Amit Kumar') : (currentUser?.full_name || 'Amit Kumar')}</strong>
             </div>
           </div>

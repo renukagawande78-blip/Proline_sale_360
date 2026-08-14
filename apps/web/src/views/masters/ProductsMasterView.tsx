@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
-import { Package, Edit3, History, ArrowUpRight, Tag, Boxes, Layers } from 'lucide-react';
+import { Package, Edit3, History, ArrowUpRight, Tag, Boxes, Layers, FileSpreadsheet, Trash2, QrCode, RefreshCw } from 'lucide-react';
 import { Product, Company } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 import { UpdateProductStockModal } from '../../components/UpdateProductStockModal';
+import { BulkImportModal } from '../../components/BulkImportModal';
+import { downloadSampleCSV } from '../../lib/masterImportExport';
+import { generateNewBarcodeSKUCode } from '../../lib/supabase';
 
 interface ProductsMasterViewProps {
   products: Product[];
@@ -10,8 +14,31 @@ interface ProductsMasterViewProps {
 }
 
 export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products, companies, searchQuery }) => {
+  const { currentUser } = useAuth();
+  const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [localProducts, setLocalProducts] = useState<Product[]>(products);
+
+  const handleDeleteProduct = (productId: string, productName: string) => {
+    if (window.confirm(`Are you sure you want to delete Product SKU "${productName}"? This action is restricted to Super Admin authority.`)) {
+      setLocalProducts(prev => prev.filter(p => p.id !== productId));
+    }
+  };
+
+  const handleRegenerateSingleBarcode = (prod: Product) => {
+    const newBarcode = generateNewBarcodeSKUCode(prod.company_id, prod.product_name);
+    setLocalProducts(prev => prev.map(p => p.id === prod.id ? { ...p, product_code: newBarcode } : p));
+  };
+
+  const handleRegenerateAllBarcodes = () => {
+    if (window.confirm("⚠️ REGENERATE ALL BARCODES: Are you sure you want to regenerate new barcode SKU codes for all products?")) {
+      setLocalProducts(prev => prev.map(p => ({
+        ...p,
+        product_code: generateNewBarcodeSKUCode(p.company_id, p.product_name)
+      })));
+    }
+  };
 
   const filteredProducts = (localProducts.length > 0 ? localProducts : products).filter(p => 
     p.product_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -28,6 +55,73 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
           setLocalProducts(prev => prev.map(p => p.id === updated.id ? updated : p));
         }}
       />
+
+      <BulkImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        masterType="products"
+      />
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setIsImportModalOpen(true)}
+          title="Upload CSV sheet for bulk importing Product SKUs & pricing"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            background: 'rgba(2, 132, 199, 0.15)',
+            color: '#38bdf8',
+            border: '1px solid rgba(2, 132, 199, 0.4)',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            borderRadius: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <FileSpreadsheet size={15} /> 📥 Import Sheet (.CSV)
+        </button>
+        <button
+          onClick={handleRegenerateAllBarcodes}
+          title="Regenerate standard barcode SKU codes for all products"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            background: 'rgba(245, 158, 11, 0.1)',
+            color: '#fbbf24',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            borderRadius: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <RefreshCw size={15} /> ⚡ Regenerate All Barcode SKUs
+        </button>
+
+        <button
+          onClick={() => downloadSampleCSV('products')}
+          title="Download sample sheet template used for bulk uploading product SKUs"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            background: 'rgba(56, 189, 248, 0.1)',
+            color: '#38bdf8',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            borderRadius: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <FileSpreadsheet size={15} /> Download Sample Sheet (.CSV)
+        </button>
+      </div>
 
       <div className="data-table-container">
         <table className="data-table">
@@ -83,13 +177,34 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
                     )}
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button
-                      className="btn btn-outline"
-                      onClick={() => setSelectedProduct(p)}
-                      style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-                    >
-                      <Edit3 size={13} /> Update Details & MRP
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                      <button
+                        className="btn btn-outline"
+                        onClick={() => handleRegenerateSingleBarcode(p)}
+                        title="Regenerate barcode SKU code for this item"
+                        style={{ borderColor: '#f59e0b', color: '#fbbf24', padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                      >
+                        <QrCode size={13} /> New Barcode
+                      </button>
+
+                      <button
+                        className="btn btn-outline"
+                        onClick={() => setSelectedProduct(p)}
+                        style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                      >
+                        <Edit3 size={13} /> Edit SKU & MRP
+                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => handleDeleteProduct(p.id, p.product_name)}
+                          title="Super Admin Authority: Delete product SKU master record"
+                          style={{ padding: '0.3rem 0.55rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

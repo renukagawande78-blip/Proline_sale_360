@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, ShieldCheck, Ban, Trash2, FileText, MoreVertical, X, RefreshCw } from 'lucide-react';
+import { Search, Plus, ShieldCheck, Ban, Trash2, FileText, MoreVertical, X, RefreshCw, Edit, PauseCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { MOCK_COMPANIES, isCompanyAllowedForUser, getOrderAccessPermission } from '../../lib/supabase';
 import { Order, PermissionControl } from '../../types';
@@ -8,6 +8,7 @@ import { PermissionDeniedModal } from '../../components/PermissionDeniedModal';
 interface OrdersViewProps {
   orders: Order[];
   onOpenCreateOrder: () => void;
+  onOpenEditOrder?: (order: Order) => void;
   onSelectOrderForApproval: (order: Order) => void;
   onViewInvoice?: (order: Order) => void;
   onCancelOrder?: (orderId: string) => void;
@@ -18,6 +19,7 @@ interface OrdersViewProps {
 export const OrdersView: React.FC<OrdersViewProps> = ({
   orders,
   onOpenCreateOrder,
+  onOpenEditOrder,
   onSelectOrderForApproval,
   onViewInvoice,
   onCancelOrder,
@@ -54,19 +56,19 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   };
 
   const handleCreateOrderClick = () => {
-    if (canAddOrder) {
-      onOpenCreateOrder();
-    } else {
-      triggerPermissionDenied('Add Sales Order / Order Entry', 'add_order');
+    if (!canAddOrder) {
+      alert('Access Restricted: You do not have permissions to create new sales orders.');
+      return;
     }
+    onOpenCreateOrder();
   };
 
   const handleConfirmCancel = (order: Order) => {
-    if (!canCancelOrder) {
-      triggerPermissionDenied(`Cancel Sales Order ${order.order_number}`, 'cancel_order');
+    if (!canCancelOrder && role !== 'SUPER_ADMIN' && role !== 'SALES_PERSON' && role !== 'AREA_SALES_MANAGER') {
+      alert('Access Restricted: You do not have permissions to cancel sales orders.');
       return;
     }
-    if (window.confirm(`Are you sure you want to cancel Sales Order ${order.order_number}?`)) {
+    if (window.confirm(`Are you sure you want to CANCEL Order ${order.order_number}?`)) {
       if (onCancelOrder) {
         onCancelOrder(order.id);
       }
@@ -74,8 +76,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   };
 
   const handleConfirmDelete = (order: Order) => {
-    if (!canDeleteOrder) {
-      triggerPermissionDenied(`Delete Sales Order ${order.order_number}`, 'delete_order');
+    if (!canDeleteOrder && role !== 'SUPER_ADMIN') {
+      alert('Access Restricted: Only Super Admin (Chirag & Harshad) can permanently delete orders.');
       return;
     }
     if (window.confirm(`⚠️ PERMANENT DELETE WARNING: Delete Sales Order ${order.order_number}? This action can only be done by System Admin.`)) {
@@ -119,7 +121,39 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
       return actions;
     }
 
-    if ((role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN' || role === 'SALES_ADMIN') && (order.status === 'SUBMITTED' || order.status === 'HELD')) {
+    const isSuperAdmin = role === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
+
+    // 1. Edit Order (Field Person / ASM / Sales Admin can edit order UP TO APPROVAL)
+    if (onOpenEditOrder && (order.status === 'DRAFT' || order.status === 'SUBMITTED' || order.status === 'HELD')) {
+      actions.push({
+        id: 'edit',
+        label: 'Edit Order (Pre-Approval)',
+        icon: Edit,
+        color: '#34d399',
+        onClick: () => onOpenEditOrder(order)
+      });
+    }
+
+    // 2. Hold Order (Field Person / Sales Exec / Admin can place order on hold)
+    if (order.status === 'SUBMITTED' || order.status === 'DRAFT') {
+      actions.push({
+        id: 'hold',
+        label: 'Hold Order',
+        icon: PauseCircle,
+        color: '#fbbf24',
+        onClick: () => onSelectOrderForApproval(order)
+      });
+    }
+
+    if (isSuperAdmin && order.status !== 'CANCELLED' && order.status !== 'COMPLETED') {
+      actions.push({
+        id: 'check',
+        label: 'Super Admin Check / Hold',
+        icon: ShieldCheck,
+        color: '#fbbf24',
+        onClick: () => onSelectOrderForApproval(order)
+      });
+    } else if (role === 'SALES_ADMIN' && (order.status === 'SUBMITTED' || order.status === 'HELD')) {
       actions.push({
         id: 'check',
         label: 'Account Check',
@@ -139,6 +173,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
       });
     }
 
+    // 3. Cancel Order (Field Person / ASM / Admin can cancel order)
     if (order.status !== 'CANCELLED' && order.status !== 'DISPATCHED' && order.status !== 'COMPLETED') {
       actions.push({
         id: 'cancel',
@@ -241,7 +276,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               <th>Salesperson / Exec</th>
               <th>Boxes / Loose</th>
               <th>Total PCS</th>
-              <th>Order Total (₹)</th>
+              <th>Pricing Stage</th>
               <th>Status</th>
               <th style={{ textAlign: 'center', width: 140 }}>Actions Authority</th>
             </tr>
@@ -281,7 +316,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                   <td><span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24' }}>{order.salesperson_name || 'Field Exec'}</span></td>
                   <td>{order.total_box_qty} Boxes / {order.total_loose_pcs} Loose</td>
                   <td><span style={{ fontWeight: 800, color: '#34d399' }}>{order.total_qty_pcs}</span></td>
-                  <td>₹{order.total_amount.toLocaleString()}</td>
+                  <td><span style={{ fontSize: '0.725rem', color: '#94a3b8', background: '#0f172a', padding: '0.2rem 0.5rem', borderRadius: 4, border: '1px solid #334155' }}>🔒 Next Phase (Billing)</span></td>
                   <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
                   <td style={{ position: 'relative', textAlign: 'center' }}>
                     

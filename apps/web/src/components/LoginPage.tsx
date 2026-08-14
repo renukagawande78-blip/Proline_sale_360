@@ -97,7 +97,7 @@ export const LoginPage: React.FC = () => {
             </h2>
 
             <p style={{ fontSize: '0.875rem', color: '#94a3b8', lineHeight: 1.6, marginBottom: '2rem' }}>
-              Real-time multi-tenant order creation, hold-reason tracking, credit limits, dispatch logistics, and sales performance analytics for 13 global FMCG & FMEG brands.
+              Real-time multi-tenant order creation, hold-reason tracking, credit limits, dispatch logistics, and sales performance analytics for 13 global FMCG & FMCD brands.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
@@ -111,7 +111,7 @@ export const LoginPage: React.FC = () => {
                 <div style={{ background: 'rgba(52, 211, 153, 0.15)', padding: 6, borderRadius: 6, color: '#34d399' }}>
                   <Building2 size={16} />
                 </div>
-                13 FMCG & FMEG Brands (Pringod, Daikin, Mogu Mogu, Waiwai...)
+                13 FMCG & FMCD Brands (Pringod, Daikin, Mogu Mogu, Waiwai...)
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#e2e8f0', fontSize: '0.825rem', fontWeight: 600 }}>
                 <div style={{ background: 'rgba(168, 85, 247, 0.15)', padding: 6, borderRadius: 6, color: '#c084fc' }}>

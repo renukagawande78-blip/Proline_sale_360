@@ -1,23 +1,40 @@
 import React, { useState } from 'react';
-import { Mail, Phone, ShieldCheck, Eye, EyeOff, UserCheck, UserX, Building2, Lock } from 'lucide-react';
+import { Mail, Phone, ShieldCheck, Eye, EyeOff, UserCheck, UserX, Building2, Lock, FileSpreadsheet, Edit3, Trash2 } from 'lucide-react';
 import { User } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { downloadSampleCSV } from '../../lib/masterImportExport';
+import { BulkImportModal } from '../../components/BulkImportModal';
 
 interface UsersMasterViewProps {
   users: User[];
   searchQuery: string;
+  onOpenUserMgmtModal?: (user?: User) => void;
 }
 
-export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users, searchQuery }) => {
+export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users: initialUsers, searchQuery, onOpenUserMgmtModal }) => {
   const { currentUser, updateUser } = useAuth();
+  const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
+  const isAdmin = isSuperAdmin;
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
-  const [localUsers, setLocalUsers] = useState<User[]>(users);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [localUsers, setLocalUsers] = useState<User[]>(initialUsers);
 
-  const isAdmin = currentUser?.role_name === 'SUPER_ADMIN' || currentUser?.role_name === 'SYSTEM_ADMIN';
+  const activeUsers = localUsers.length > 0 ? localUsers : initialUsers;
 
-  const activeUserList = localUsers.length > 0 ? localUsers : users;
+  const handleDeleteUser = (userId: string, userName: string) => {
+    if (window.confirm(`Are you sure you want to delete user account "${userName}"? This action is restricted to Super Admin authority.`)) {
+      setLocalUsers(prev => prev.filter(u => u.id !== userId));
+    }
+  };
 
-  const filteredUsers = activeUserList.filter(u => 
+  const handleEditUser = (u: User) => {
+    const newName = window.prompt(`Update User Full Name for ${u.email}:`, u.full_name);
+    if (newName && newName.trim()) {
+      setLocalUsers(prev => prev.map(item => item.id === u.id ? { ...item, full_name: newName.trim() } : item));
+    }
+  };
+
+  const filteredUsers = activeUsers.filter(u => 
     u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     u.role_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -41,7 +58,56 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users, searchQ
   };
 
   return (
-    <div className="data-table-container">
+    <>
+      <BulkImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        masterType="users"
+      />
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setIsImportModalOpen(true)}
+          title="Upload CSV sheet for bulk importing system users & brand roles"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            background: 'rgba(2, 132, 199, 0.15)',
+            color: '#38bdf8',
+            border: '1px solid rgba(2, 132, 199, 0.4)',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            borderRadius: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <FileSpreadsheet size={15} /> 📥 Import Sheet (.CSV)
+        </button>
+
+        <button
+          onClick={() => downloadSampleCSV('users')}
+          title="Download sample sheet template used for bulk uploading system users & roles"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            background: 'rgba(56, 189, 248, 0.1)',
+            color: '#38bdf8',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            borderRadius: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <FileSpreadsheet size={15} /> Download Sample Sheet (.CSV)
+        </button>
+      </div>
+
+      <div className="data-table-container">
       <table className="data-table">
         <thead>
           <tr>
@@ -53,6 +119,7 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users, searchQ
             <th>Brand Handle Scope</th>
             <th>Status</th>
             {isAdmin && <th style={{ textAlign: 'center' }}>Password Authority</th>}
+            {isSuperAdmin && <th style={{ textAlign: 'center' }}>Action</th>}
           </tr>
         </thead>
         <tbody>
@@ -140,11 +207,34 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users, searchQ
                     </div>
                   </td>
                 )}
+
+                {isSuperAdmin && (
+                  <td style={{ textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                      <button
+                        className="btn btn-outline"
+                        onClick={() => handleEditUser(u)}
+                        style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                      >
+                        <Edit3 size={13} /> Edit User
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => handleDeleteUser(u.id, u.full_name)}
+                        title="Super Admin Authority: Delete user account"
+                        style={{ padding: '0.3rem 0.55rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             );
           })}
         </tbody>
       </table>
     </div>
+    </>
   );
 };

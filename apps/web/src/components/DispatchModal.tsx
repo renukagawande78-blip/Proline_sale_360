@@ -15,10 +15,14 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   onClose,
   onConfirmDispatch
 }) => {
-  const [dispatchType, setDispatchType] = useState<'DELIVERY' | 'SELF_PICKUP'>('DELIVERY');
-  const [vehicleNumber, setVehicleNumber] = useState('DL-01-AB-1234');
+  const [dispatchType, setDispatchType] = useState<'F.O.R' | 'Self Pickup'>(order?.delivery_type || 'F.O.R');
+  const [isCompanyVehicle, setIsCompanyVehicle] = useState<boolean>(true);
+  const [vehicleNumber, setVehicleNumber] = useState('MH-04-AB-1234');
   const [driverName, setDriverName] = useState('Mahesh Verma');
   const [driverMobile, setDriverMobile] = useState('+91 97777 22222');
+  const [tempoNumber, setTempoNumber] = useState('MH-12-TR-9090');
+  const [bookingId, setBookingId] = useState('PORTER-88221');
+  const [freightAmount, setFreightAmount] = useState<number>(1850);
   const [lrNumber, setLrNumber] = useState('LR-99887766');
   
   // Item-wise dispatch quantity state
@@ -44,9 +48,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   const handleConfirm = () => {
     const payload = {
       dispatch_type: dispatchType,
-      vehicle_number: vehicleNumber,
+      is_company_vehicle: isCompanyVehicle,
+      vehicle_number: isCompanyVehicle ? vehicleNumber : tempoNumber,
       driver_name: driverName,
       driver_mobile: driverMobile,
+      tempo_number: tempoNumber,
+      booking_id: bookingId,
+      freight_amount: freightAmount,
       lr_number: lrNumber,
       items: Object.entries(dispatchItems).map(([itemId, qty]) => ({
         order_item_id: itemId,
@@ -67,11 +75,11 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
               <Truck color="#38bdf8" size={22} />
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
-                Warehouse Stock Availability & Dispatch Execution
+                Stage 5: Warehouse Packing & Logistics Allocation
               </h2>
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 2 }}>
-              Order No: <strong style={{ color: '#38bdf8' }}>{order.order_number}</strong> | Agency: <strong style={{ color: '#f8fafc' }}>{order.agency_name}</strong> | System Approver: <strong style={{ color: '#34d399' }}>{order.approved_by_name || 'System Admin'}</strong>
+              Order No: <strong style={{ color: '#38bdf8' }}>{order.order_number}</strong> | Agency: <strong style={{ color: '#f8fafc' }}>{order.agency_name}</strong> | Delivery Type: <strong style={{ color: '#34d399' }}>{dispatchType}</strong>
             </p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
@@ -82,54 +90,106 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         {/* Logistics & Transporter Form */}
         <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '1rem', marginBottom: '1.25rem' }}>
           <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#38bdf8', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Truck size={16} /> LOGISTICS & VEHICLE CHALLAN DETAILS
+            <Truck size={16} /> STAGE 5 LOGISTICS & FLEET ALLOCATION
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.85rem', fontSize: '0.8rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', fontSize: '0.8rem' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DISPATCH MODE</label>
+              <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DELIVERY TYPE</label>
               <select 
                 value={dispatchType}
                 onChange={e => setDispatchType(e.target.value as any)}
                 style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 700 }}
               >
-                <option value="DELIVERY">DELIVERY / TRANSPORTER</option>
-                <option value="SELF_PICKUP">SELF PICKUP BY AGENCY</option>
+                <option value="F.O.R">F.O.R DELIVERY</option>
+                <option value="Self Pickup">SELF PICKUP (Record Driver & Mobile)</option>
               </select>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>VEHICLE NUMBER</label>
-              <input 
-                type="text" 
-                value={vehicleNumber}
-                onChange={e => setVehicleNumber(e.target.value)}
-                placeholder="e.g. MH-04-AB-1234"
-                style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
-              />
-            </div>
+            {dispatchType === 'Self Pickup' ? (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>PICKUP DRIVER NAME*</label>
+                  <input 
+                    type="text" 
+                    value={driverName}
+                    onChange={e => setDriverName(e.target.value)}
+                    placeholder="Driver Name"
+                    style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>DRIVER MOBILE NO.*</label>
+                  <input 
+                    type="text" 
+                    value={driverMobile}
+                    onChange={e => setDriverMobile(e.target.value)}
+                    placeholder="+91 Mobile No"
+                    style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#fbbf24', marginBottom: 4 }}>COMPANY VEHICLE?</label>
+                  <select 
+                    value={isCompanyVehicle ? 'YES' : 'NO'}
+                    onChange={e => setIsCompanyVehicle(e.target.value === 'YES')}
+                    style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 700 }}
+                  >
+                    <option value="YES">YES — Company Owned Vehicle</option>
+                    <option value="NO">NO — Rental / Porter Transporter</option>
+                  </select>
+                </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER NAME & MOBILE</label>
-              <input 
-                type="text" 
-                value={`${driverName} (${driverMobile})`}
-                onChange={e => setDriverName(e.target.value)}
-                placeholder="Driver Name & Contact"
-                style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.775rem' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>LR / CHALLAN NUMBER</label>
-              <input 
-                type="text" 
-                value={lrNumber}
-                onChange={e => setLrNumber(e.target.value)}
-                placeholder="e.g. LR-998877"
-                style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
-              />
-            </div>
+                {isCompanyVehicle ? (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>COMPANY VEHICLE NO.</label>
+                    <input 
+                      type="text" 
+                      value={vehicleNumber}
+                      onChange={e => setVehicleNumber(e.target.value)}
+                      placeholder="e.g. MH-04-AB-1234"
+                      style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>TEMPO NUMBER*</label>
+                      <input 
+                        type="text" 
+                        value={tempoNumber}
+                        onChange={e => setTempoNumber(e.target.value)}
+                        placeholder="e.g. MH-12-TR-9090"
+                        style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>BOOKING ID / CHALLAN*</label>
+                      <input 
+                        type="text" 
+                        value={bookingId}
+                        onChange={e => setBookingId(e.target.value)}
+                        placeholder="e.g. PORTER-88221"
+                        style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>FREIGHT AMOUNT (₹)*</label>
+                      <input 
+                        type="number" 
+                        value={freightAmount}
+                        onChange={e => setFreightAmount(Number(e.target.value))}
+                        placeholder="Freight INR"
+                        style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 700 }}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </div>
 

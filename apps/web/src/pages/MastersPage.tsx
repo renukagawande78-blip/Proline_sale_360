@@ -9,6 +9,8 @@ import {
   Check, 
   X, 
   Download,
+  Upload,
+  FileSpreadsheet,
   MapPin
 } from 'lucide-react';
 import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, isCompanyAllowedForUser } from '../lib/supabase';
@@ -21,16 +23,18 @@ import { BrandsMasterView } from '../views/masters/BrandsMasterView';
 import { UsersMasterView } from '../views/masters/UsersMasterView';
 import { ZonesMasterView } from '../views/masters/ZonesMasterView';
 import { RegisterAgencyModal } from '../components/RegisterAgencyModal';
+import { BulkImportModal } from '../components/BulkImportModal';
+import { MasterType, downloadSampleCSV, exportMasterCSV } from '../lib/masterImportExport';
 
 interface MastersPageProps {
   initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'zones';
 }
 
 export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies' }) => {
-  const { users, currentUser, hasPermission } = useAuth();
+  const { users, currentUser, hasPermission, createUser } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
   const isSalesPerson = role === 'SALES_PERSON';
-  const canAddMaster = hasPermission('new_party') || hasPermission('product_mgmt') || role === 'SYSTEM_ADMIN' || role === 'SUPER_ADMIN';
+  const canAddMaster = hasPermission('new_party') || hasPermission('product_mgmt') || role === 'SUPER_ADMIN';
 
   const [activeTab, setActiveTab] = useState<'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'zones'>(initialTab);
 
@@ -47,6 +51,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
   const [agenciesList, setAgenciesList] = useState<Agency[]>(MOCK_AGENCIES);
   const [productsList, setProductsList] = useState<Product[]>(MOCK_PRODUCTS);
   const [isRegisterAgencyOpen, setIsRegisterAgencyOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
 
   // Mapped Data Filtered by Brand Handle Scope
   const mappedAgencies = agenciesList.filter(a => {
@@ -99,8 +104,8 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         company_id: 'c01',
         product_code: newItemCode || 'SKU-NEW',
         product_name: newItemName.trim(),
-        pcs_per_box: newItemPack,
-        unit_price: newItemPrice
+        pcs_per_box: newItemPack || 24,
+        unit_price: newItemPrice || 100
       };
       setProductsList(prev => [...prev, newP]);
       setSuccessNotice(`New Product SKU "${newItemName}" added!`);
@@ -112,56 +117,76 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
     setTimeout(() => setSuccessNotice(null), 3000);
   };
 
-  // Master Data CSV Download Handler for Salesperson / Admin
-  const handleDownloadMasterCSV = () => {
-    let headers: string[] = [];
-    let rows: (string | number)[][] = [];
-    let filename = '';
+  const handleExportCSV = () => {
+    let currentData: any[] = [];
+    if (activeTab === 'agencies') currentData = mappedAgencies;
+    else if (activeTab === 'products') currentData = mappedProducts;
+    else if (activeTab === 'companies') currentData = mappedCompanies;
+    else if (activeTab === 'users') currentData = users;
+    else if (activeTab === 'zones') currentData = mappedAgencies;
 
-    if (activeTab === 'agencies') {
-      filename = `Mapped_Agencies_Master_${currentUser?.full_name}_${new Date().toISOString().substring(0, 10)}`;
-      headers = ['Agency Code', 'Agency Name', 'City', 'Area / Territory', 'Contact Person', 'Mobile', 'Email', 'Credit Limit (INR)'];
-      rows = mappedAgencies.map(a => [
-        a.agency_code,
-        a.agency_name,
-        a.city || 'N/A',
-        a.area_name || 'N/A',
-        a.contact_person || 'N/A',
-        a.mobile || 'N/A',
-        a.email || 'N/A',
-        a.credit_limit
-      ]);
-    } else if (activeTab === 'products') {
-      filename = `Mapped_Products_Master_${currentUser?.full_name}_${new Date().toISOString().substring(0, 10)}`;
-      headers = ['Product Code', 'Product SKU Name', 'Company Brand', 'Pcs Per Box', 'MRP Unit Price (INR)'];
-      rows = mappedProducts.map(p => {
-        const comp = companiesList.find(c => c.id === p.company_id);
-        return [
-          p.product_code,
-          p.product_name,
-          comp?.company_name || 'FMCG',
-          p.pcs_per_box,
-          p.unit_price
-        ];
+    exportMasterCSV(activeTab === 'reasons' ? 'agencies' : (activeTab as MasterType), currentData);
+  };
+
+  const handleImportSuccess = (importedRecords: any[], masterType: MasterType) => {
+    if (masterType === 'agencies') {
+      const formatted: Agency[] = importedRecords.map((r, i) => ({
+        id: 'ag_imp_' + Date.now() + '_' + i,
+        agency_code: r.agency_code || `AG-${Math.floor(1000 + Math.random() * 9000)}`,
+        agency_name: r.agency_name || 'Imported Agency',
+        city: r.city || 'Surat',
+        area_name: r.area_name || 'Central Zone',
+        contact_person: r.contact_person || 'Haresh Patel',
+        mobile: r.mobile || '9898000000',
+        email: r.email || 'party@proline.com',
+        gstin: r.gstin || '24AAACI1234F1Z9',
+        credit_limit: Number(r.credit_limit) || 250000,
+        assigned_salesperson: r.assigned_salesperson || 'Chirag Patel'
+      }));
+      setAgenciesList(prev => [...formatted, ...prev]);
+      setSuccessNotice(`Successfully imported ${formatted.length} Agencies / B2B Parties into Master!`);
+    } else if (masterType === 'products') {
+      const formatted: Product[] = importedRecords.map((r, i) => ({
+        id: 'p_imp_' + Date.now() + '_' + i,
+        company_id: 'c01',
+        product_code: r.product_code || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+        product_name: r.product_name || 'Imported SKU Product',
+        pcs_per_box: Number(r.pcs_per_box) || 24,
+        unit_price: Number(r.unit_price) || 120,
+        mrp_price: Number(r.mrp_price) || 150,
+        stock_box_qty: Number(r.stock_box_qty) || 200,
+        stock_loose_pcs: Number(r.stock_loose_pcs) || 0,
+        segment: r.segment || 'FMCG'
+      }));
+      setProductsList(prev => [...formatted, ...prev]);
+      setSuccessNotice(`Successfully imported ${formatted.length} Products / SKUs into Master!`);
+    } else if (masterType === 'companies') {
+      const formatted: Company[] = importedRecords.map((r, i) => ({
+        id: 'c_imp_' + Date.now() + '_' + i,
+        company_code: r.company_code || `BRAND-${i+1}`,
+        company_name: r.company_name || 'Imported Brand Company',
+        segment: r.segment || 'FMCG'
+      }));
+      setCompaniesList(prev => [...formatted, ...prev]);
+      setSuccessNotice(`Successfully imported ${formatted.length} Brand Companies into Master!`);
+    } else if (masterType === 'users') {
+      importedRecords.forEach((r) => {
+        if (createUser) {
+          createUser({
+            full_name: r.full_name || 'Imported User',
+            email: r.email || `user${Math.floor(Math.random()*1000)}@proline.com`,
+            role_name: r.role_name || 'SALES_PERSON',
+            company_handle: r.company_handle || 'All',
+            password: r.password || '1234'
+          });
+        }
       });
+      setSuccessNotice(`Successfully imported ${importedRecords.length} System Users & Roles!`);
     } else {
-      filename = `Mapped_Brands_Master_${currentUser?.full_name}_${new Date().toISOString().substring(0, 10)}`;
-      headers = ['Company Code', 'Company Name', 'Segment'];
-      rows = mappedCompanies.map(c => [c.company_code, c.company_name, c.segment || 'FMCG']);
+      setSuccessNotice(`Successfully imported ${importedRecords.length} records into Master!`);
     }
 
-    const csvLines = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
-
-    const blob = new Blob(['\uFEFF' + csvLines], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${filename}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    setTimeout(() => setSuccessNotice(null), 4000);
   };
 
   return (
@@ -174,22 +199,46 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        {/* Master Action Toolbar */}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {/* Download Sample CSV Template */}
           <button 
             className="btn btn-outline"
-            onClick={handleDownloadMasterCSV}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#34d399', color: '#34d399', fontWeight: 700 }}
+            onClick={() => downloadSampleCSV(activeTab === 'reasons' ? 'agencies' : (activeTab as MasterType))}
+            title="Download formatted sample sheet used for bulk data upload"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#38bdf8', color: '#38bdf8', fontWeight: 700, fontSize: '0.8rem' }}
           >
-            <Download size={16} /> Download Mapped Master CSV
+            <FileSpreadsheet size={15} /> Download Sample Upload Sheet
+          </button>
+
+          {/* Bulk Import CSV */}
+          {canAddMaster && (
+            <button 
+              className="btn btn-outline"
+              onClick={() => setIsBulkImportOpen(true)}
+              title="Bulk data upload via CSV"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#fbbf24', color: '#fbbf24', fontWeight: 700, fontSize: '0.8rem' }}
+            >
+              <Upload size={15} /> Bulk Import CSV
+            </button>
+          )}
+
+          {/* Export Current Master CSV */}
+          <button 
+            className="btn btn-outline"
+            onClick={handleExportCSV}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#34d399', color: '#34d399', fontWeight: 700, fontSize: '0.8rem' }}
+          >
+            <Download size={15} /> Export Master CSV
           </button>
 
           {canAddMaster && activeTab !== 'agencies' && activeTab !== 'zones' && (
             <button 
               className="btn btn-primary"
               onClick={() => setIsAddModalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', fontSize: '0.8rem' }}
             >
-              <Plus size={16} /> Add New {activeTab.slice(0, -1).toUpperCase()} Master
+              <Plus size={15} /> Add {activeTab.slice(0, -1).toUpperCase()}
             </button>
           )}
         </div>
@@ -405,6 +454,13 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
           </div>
         </div>
       )}
+
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        masterType={activeTab === 'reasons' ? 'agencies' : (activeTab as MasterType)}
+        onImportSuccess={handleImportSuccess}
+      />
 
       <RegisterAgencyModal
         isOpen={isRegisterAgencyOpen}

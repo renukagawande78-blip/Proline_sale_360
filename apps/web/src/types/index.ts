@@ -1,6 +1,5 @@
 export type RoleName =
   | 'SUPER_ADMIN'
-  | 'SYSTEM_ADMIN'
   | 'ACCOUNTS'
   | 'SALES_ADMIN'
   | 'BILLING'
@@ -11,16 +10,21 @@ export type RoleName =
 export type OrderStatus =
   | 'DRAFT'
   | 'SUBMITTED'
+  | 'ACCOUNTS_APPROVED'
   | 'APPROVED'
   | 'HELD'
   | 'REJECTED'
+  | 'WAIT_FOR_STOCK'
+  | 'INVENTORY_AUDITED'
+  | 'BILLED'
   | 'DISPATCH_PENDING'
+  | 'READY_FOR_PICKUP'
+  | 'READY_FOR_SELF_PICKUP'
   | 'PARTIALLY_DISPATCHED'
   | 'DISPATCHED'
-  | 'BILLED'
-  | 'READY_FOR_PICKUP'
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
+  | 'POD_ISSUE_RAISED'
   | 'COMPLETED'
   | 'CANCELLED';
 
@@ -176,7 +180,7 @@ export interface Product {
   stock_loose_pcs?: number;
   total_stock_pcs?: number;
   reserved_stock_pcs?: number;
-  segment?: 'FMCG' | 'FMEG';
+  segment?: 'FMCG' | 'FMCD';
 }
 
 export interface OrderItem {
@@ -187,6 +191,7 @@ export interface OrderItem {
   pcs_per_box: number;
   box_qty: number;
   loose_pcs: number;
+  free_pcs?: number;
   total_qty_pcs: number;
   unit_price: number;
   total_price: number;
@@ -212,6 +217,7 @@ export interface Order {
   total_box_qty: number;
   total_loose_pcs: number;
   total_qty_pcs: number;
+  total_free_pcs?: number;
   total_amount: number;
   remarks?: string;
   delivery_type?: 'F.O.R' | 'Self Pickup';
@@ -224,6 +230,27 @@ export interface Order {
   invoice_date?: string;
   invoice_amount?: number;
   return_request?: ReturnRequest;
+  
+  // Operational Workflow Diagram Fields
+  payment_type?: 'ADVANCE' | 'OVERDUE' | 'CREDIT';
+  payment_receipt_no?: string;
+  financial_approval_by?: string;
+  inventory_status?: 'IN_STOCK' | 'WAIT_FOR_STOCK';
+  priority?: 'HIGH' | 'MEDIUM' | 'LOW';
+  credit_days?: number;
+  vehicle_number?: string;
+  is_company_vehicle?: boolean;
+  driver_name?: string;
+  driver_mobile?: string;
+  tempo_number?: string;
+  booking_id?: string;
+  freight_amount?: number;
+  pod_status?: 'CLEAN' | 'ISSUE_RAISED';
+  pod_issue_type?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN';
+  pod_issue_details?: string;
+  grn_number?: string;
+  grn_value?: number;
+  previous_status_before_hold?: OrderStatus;
 }
 
 export type ReturnType = 'REPLACEMENT' | 'DAMAGED_RETURN';

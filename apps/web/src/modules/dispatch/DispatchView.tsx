@@ -11,12 +11,14 @@ interface DispatchViewProps {
   orders: Order[];
   onOpenDispatchModal: (order: Order) => void;
   onUpdateOrderStatus?: (orderId: string, newStatus: OrderStatus, notificationMsg?: string) => void;
+  onOpenPODModal?: (order: Order) => void;
 }
 
 export const DispatchView: React.FC<DispatchViewProps> = ({ 
   orders, 
   onOpenDispatchModal,
-  onUpdateOrderStatus 
+  onUpdateOrderStatus,
+  onOpenPODModal
 }) => {
   const { currentUser } = useAuth();
   const { addNotification } = useNotifications();
@@ -338,14 +340,14 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                         </button>
                       )}
 
-                      {/* Step 5: Out for Delivery -> Mark Delivered */}
-                      {order.status === 'OUT_FOR_DELIVERY' && (
+                      {/* Step 5: Out for Delivery -> POD Verification Drop Update */}
+                      {(order.status === 'OUT_FOR_DELIVERY' || order.status === 'DISPATCHED') && (
                         <button 
                           className="btn btn-success"
-                          onClick={() => handleMarkDelivered(order)}
+                          onClick={() => onOpenPODModal ? onOpenPODModal(order) : undefined}
                           style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                         >
-                          <CheckCircle size={14} /> Mark Delivered & Completed
+                          <CheckCircle size={14} /> Stage 6: Verify POD & Delivery Drop
                         </button>
                       )}
 

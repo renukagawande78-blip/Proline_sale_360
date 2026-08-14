@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
-import { Store, Plus, Landmark, UserCheck, Edit3 } from 'lucide-react';
+import { Store, Plus, Landmark, UserCheck, Edit3, Trash2, FileSpreadsheet, DollarSign } from 'lucide-react';
 import { Agency } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 import { RegisterAgencyModal } from '../../components/RegisterAgencyModal';
 import { UpdateAgencyModal } from '../../components/UpdateAgencyModal';
+import { UpdatePartyBalanceModal } from '../../components/UpdatePartyBalanceModal';
+import { BulkImportModal } from '../../components/BulkImportModal';
+import { downloadSampleCSV } from '../../lib/masterImportExport';
 
 interface AgenciesMasterViewProps {
   agencies: Agency[];
@@ -11,9 +15,19 @@ interface AgenciesMasterViewProps {
 }
 
 export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies, searchQuery, onAgencyRegistered }) => {
+  const { currentUser } = useAuth();
+  const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedAgencyToEdit, setSelectedAgencyToEdit] = useState<Agency | null>(null);
+  const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);
+
+  const handleDeleteAgency = (agencyId: string, agencyName: string) => {
+    if (window.confirm(`Are you sure you want to delete sales agency "${agencyName}"? This action is restricted to Super Admin authority.`)) {
+      setLocalAgencies(prev => prev.filter(a => a.id !== agencyId));
+    }
+  };
 
   const activeAgencyList = localAgencies.length > 0 ? localAgencies : agencies;
 
@@ -46,7 +60,97 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
         }}
       />
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+      <UpdatePartyBalanceModal
+        isOpen={isBalanceModalOpen}
+        onClose={() => setIsBalanceModalOpen(false)}
+      />
+
+      <BulkImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        masterType="agencies"
+      />
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setIsImportModalOpen(true)}
+          title="Upload CSV sheet for bulk importing agencies & B2B party records"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            background: 'rgba(2, 132, 199, 0.15)',
+            color: '#38bdf8',
+            border: '1px solid rgba(2, 132, 199, 0.4)',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            borderRadius: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <FileSpreadsheet size={15} /> 📥 Import Sheet (.CSV)
+        </button>
+        <button
+          onClick={() => downloadSampleCSV('party_balances')}
+          title="Download sample sheet template used for daily bulk party balance updates"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            background: 'rgba(52, 211, 153, 0.1)',
+            color: '#34d399',
+            border: '1px solid rgba(52, 211, 153, 0.3)',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            borderRadius: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <FileSpreadsheet size={15} /> Daily Balances Sample (.CSV)
+        </button>
+
+        <button
+          onClick={() => setIsBalanceModalOpen(true)}
+          title="Bulk update party balances & credit limits for today's billing cycle"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            background: 'rgba(251, 191, 36, 0.1)',
+            color: '#fbbf24',
+            border: '1px solid rgba(251, 191, 36, 0.3)',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            borderRadius: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <DollarSign size={15} /> Bulk Update Balances
+        </button>
+
+        <button
+          onClick={() => downloadSampleCSV('agencies')}
+          title="Download sample sheet template used for bulk uploading agencies"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            background: 'rgba(56, 189, 248, 0.1)',
+            color: '#38bdf8',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            borderRadius: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <FileSpreadsheet size={15} /> Download Agency Sheet (.CSV)
+        </button>
+
         <button
           onClick={() => setIsRegisterModalOpen(true)}
           style={{
@@ -132,13 +236,25 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
                   <td><span style={{ fontWeight: 800, color: '#38bdf8' }}>₹{(a.credit_limit || 250000).toLocaleString()}</span></td>
                   <td><span className="status-badge status-APPROVED">MAPPED</span></td>
                   <td style={{ textAlign: 'center' }}>
-                    <button
-                      className="btn btn-outline"
-                      onClick={() => setSelectedAgencyToEdit(a)}
-                      style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-                    >
-                      <Edit3 size={13} /> Edit Party Details
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                      <button
+                        className="btn btn-outline"
+                        onClick={() => setSelectedAgencyToEdit(a)}
+                        style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                      >
+                        <Edit3 size={13} /> Edit Details
+                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => handleDeleteAgency(a.id, a.agency_name)}
+                          title="Super Admin Authority: Delete agency master record"
+                          style={{ padding: '0.3rem 0.55rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

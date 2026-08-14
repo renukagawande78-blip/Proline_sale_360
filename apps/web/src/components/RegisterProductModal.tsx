@@ -12,7 +12,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { Product } from '../types';
-import { registerNewProduct, MOCK_COMPANIES } from '../lib/supabase';
+import { registerNewProduct, MOCK_COMPANIES, generateNewBarcodeSKUCode } from '../lib/supabase';
 
 interface RegisterProductModalProps {
   isOpen: boolean;
