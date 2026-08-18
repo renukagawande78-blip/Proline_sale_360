@@ -112,48 +112,40 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
     title: 'Products & SKUs Master',
     filenamePrefix: 'Products_SKU_Master_Bulk_Upload_Sample',
     columns: [
-      { key: 'product_code', header: 'Product SKU Code', example: 'SKU-9901' },
-      { key: 'product_name', header: 'Product Name', example: 'Pringod Gold Biscuit 100g' },
-      { key: 'company_name', header: 'Brand / Company', example: 'Priyagold (Pringod)' },
-      { key: 'pcs_per_box', header: 'Pcs Per Box', example: '24' },
-      { key: 'unit_price', header: 'Unit Price (INR)', example: '120' },
+      { key: 'product_code', header: 'Product SKU Code', example: 'P-AK-001' },
+      { key: 'product_name', header: 'Product Name', example: 'Priyagold Butter Delite 100g' },
       { key: 'mrp_price', header: 'MRP Price (INR)', example: '150' },
-      { key: 'stock_box_qty', header: 'Stock Box Qty', example: '500' },
-      { key: 'stock_loose_pcs', header: 'Stock Loose Pcs', example: '12' },
+      { key: 'pcs_per_box', header: 'Pack Size (Pcs Per Box)', example: '24' },
+      { key: 'category', header: 'Product Category', example: 'Biscuits' },
+      { key: 'account_group', header: 'Group Name (FMCG/FMCD)', example: 'FMCG' },
       { key: 'segment', header: 'Segment (FMCG/FMCD)', example: 'FMCG' }
     ],
     sampleData: [
       {
-        product_code: 'SKU-9901',
-        product_name: 'Pringod Gold Biscuit 100g Pack of 24',
-        company_name: 'Priyagold (Pringod)',
-        pcs_per_box: '24',
-        unit_price: '120',
+        product_code: 'P-AK-001',
+        product_name: 'Priyagold Butter Delite 100g',
         mrp_price: '150',
-        stock_box_qty: '500',
-        stock_loose_pcs: '12',
+        pcs_per_box: '24',
+        category: 'Biscuits',
+        account_group: 'FMCG',
         segment: 'FMCG'
       },
       {
-        product_code: 'SKU-9902',
+        product_code: 'P-AK-002',
         product_name: 'Orion Choco Pie 12P Tray Pack',
-        company_name: 'Orion',
+        mrp_price: '210',
         pcs_per_box: '16',
-        unit_price: '180',
-        mrp_price: '220',
-        stock_box_qty: '350',
-        stock_loose_pcs: '0',
+        category: 'Confectionery',
+        account_group: 'FMCG',
         segment: 'FMCG'
       },
       {
-        product_code: 'SKU-9903',
-        product_name: 'Whirlpool 1.5 Ton 3 Star Inverter AC',
-        company_name: 'Whirlpool',
+        product_code: 'P-AK-003',
+        product_name: 'Whirlpool Direct Cool Refrigerator 190L',
+        mrp_price: '18500',
         pcs_per_box: '1',
-        unit_price: '32500',
-        mrp_price: '38900',
-        stock_box_qty: '45',
-        stock_loose_pcs: '0',
+        category: 'Appliances',
+        account_group: 'FMCD',
         segment: 'FMCD'
       }
     ]
@@ -336,14 +328,27 @@ export const parseCSVContent = (csvText: string, masterType: MasterType): { succ
 
   const rawHeaders = parseLine(lines[0]).map(h => h.replace(/^[\uFEFF]/, '').trim().toLowerCase());
   
-  // Map headers to schema keys
+  // Map headers to schema keys with aliases support
   const keyMap: Record<number, string> = {};
   rawHeaders.forEach((h, idx) => {
-    const matchedCol = schema.columns.find(col => 
-      col.header.toLowerCase() === h || col.key.toLowerCase() === h
-    );
-    if (matchedCol) {
-      keyMap[idx] = matchedCol.key;
+    // Check aliases for products
+    if (masterType === 'products') {
+      if (h === 'product' || h === 'product name' || h === 'product_name') keyMap[idx] = 'product_name';
+      else if (h === 'mrp' || h === 'mrp price' || h === 'mrp price (inr)' || h === 'mrp_price') keyMap[idx] = 'mrp_price';
+      else if (h === 'pack size' || h === 'pack size (pcs per box)' || h === 'pcs_per_box' || h === 'pcs per box') keyMap[idx] = 'pcs_per_box';
+      else if (h === 'product category' || h === 'category') keyMap[idx] = 'category';
+      else if (h === 'group name' || h === 'account group' || h === 'account_group') keyMap[idx] = 'account_group';
+      else if (h === 'segment') keyMap[idx] = 'segment';
+      else if (h === 'sku code' || h === 'product sku code' || h === 'product_code') keyMap[idx] = 'product_code';
+    }
+
+    if (!keyMap[idx]) {
+      const matchedCol = schema.columns.find(col => 
+        col.header.toLowerCase() === h || col.key.toLowerCase() === h
+      );
+      if (matchedCol) {
+        keyMap[idx] = matchedCol.key;
+      }
     }
   });
 
@@ -359,6 +364,19 @@ export const parseCSVContent = (csvText: string, masterType: MasterType): { succ
         rowObj[key] = val;
       }
     });
+
+    if (masterType === 'products') {
+      // Autogenerate product_code if missing
+      if (!rowObj.product_code || !String(rowObj.product_code).trim()) {
+        rowObj.product_code = `SKU-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 90 + 10)}`;
+      }
+      rowObj.mrp_price = Number(rowObj.mrp_price || 100);
+      rowObj.pcs_per_box = Number(rowObj.pcs_per_box || 24);
+      rowObj.category = rowObj.category || 'General';
+      rowObj.account_group = rowObj.account_group || 'FMCG';
+      rowObj.segment = rowObj.segment || 'FMCG';
+      rowObj.unit_price = Number(rowObj.unit_price || rowObj.mrp_price);
+    }
 
     parsedItems.push(rowObj);
   }

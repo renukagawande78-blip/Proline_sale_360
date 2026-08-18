@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Store, 
   X, 
@@ -7,16 +7,18 @@ import {
   Mail, 
   Building2, 
   MapPin, 
-  Landmark, 
   CheckCircle2, 
   Sparkles,
-  ArrowRight,
-  ArrowLeft,
   Plus,
-  ShieldCheck
+  ShieldCheck,
+  CreditCard,
+  Layers,
+  Zap,
+  Globe,
+  RefreshCw
 } from 'lucide-react';
 import { Agency } from '../types';
-import { registerNewAgency, resolveZoneForAreaAndCity, MOCK_COMPANIES } from '../lib/supabase';
+import { registerNewAgency, resolveZoneForAreaAndCity, MOCK_COMPANIES, generateNewAgencyCode, saveAgencyToSupabase, saveAreaToSupabase, saveZoneToSupabase, fetchAreasFromSupabaseTable, fetchZonesFromSupabaseAreasTable } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
 interface RegisterAgencyModalProps {
@@ -32,14 +34,11 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
 }) => {
   const { currentUser } = useAuth();
 
-  // Active Tab / Step (1: Firm, 2: Contact, 3: Territory, 4: Financials)
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4>(1);
-
-  // Form State
+  // Form State - Firm Details
   const [agencyName, setAgencyName] = useState('');
   const [agencyCode, setAgencyCode] = useState('');
-  const [companyId, setCompanyId] = useState(MOCK_COMPANIES[0]?.id || 'c01');
-  const [accountGroup, setAccountGroup] = useState('Sundry Debtors-Electronics');
+  const [companyId] = useState(MOCK_COMPANIES[0]?.id || 'c01');
+  const [accountGroup, setAccountGroup] = useState('FMCG');
   const [gstin, setGstin] = useState('');
   
   // Contact Person
@@ -50,30 +49,184 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
   // Location & Territory
   const [city, setCity] = useState('Surat');
   const [areaName, setAreaName] = useState('Katargam');
-  const [assignedSalesperson, setAssignedSalesperson] = useState(currentUser?.full_name || 'Chirag Patel');
 
-  // Bank & Financials
-  const [bankName, setBankName] = useState('HDFC Bank');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [ifscCode, setIfscCode] = useState('');
-  const [branchName, setBranchName] = useState('Ring Road Branch, Surat');
+  // Approved Credit Limit
   const [creditLimit, setCreditLimit] = useState<number>(250000);
+
+  // Dynamic Lists for City, Area, Zone Dropdowns & Inline Master Addition
+  const [citiesList, setCitiesList] = useState<string[]>([
+    'Surat', 'Surat Rural', 'Navsari', 'Valsad', 'Vapi', 'Bharuch', 'Ankleshwar', 'Bardoli', 'Vyara', 'Ahmedabad', 'Vadodara', 'Rajkot', 'Jamnagar', 'Bhavnagar', 'Gandhinagar'
+  ]);
+
+  const [areasMap, setAreasMap] = useState<Record<string, string[]>>({
+    'Surat': ['Katargam', 'Varachha', 'Amroli', 'Udhna', 'Adajan', 'Vesu', 'Parle Point', 'Piplod', 'Bhatar', 'Ring Road', 'Salabatpura', 'Begumpura', 'Rander', 'Palanpur Jakatnaka', 'Dindoli', 'Pandesara', 'Limbayat'],
+    'Surat Rural': ['Kamrej', 'Bardoli', 'Kadodara', 'Kim', 'Kosamba', 'Mandvi', 'Valod', 'Mahuva', 'Palsana', 'Pasodara', 'Kathor', 'Niyol', 'Kholvad'],
+    'Navsari': ['Navsari City', 'Gandevi', 'Chikhli', 'Jalalpore', 'Vansda', 'Bilimora'],
+    'Valsad': ['Valsad City', 'Pardi', 'Umbergaon', 'Dharampur', 'Kaprada'],
+    'Vapi': ['Vapi GIDC', 'Vapi Town', 'Chanod', 'Dungra', 'Salvav'],
+    'Bharuch': ['Bharuch City', 'Jambusar', 'Zagadia', 'Vagra', 'Amod'],
+    'Ankleshwar': ['Ankleshwar GIDC', 'Ankleshwar Town', 'Panoli', 'Kosamba'],
+    'Bardoli': ['Bardoli Town', 'Mota', 'Valod', 'Buhari', 'Bajipura'],
+    'Vyara': ['Vyara Town', 'Songadh', 'Valod', 'Uchchhal']
+  });
+
+  const [zonesList, setZonesList] = useState([
+    { code: 'ZN-SUR-A', name: 'City-A (Surat City Zone)', region: 'Surat City Zone' },
+    { code: 'ZN-SUR-B', name: 'City-B (Surat City Zone)', region: 'Surat City Zone' },
+    { code: 'ZN-SUR-R1', name: 'Rural-1 (Surat Rural Zone)', region: 'Surat Rural Zone' },
+    { code: 'ZN-SUR-R2', name: 'Rural-2 (Surat Rural Zone)', region: 'Surat Rural Zone' },
+    { code: 'ZN-SUR-R3', name: 'Rural-3 (Surat Rural Zone)', region: 'Surat Rural Zone' },
+    { code: 'ZN-SG-01', name: 'South Gujarat Zone', region: 'South Gujarat Region' },
+    { code: 'ZN-CG-01', name: 'Central Gujarat Zone', region: 'Central Gujarat Region' },
+    { code: 'ZN-NG-01', name: 'North Gujarat Zone', region: 'North Gujarat Region' },
+    { code: 'ZN-SR-01', name: 'Saurashtra Zone', region: 'Saurashtra Region' }
+  ]);
+
+  const [selectedZone, setSelectedZone] = useState<string>('City-A (Surat City Zone)');
+
+  // Inline Controls toggles
+  const [showAddCity, setShowAddCity] = useState(false);
+  const [newCityInput, setNewCityInput] = useState('');
+
+  const [showAddArea, setShowAddArea] = useState(false);
+  const [newAreaInput, setNewAreaInput] = useState('');
+
+  const [showAddZone, setShowAddZone] = useState(false);
+  const [newZoneCodeInput, setNewZoneCodeInput] = useState('');
+  const [newZoneNameInput, setNewZoneNameInput] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
+
+  const handleAddCityInline = () => {
+    if (!newCityInput.trim()) return;
+    const cName = newCityInput.trim();
+    if (!citiesList.includes(cName)) {
+      setCitiesList(prev => [...prev, cName]);
+    }
+    setCity(cName);
+    setNewCityInput('');
+    setShowAddCity(false);
+  };
+
+  const handleAddAreaInline = async () => {
+    if (!newAreaInput.trim()) return;
+    const aName = newAreaInput.trim();
+    setAreasMap(prev => ({
+      ...prev,
+      [city]: Array.from(new Set([...(prev[city] || []), aName]))
+    }));
+    setAreaName(aName);
+    
+    // Save new Area master directly to Supabase!
+    await saveAreaToSupabase({
+      id: `ar_${Date.now()}`,
+      area_code: `AR-${(city || 'SUR').substring(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`,
+      area_name: aName,
+      city: city,
+      zone_code: 'ZN-SUR-A',
+      region: resolvedZone.region || 'Surat City Zone',
+      description: `New Area added via Agency Master Registration: ${aName}`
+    });
+
+    setNewAreaInput('');
+    setShowAddArea(false);
+  };
+
+  const handleAddZoneInline = async () => {
+    if (!newZoneNameInput.trim()) return;
+    const zCode = newZoneCodeInput.trim() || `ZN-${(city || 'SUR').substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
+    const zName = newZoneNameInput.trim();
+    const newZoneObj = { code: zCode, name: zName, region: 'Surat City Zone' };
+    
+    setZonesList(prev => [...prev, newZoneObj]);
+    setSelectedZone(zName);
+
+    // Save new Zone master directly to Supabase!
+    await saveZoneToSupabase({
+      id: `zn_${Date.now()}`,
+      zone_code: zCode,
+      zone_name: zName as any,
+      region: 'Surat City Zone',
+      major_areas: [areaName || city],
+      description: `New Zone Master created inline: ${zName}`
+    });
+
+    setNewZoneCodeInput('');
+    setNewZoneNameInput('');
+    setShowAddZone(false);
+  };
+
+  useEffect(() => {
+    if (isOpen && !agencyCode) {
+      setAgencyCode(generateNewAgencyCode(city));
+    }
+  }, [isOpen, city]);
+
+  // Fetch live Areas and Zones directly from Supabase `public.areas` & `public.zones` tables
+  useEffect(() => {
+    if (!isOpen) return;
+
+    fetchAreasFromSupabaseTable().then(sbAreas => {
+      if (sbAreas && sbAreas.length > 0) {
+        const dynamicCitiesSet = new Set<string>([
+          'Surat', 'Surat Rural', 'Navsari', 'Valsad', 'Vapi', 'Bharuch', 'Ankleshwar', 'Bardoli', 'Vyara'
+        ]);
+        const dynamicAreasMap: Record<string, string[]> = { ...areasMap };
+
+        sbAreas.forEach(item => {
+          const cName = (item.city || 'Surat').trim();
+          const aName = (item.area_name || '').trim();
+
+          dynamicCitiesSet.add(cName);
+
+          if (!dynamicAreasMap[cName]) {
+            dynamicAreasMap[cName] = [];
+          }
+          if (aName && !dynamicAreasMap[cName].includes(aName)) {
+            dynamicAreasMap[cName].push(aName);
+          }
+        });
+
+        setCitiesList(Array.from(dynamicCitiesSet));
+        setAreasMap(dynamicAreasMap);
+      }
+    });
+
+    fetchZonesFromSupabaseAreasTable().then(sbZones => {
+      if (sbZones && sbZones.length > 0) {
+        const formattedZones = sbZones.map(z => ({
+          code: z.zone_code,
+          name: z.zone_name.includes('(') ? z.zone_name : `${z.zone_name} (${z.region})`,
+          region: z.region
+        }));
+        setZonesList(prev => {
+          const names = new Set(prev.map(p => p.name));
+          const additions = formattedZones.filter(fz => !names.has(fz.name));
+          return [...prev, ...additions];
+        });
+      }
+    });
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   // Auto-resolve live zone for preview
   const resolvedZone = resolveZoneForAreaAndCity(areaName, city);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!agencyName.trim() || !city.trim()) {
-      setActiveStep(1);
+    if (!agencyName.trim()) {
+      setErrorNotice('Agency / Business Firm Name is required!');
+      return;
+    }
+    if (!city.trim()) {
+      setErrorNotice('City name is required for auto-zone mapping!');
       return;
     }
 
+    setErrorNotice(null);
     setIsSubmitting(true);
 
     const newAgency = registerNewAgency({
@@ -83,20 +236,27 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
       city: city.trim(),
       area_name: areaName.trim() || city.trim(),
       account_group: accountGroup,
-      gstin: gstin.trim(),
-      contact_person: contactPerson.trim() || 'Owner / Manager',
+      gstin: gstin.trim().toUpperCase(),
+      contact_person: contactPerson.trim() || '',
       mobile: mobile.trim(),
       email: email.trim(),
       credit_limit: Number(creditLimit),
-      bank_name: bankName.trim(),
-      account_number: accountNumber.trim(),
-      ifsc_code: ifscCode.trim(),
-      branch_name: branchName.trim(),
-      assigned_salesperson: assignedSalesperson.trim()
+      bank_name: '',
+      account_number: '',
+      ifsc_code: '',
+      branch_name: ''
     });
 
+    // Save directly to Supabase live database
+    const saveRes = await saveAgencyToSupabase(newAgency);
+    if (!saveRes.success && saveRes.error) {
+      setIsSubmitting(false);
+      setErrorNotice(`⚠️ Supabase Database Error: ${saveRes.error}`);
+      return;
+    }
+
     setIsSubmitting(false);
-    setSuccessNotice(`New Sales Agency "${agencyName}" registered & mapped to ${resolvedZone.zone_name} (${resolvedZone.region})!`);
+    setSuccessNotice(`New Agency "${agencyName}" onboarded & mapped to ${resolvedZone.zone_name} (${resolvedZone.region})!`);
 
     if (onSuccess) {
       onSuccess(newAgency);
@@ -111,443 +271,956 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
       setContactPerson('');
       setMobile('');
       setEmail('');
-      setAccountNumber('');
-      setIfscCode('');
-      setActiveStep(1);
+      setSuccessNotice(null);
+      setErrorNotice(null);
     }, 1200);
   };
 
+  const creditPresets = [100000, 250000, 500000, 1000000, 2500000];
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl overflow-hidden flex flex-col">
+    <div 
+      className="modal-overlay" 
+      style={{ 
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: 'rgba(7, 14, 32, 0.85)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem'
+      }}
+    >
+      <div 
+        className="modal-card" 
+        style={{ 
+          maxWidth: 820, 
+          width: '95vw', 
+          maxHeight: '90vh',
+          background: '#0f172a', 
+          border: '1px solid #38bdf8', 
+          borderRadius: 20, 
+          padding: 0, 
+          overflow: 'hidden',
+          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 30px rgba(56, 189, 248, 0.15)',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
         
-        {/* Header */}
-        <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-sky-950 to-indigo-950 text-white flex items-center justify-between border-b border-sky-900/50">
-          <div className="flex items-center space-x-3">
-            <div className="w-11 h-11 rounded-2xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-400 shadow-inner">
-              <Store className="w-6 h-6" />
+        {/* Modal Header */}
+        <div style={{
+          padding: '1.25rem 1.5rem',
+          background: 'linear-gradient(135deg, #070e20 0%, #0f172a 50%, #1e1b4b 100%)',
+          borderBottom: '1px solid rgba(56, 189, 248, 0.25)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div style={{
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              background: 'rgba(56, 189, 248, 0.15)',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#38bdf8',
+              boxShadow: 'inset 0 0 12px rgba(56, 189, 248, 0.2)'
+            }}>
+              <Store size={22} />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-white tracking-wide">Register New B2B Sales Agency</h2>
-              <p className="text-xs text-sky-300">
-                Onboard agency, contact person, bank details & auto-map territory zone
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>
+                  Register B2B Sales Agency
+                </h2>
+                <span style={{ 
+                  fontSize: '0.675rem', 
+                  fontWeight: 800, 
+                  color: '#38bdf8', 
+                  background: 'rgba(56, 189, 248, 0.15)', 
+                  padding: '0.2rem 0.6rem', 
+                  borderRadius: 6, 
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  New Partner Form
+                </span>
+              </div>
+              <p style={{ fontSize: '0.775rem', color: '#94a3b8', marginTop: 2 }}>
+                Onboard agency firm, dealer contact details, territory location & approved credit terms
               </p>
             </div>
           </div>
           
           <button
             onClick={onClose}
-            className="p-2.5 rounded-2xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            style={{
+              padding: '0.5rem',
+              borderRadius: 10,
+              background: '#1e293b',
+              border: '1px solid #334155',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#334155';
+              e.currentTarget.style.color = '#ffffff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#1e293b';
+              e.currentTarget.style.color = '#94a3b8';
+            }}
           >
-            <X className="w-5 h-5" />
+            <X size={18} />
           </button>
         </div>
 
-        {/* 4-Step Segmented Wizard Navigation Bar */}
-        <div className="grid grid-cols-4 bg-slate-100 dark:bg-slate-950 p-2 border-b border-slate-200 dark:border-slate-800 text-center gap-1">
-          <button
-            type="button"
-            onClick={() => setActiveStep(1)}
-            className={`py-2 px-1 rounded-xl text-[11px] font-extrabold flex items-center justify-center space-x-1 transition-all ${
-              activeStep === 1 
-                ? 'bg-sky-500 text-white shadow-md' 
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">1. Firm Info</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveStep(2)}
-            className={`py-2 px-1 rounded-xl text-[11px] font-extrabold flex items-center justify-center space-x-1 transition-all ${
-              activeStep === 2 
-                ? 'bg-sky-500 text-white shadow-md' 
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <User className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">2. Contact Person</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveStep(3)}
-            className={`py-2 px-1 rounded-xl text-[11px] font-extrabold flex items-center justify-center space-x-1 transition-all ${
-              activeStep === 3 
-                ? 'bg-sky-500 text-white shadow-md' 
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <MapPin className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">3. Territory Zone</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveStep(4)}
-            className={`py-2 px-1 rounded-xl text-[11px] font-extrabold flex items-center justify-center space-x-1 transition-all ${
-              activeStep === 4 
-                ? 'bg-sky-500 text-white shadow-md' 
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Landmark className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">4. Bank & Credit</span>
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+        {/* Single Form Body Content */}
+        <form onSubmit={handleSubmit} style={{ 
+          padding: '1.25rem 1.5rem', 
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1.25rem'
+        }}>
           
+          {errorNotice && (
+            <div style={{
+              padding: '0.75rem 1rem',
+              background: 'rgba(244, 63, 94, 0.12)',
+              border: '1px solid rgba(244, 63, 94, 0.35)',
+              color: '#fda4af',
+              borderRadius: 12,
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.6rem'
+            }}>
+              <X size={16} color="#f43f5e" />
+              <span>{errorNotice}</span>
+            </div>
+          )}
+
           {successNotice && (
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-200 rounded-2xl text-xs font-bold flex items-center space-x-3 animate-in zoom-in-95">
-              <CheckCircle2 className="w-6 h-6 text-emerald-500 flex-shrink-0" />
+            <div style={{
+              padding: '0.85rem 1.15rem',
+              background: 'rgba(16, 185, 129, 0.15)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              color: '#6ee7b7',
+              borderRadius: 12,
+              fontSize: '0.825rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem'
+            }}>
+              <CheckCircle2 size={20} color="#34d399" />
               <span>{successNotice}</span>
             </div>
           )}
 
-          {/* STEP 1: Firm & Account Details */}
-          {activeStep === 1 && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center space-x-2 text-xs font-bold text-sky-400">
-                <Building2 className="w-4 h-4 text-sky-400" />
-                <span>Step 1 of 4: Registered Business & Account Identification</span>
-              </div>
+          {/* SECTION 1: Firm & Account Details */}
+          <div style={{
+            background: '#070e20',
+            border: '1px solid #1e293b',
+            borderRadius: 14,
+            padding: '1.15rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem'
+          }}>
+            <div style={{
+              fontSize: '0.825rem',
+              fontWeight: 800,
+              color: '#38bdf8',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              paddingBottom: '0.5rem',
+              borderBottom: '1px solid #1e293b'
+            }}>
+              <Building2 size={16} />
+              <span>1. Business Firm & Account Classification</span>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Agency / Business Firm Name <span className="text-rose-500">*</span>
-                  </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Agency / Business Firm Name <span style={{ color: '#f43f5e' }}>*</span>
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <Store size={16} color="#64748b" />
                   <input
                     type="text"
-                    placeholder="e.g. Radhe Electronics & Agencies"
+                    placeholder="e.g. Krishna Trading Agency"
                     value={agencyName}
                     onChange={(e) => setAgencyName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-sky-500/40"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.825rem',
+                      fontWeight: 700,
+                      width: '100%'
+                    }}
                     required
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Agency Code (Optional)
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1' }}>
+                    Agency Code <span style={{ color: '#38bdf8', fontWeight: 700 }}>(Auto-Generated)</span>
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => setAgencyCode(generateNewAgencyCode(city))}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#38bdf8',
+                      fontSize: '0.7rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.2rem'
+                    }}
+                  >
+                    <RefreshCw size={11} /> Auto-Generate
+                  </button>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #38bdf8',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <ShieldCheck size={16} color="#38bdf8" />
                   <input
                     type="text"
-                    placeholder="Auto-generated if empty"
+                    placeholder="Auto-generated (e.g. AG-SUR-102)"
                     value={agencyCode}
-                    onChange={(e) => setAgencyCode(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
+                    onChange={(e) => setAgencyCode(e.target.value.toUpperCase())}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#38bdf8',
+                      fontSize: '0.825rem',
+                      fontFamily: 'monospace',
+                      fontWeight: 800,
+                      width: '100%'
+                    }}
                   />
                 </div>
               </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Account Classification Group
-                  </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Account Group
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <Layers size={16} color="#64748b" />
                   <select
                     value={accountGroup}
                     onChange={(e) => setAccountGroup(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      width: '100%'
+                    }}
                   >
-                    <option value="Sundry Debtors-Electronics">Sundry Debtors-Electronics</option>
-                    <option value="Sundry Debtors-FMCG">Sundry Debtors-FMCG</option>
-                    <option value="Sundry Debtors-Retail">Sundry Debtors-Retail</option>
-                    <option value="Sundry Debtors-General">Sundry Debtors-General</option>
+                    <option value="FMCG" style={{ background: '#0f172a', color: '#fff' }}>FMCG</option>
+                    <option value="FMCD" style={{ background: '#0f172a', color: '#fff' }}>FMCD</option>
                   </select>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    15-Digit GSTIN Number
-                  </label>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  15-Digit GSTIN Number
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <CreditCard size={16} color="#64748b" />
                   <input
                     type="text"
                     placeholder="e.g. 24BBXPP2871D1ZB"
                     value={gstin}
-                    onChange={(e) => setGstin(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
+                    onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.8rem',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      width: '100%'
+                    }}
                   />
                 </div>
+              </div>
+            </div>
+          </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Mapped Brand Scope
+          {/* SECTION 2: Primary Dealer Contact */}
+          <div style={{
+            background: '#070e20',
+            border: '1px solid #1e293b',
+            borderRadius: 14,
+            padding: '1.15rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem'
+          }}>
+            <div style={{
+              fontSize: '0.825rem',
+              fontWeight: 800,
+              color: '#38bdf8',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              paddingBottom: '0.5rem',
+              borderBottom: '1px solid #1e293b'
+            }}>
+              <User size={16} />
+              <span>2. Primary Contact & Dealer Details</span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Contact Person Name
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <User size={16} color="#64748b" />
+                  <input
+                    type="text"
+                    placeholder="e.g. Rajesh Sharma"
+                    value={contactPerson}
+                    onChange={(e) => setContactPerson(e.target.value)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.825rem',
+                      fontWeight: 700,
+                      width: '100%'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Mobile Phone Number
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <Phone size={16} color="#64748b" />
+                  <input
+                    type="text"
+                    placeholder="+91 98765 43210"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.825rem',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      width: '100%'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Email Address
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <Mail size={16} color="#64748b" />
+                  <input
+                    type="email"
+                    placeholder="rajesh@agency.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.8rem',
+                      width: '100%'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 3: Location, Territory & Credit Terms */}
+          <div style={{
+            background: '#070e20',
+            border: '1px solid #1e293b',
+            borderRadius: 14,
+            padding: '1.15rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem'
+          }}>
+            <div style={{
+              fontSize: '0.825rem',
+              fontWeight: 800,
+              color: '#38bdf8',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              paddingBottom: '0.5rem',
+              borderBottom: '1px solid #1e293b'
+            }}>
+              <MapPin size={16} />
+              <span>3. Location, Territory Auto-Zone & Credit Terms</span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+              {/* City Selection Dropdown & Inline Add Button */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1' }}>
+                    City Name <span style={{ color: '#f43f5e' }}>*</span>
                   </label>
-                  <select
-                    value={companyId}
-                    onChange={(e) => setCompanyId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCity(!showAddCity)}
+                    style={{
+                      background: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid rgba(56, 189, 248, 0.35)',
+                      color: '#38bdf8',
+                      borderRadius: 6,
+                      padding: '0.15rem 0.5rem',
+                      fontSize: '0.675rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.2rem'
+                    }}
                   >
-                    {MOCK_COMPANIES.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.company_name} ({c.company_code}) [{c.segment || 'FMCG'}]
+                    <Plus size={12} /> Add City
+                  </button>
+                </div>
+
+                {showAddCity ? (
+                  <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder="Enter new City name"
+                      value={newCityInput}
+                      onChange={(e) => setNewCityInput(e.target.value)}
+                      style={{
+                        flex: 1,
+                        background: '#0f172a',
+                        border: '1px solid #38bdf8',
+                        borderRadius: 8,
+                        padding: '0.45rem 0.65rem',
+                        color: '#ffffff',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        outline: 'none'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCityInline}
+                      style={{
+                        background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '0.45rem 0.75rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                ) : null}
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <Globe size={16} color="#64748b" />
+                  <select
+                    value={city}
+                    onChange={(e) => {
+                      setCity(e.target.value);
+                      const availableAreas = areasMap[e.target.value] || [];
+                      if (availableAreas.length > 0) {
+                        setAreaName(availableAreas[0]);
+                      }
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.825rem',
+                      fontWeight: 700,
+                      width: '100%',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {citiesList.map((c, idx) => (
+                      <option key={idx} value={c} style={{ background: '#0f172a', color: '#fff' }}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Locality / Area Dropdown & Inline Add Button */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1' }}>
+                    Locality / Area Name <span style={{ color: '#f43f5e' }}>*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddArea(!showAddArea)}
+                    style={{
+                      background: 'rgba(52, 211, 153, 0.15)',
+                      border: '1px solid rgba(52, 211, 153, 0.35)',
+                      color: '#34d399',
+                      borderRadius: 6,
+                      padding: '0.15rem 0.5rem',
+                      fontSize: '0.675rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.2rem'
+                    }}
+                  >
+                    <Plus size={12} /> Add Area
+                  </button>
+                </div>
+
+                {showAddArea ? (
+                  <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder={`New Area for ${city}`}
+                      value={newAreaInput}
+                      onChange={(e) => setNewAreaInput(e.target.value)}
+                      style={{
+                        flex: 1,
+                        background: '#0f172a',
+                        border: '1px solid #34d399',
+                        borderRadius: 8,
+                        padding: '0.45rem 0.65rem',
+                        color: '#ffffff',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        outline: 'none'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddAreaInline}
+                      style={{
+                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '0.45rem 0.75rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Save Area
+                    </button>
+                  </div>
+                ) : null}
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <MapPin size={16} color="#64748b" />
+                  <select
+                    value={areaName}
+                    onChange={(e) => setAreaName(e.target.value)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.825rem',
+                      fontWeight: 700,
+                      width: '100%',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {(areasMap[city] || [areaName || city]).map((a, idx) => (
+                      <option key={idx} value={a} style={{ background: '#0f172a', color: '#fff' }}>
+                        {a}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
             </div>
-          )}
 
-          {/* STEP 2: Contact Person Information */}
-          {activeStep === 2 && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center space-x-2 text-xs font-bold text-sky-400">
-                <User className="w-4 h-4 text-sky-400" />
-                <span>Step 2 of 4: Primary Contact Person & Dealer Details</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Contact Person Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Ramesh Patel"
-                    value={contactPerson}
-                    onChange={(e) => setContactPerson(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
+            {/* Mapped Zone Dropdown & Inline Add Zone Master Controls */}
+            <div style={{
+              padding: '0.85rem 1.15rem',
+              background: 'linear-gradient(135deg, rgba(7, 14, 32, 0.9), rgba(15, 23, 42, 0.9))',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              borderRadius: 12,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.65rem'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '0.775rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span>Mapped Territory Zone Resolution</span>
+                  <Zap size={13} color="#f59e0b" />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Mobile Phone Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="+91 98250 12345"
-                    value={mobile}
-                    onChange={(e) => setMobile(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="agency@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: Location, Territory & Auto-Zone Mapping */}
-          {activeStep === 3 && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center space-x-2 text-xs font-bold text-sky-400">
-                <MapPin className="w-4 h-4 text-sky-400" />
-                <span>Step 3 of 4: City, Locality & Auto-Resolved Territory Zone</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    City <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Surat, Navsari, Vapi"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Locality / Area Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Katargam, Varachha, Udhana"
-                    value={areaName}
-                    onChange={(e) => setAreaName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Assigned Field Salesperson
-                  </label>
-                  <input
-                    type="text"
-                    value={assignedSalesperson}
-                    onChange={(e) => setAssignedSalesperson(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Auto-Resolved Zone Live Indicator Card */}
-              <div className="p-4 bg-gradient-to-r from-sky-950/60 via-slate-900 to-indigo-950/60 border border-sky-500/40 rounded-2xl flex items-center justify-between shadow-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400">
-                    <Sparkles className="w-5 h-5 animate-pulse" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-extrabold text-sky-300 block">
-                      Auto-Mapped Territory Zone:
-                    </span>
-                    <span className="text-[11px] text-slate-300">
-                      Locality: <strong>"{areaName || city}"</strong> | City: <strong>"{city}"</strong>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span className={`px-3 py-1.5 rounded-xl text-xs font-extrabold shadow-md ${
-                    resolvedZone.region === 'Surat City Zone' 
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
-                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  }`}>
-                    {resolvedZone.zone_name} ({resolvedZone.region})
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: Bank Details & Approved Credit Limit */}
-          {activeStep === 4 && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center space-x-2 text-xs font-bold text-sky-400">
-                <Landmark className="w-4 h-4 text-sky-400" />
-                <span>Step 4 of 4: Bank Account & Approved Credit Limit Terms</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Bank Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. HDFC Bank, ICICI Bank, SBI"
-                    value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Bank Account Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="50100012345678"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    IFSC Code
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="HDFC0000123"
-                    value={ifscCode}
-                    onChange={(e) => setIfscCode(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Branch Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ring Road Branch, Surat"
-                    value={branchName}
-                    onChange={(e) => setBranchName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Approved Credit Limit (₹)
-                  </label>
-                  <input
-                    type="number"
-                    step="25000"
-                    min="0"
-                    value={creditLimit}
-                    onChange={(e) => setCreditLimit(Number(e.target.value))}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Action Buttons & Wizard Controls */}
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <div>
-              {activeStep > 1 && (
                 <button
                   type="button"
-                  onClick={() => setActiveStep((prev) => (prev - 1) as any)}
-                  className="px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center space-x-1.5"
+                  onClick={() => setShowAddZone(!showAddZone)}
+                  style={{
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    color: '#fbbf24',
+                    borderRadius: 6,
+                    padding: '0.15rem 0.5rem',
+                    fontSize: '0.675rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.2rem'
+                  }}
                 >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Previous Step</span>
+                  <Plus size={12} /> Add Zone Master
                 </button>
-              )}
+              </div>
+
+              {showAddZone ? (
+                <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.5rem', borderRadius: 8, border: '1px solid #fbbf24' }}>
+                  <input
+                    type="text"
+                    placeholder="Zone Code (e.g. ZN-SUR-C)"
+                    value={newZoneCodeInput}
+                    onChange={(e) => setNewZoneCodeInput(e.target.value)}
+                    style={{ flex: 1, background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.35rem 0.55rem', color: '#fff', fontSize: '0.75rem' }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Zone Name (e.g. City-C)"
+                    value={newZoneNameInput}
+                    onChange={(e) => setNewZoneNameInput(e.target.value)}
+                    style={{ flex: 1, background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.35rem 0.55rem', color: '#fff', fontSize: '0.75rem' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddZoneInline}
+                    style={{ background: '#f59e0b', color: '#0f172a', border: 'none', borderRadius: 6, padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    Save Zone
+                  </button>
+                </div>
+              ) : null}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                <select
+                  value={selectedZone}
+                  onChange={(e) => setSelectedZone(e.target.value)}
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: 8,
+                    padding: '0.45rem 0.75rem',
+                    color: '#fbbf24',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    outline: 'none',
+                    flex: 1
+                  }}
+                >
+                  {zonesList.map((z, idx) => (
+                    <option key={idx} value={z.name} style={{ background: '#0f172a', color: '#fff' }}>
+                      {z.name}
+                    </option>
+                  ))}
+                  <option value={resolvedZone.zone_name} style={{ background: '#0f172a', color: '#fff' }}>
+                    Auto-Resolved: {resolvedZone.zone_name} ({resolvedZone.region})
+                  </option>
+                </select>
+              </div>
             </div>
 
-            <div className="flex items-center space-x-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
+            {/* Auto-Resolved Zone Live Preview Card */}
+            <div style={{
+              padding: '0.85rem 1.15rem',
+              background: 'linear-gradient(135deg, rgba(7, 14, 32, 0.9), rgba(15, 23, 42, 0.9))',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              boxShadow: '0 8px 20px rgba(0, 0, 0, 0.4)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: 'rgba(56, 189, 248, 0.15)',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#38bdf8'
+                }}>
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.775rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span>Auto-Mapped Territory Zone Resolution</span>
+                    <Zap size={13} color="#f59e0b" />
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>
+                    Locality: <strong style={{ color: '#f8fafc' }}>"{areaName || city}"</strong> | City: <strong style={{ color: '#f8fafc' }}>"{city}"</strong>
+                  </div>
+                </div>
+              </div>
 
-              {activeStep < 4 ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveStep((prev) => (prev + 1) as any)}
-                  className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center space-x-1.5"
-                >
-                  <span>Next Step</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center space-x-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Registering Agency...' : 'Register & Map B2B Agency'}</span>
-                </button>
-              )}
+              <div>
+                <span style={{
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: 8,
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  background: resolvedZone.region === 'Surat City Zone' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                  color: resolvedZone.region === 'Surat City Zone' ? '#fbbf24' : '#34d399',
+                  border: resolvedZone.region === 'Surat City Zone' ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(16, 185, 129, 0.35)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+                }}>
+                  {resolvedZone.zone_name} ({resolvedZone.region})
+                </span>
+              </div>
             </div>
+
+            {/* Credit Limit Input & Presets */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 2fr',
+              gap: '1rem',
+              alignItems: 'center',
+              background: '#0f172a',
+              border: '1px solid #334155',
+              borderRadius: 12,
+              padding: '0.85rem 1rem'
+            }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Approved Credit Limit (₹)
+                </label>
+                <input
+                  type="number"
+                  step="25000"
+                  min="0"
+                  value={creditLimit}
+                  onChange={(e) => setCreditLimit(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 0.75rem',
+                    background: '#070e20',
+                    border: '1px solid #334155',
+                    borderRadius: 8,
+                    color: '#fbbf24',
+                    fontSize: '0.875rem',
+                    fontWeight: 800,
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '0.35rem' }}>
+                  Quick Presets:
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {creditPresets.map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setCreditLimit(val)}
+                      style={{
+                        padding: '0.3rem 0.65rem',
+                        borderRadius: 8,
+                        fontSize: '0.725rem',
+                        fontWeight: 800,
+                        background: creditLimit === val ? 'rgba(245, 158, 11, 0.2)' : '#1e293b',
+                        color: creditLimit === val ? '#fbbf24' : '#cbd5e1',
+                        border: creditLimit === val ? '1px solid #f59e0b' : '1px solid #334155',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      ₹{(val / 100000).toLocaleString()} Lakh
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Footer Buttons */}
+          <div style={{
+            paddingTop: '1rem',
+            borderTop: '1px solid #1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: '0.75rem',
+            marginTop: '0.25rem'
+          }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '0.6rem 1.2rem',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                color: '#94a3b8',
+                background: '#1e293b',
+                border: '1px solid #334155',
+                borderRadius: 10,
+                cursor: 'pointer'
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              style={{
+                padding: '0.65rem 1.6rem',
+                fontSize: '0.825rem',
+                fontWeight: 800,
+                color: '#ffffff',
+                background: 'linear-gradient(135deg, #059669, #0d9488)',
+                border: 'none',
+                borderRadius: 10,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                opacity: isSubmitting ? 0.6 : 1,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Plus size={16} />
+              <span>{isSubmitting ? 'Registering Agency...' : 'Register & Map B2B Agency'}</span>
+            </button>
           </div>
 
         </form>

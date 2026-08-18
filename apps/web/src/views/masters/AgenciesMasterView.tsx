@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Store, Plus, Landmark, UserCheck, Edit3, Trash2, FileSpreadsheet, DollarSign } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Store, Plus, Landmark, UserCheck, Edit3, Trash2, FileSpreadsheet, DollarSign, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { Agency } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { RegisterAgencyModal } from '../../components/RegisterAgencyModal';
@@ -7,6 +7,13 @@ import { UpdateAgencyModal } from '../../components/UpdateAgencyModal';
 import { UpdatePartyBalanceModal } from '../../components/UpdatePartyBalanceModal';
 import { BulkImportModal } from '../../components/BulkImportModal';
 import { downloadSampleCSV } from '../../lib/masterImportExport';
+import { 
+  checkIsSuperAdmin, 
+  fetchAgenciesFromSupabaseTable, 
+  deleteAgencyFromSupabase, 
+  deduplicateAgencies, 
+  supabase 
+} from '../../lib/supabase';
 
 interface AgenciesMasterViewProps {
   agencies: Agency[];
@@ -16,20 +23,83 @@ interface AgenciesMasterViewProps {
 
 export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies, searchQuery, onAgencyRegistered }) => {
   const { currentUser } = useAuth();
-  const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
+  const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedAgencyToEdit, setSelectedAgencyToEdit] = useState<Agency | null>(null);
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const handleDeleteAgency = (agencyId: string, agencyName: string) => {
+  useEffect(() => {
+    if (agencies) {
+      setLocalAgencies(agencies);
+    }
+  }, [agencies]);
+
+  const handleSyncLiveAgencies = async () => {
+    setIsSyncing(true);
+    const { agencies: liveList, error } = await fetchAgenciesFromSupabaseTable();
+    if (error) {
+      setFetchError(error);
+    } else {
+      setFetchError(null);
+      setLocalAgencies(liveList);
+      setSuccessNotice("🔄 Synced latest sales agencies & B2B party data directly from live Supabase `agencies` table!");
+      setTimeout(() => setSuccessNotice(null), 3500);
+    }
+    setIsSyncing(false);
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadLiveAgencies = async () => {
+      const { agencies: liveList, error } = await fetchAgenciesFromSupabaseTable();
+      if (isMounted) {
+        if (error) {
+          setFetchError(error);
+        } else {
+          setFetchError(null);
+          setLocalAgencies(liveList);
+        }
+      }
+    };
+    loadLiveAgencies();
+
+    // Supabase Realtime Listener for Instant Live Database Updates
+    const channel = supabase
+      .channel('public:agencies_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agencies' }, async () => {
+        const { agencies: refreshed, error } = await fetchAgenciesFromSupabaseTable();
+        if (isMounted) {
+          if (error) {
+            setFetchError(error);
+          } else {
+            setFetchError(null);
+            setLocalAgencies(refreshed);
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleDeleteAgency = async (agencyId: string, agencyName: string) => {
     if (window.confirm(`Are you sure you want to delete sales agency "${agencyName}"? This action is restricted to Super Admin authority.`)) {
+      await deleteAgencyFromSupabase(agencyId);
       setLocalAgencies(prev => prev.filter(a => a.id !== agencyId));
+      setSuccessNotice(`Agency "${agencyName}" removed from live database.`);
+      setTimeout(() => setSuccessNotice(null), 3000);
     }
   };
 
-  const activeAgencyList = localAgencies.length > 0 ? localAgencies : agencies;
+  const activeAgencyList = localAgencies;
 
   const filteredAgencies = activeAgencyList.filter(a => 
     a.agency_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -69,48 +139,68 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         masterType="agencies"
+        onImportSuccess={() => {
+          handleSyncLiveAgencies();
+        }}
       />
+
+      {fetchError && (
+        <div style={{
+          background: 'rgba(244, 63, 94, 0.15)',
+          border: '1px solid rgba(244, 63, 94, 0.4)',
+          color: '#fb7185',
+          padding: '0.85rem 1.15rem',
+          borderRadius: '12px',
+          fontSize: '0.85rem',
+          fontWeight: 800,
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.65rem'
+        }}>
+          <AlertCircle size={18} /> ⚠️ Supabase Database Fetch Error: {fetchError}
+        </div>
+      )}
+
+      {successNotice && (
+        <div style={{
+          background: 'rgba(52, 211, 153, 0.15)',
+          border: '1px solid rgba(52, 211, 153, 0.4)',
+          color: '#34d399',
+          padding: '0.85rem 1.15rem',
+          borderRadius: '12px',
+          fontSize: '0.85rem',
+          fontWeight: 800,
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.65rem'
+        }}>
+          <Check size={18} /> {successNotice}
+        </div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <button
-          onClick={() => setIsImportModalOpen(true)}
-          title="Upload CSV sheet for bulk importing agencies & B2B party records"
+          onClick={handleSyncLiveAgencies}
+          disabled={isSyncing}
+          title="Fetch latest agency records directly from live Supabase agencies table"
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '0.4rem',
             padding: '0.55rem 1rem',
-            background: 'rgba(2, 132, 199, 0.15)',
+            background: 'rgba(56, 189, 248, 0.15)',
             color: '#38bdf8',
-            border: '1px solid rgba(2, 132, 199, 0.4)',
+            border: '1px solid rgba(56, 189, 248, 0.4)',
             fontWeight: 800,
             fontSize: '0.8rem',
             borderRadius: '10px',
-            cursor: 'pointer'
+            cursor: isSyncing ? 'not-allowed' : 'pointer'
           }}
         >
-          <FileSpreadsheet size={15} /> 📥 Import Sheet (.CSV)
+          <RefreshCw size={15} className={isSyncing ? 'spin-anim' : ''} /> {isSyncing ? 'Syncing...' : '🔄 Sync Live DB'}
         </button>
-        <button
-          onClick={() => downloadSampleCSV('party_balances')}
-          title="Download sample sheet template used for daily bulk party balance updates"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.55rem 1rem',
-            background: 'rgba(52, 211, 153, 0.1)',
-            color: '#34d399',
-            border: '1px solid rgba(52, 211, 153, 0.3)',
-            fontWeight: 800,
-            fontSize: '0.8rem',
-            borderRadius: '10px',
-            cursor: 'pointer'
-          }}
-        >
-          <FileSpreadsheet size={15} /> Daily Balances Sample (.CSV)
-        </button>
-
         <button
           onClick={() => setIsBalanceModalOpen(true)}
           title="Bulk update party balances & credit limits for today's billing cycle"
@@ -129,26 +219,6 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
           }}
         >
           <DollarSign size={15} /> Bulk Update Balances
-        </button>
-
-        <button
-          onClick={() => downloadSampleCSV('agencies')}
-          title="Download sample sheet template used for bulk uploading agencies"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.55rem 1rem',
-            background: 'rgba(56, 189, 248, 0.1)',
-            color: '#38bdf8',
-            border: '1px solid rgba(56, 189, 248, 0.3)',
-            fontWeight: 800,
-            fontSize: '0.8rem',
-            borderRadius: '10px',
-            cursor: 'pointer'
-          }}
-        >
-          <FileSpreadsheet size={15} /> Download Agency Sheet (.CSV)
         </button>
 
         <button
@@ -181,7 +251,6 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
               <th>Zone & Territory</th>
               <th>GSTIN & Account Group</th>
               <th>Contact Person & Mobile</th>
-              <th>Bank Account Details</th>
               <th>Assigned Salesperson</th>
               <th>Credit Limit</th>
               <th>Status</th>
@@ -193,10 +262,10 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
               const isSurat = a.zone_region === 'Surat City Zone';
               return (
                 <tr key={a.id}>
-                  <td><code style={{ color: '#38bdf8', fontWeight: 800 }}>{a.agency_code}</code></td>
+                  <td><code style={{ color: '#38bdf8', fontWeight: 800 }}>{a.agency_code || 'N/A'}</code></td>
                   <td>
-                    <strong style={{ color: '#f8fafc' }}>{a.agency_name}</strong>
-                    <div style={{ fontSize: '0.725rem', color: '#64748b' }}>{a.address || `${a.area_name}, ${a.city}`}</div>
+                    <strong style={{ color: '#f8fafc' }}>{a.agency_name || 'N/A'}</strong>
+                    <div style={{ fontSize: '0.725rem', color: '#64748b' }}>{a.address || `${a.area_name || 'N/A'}, ${a.city || 'N/A'}`}</div>
                   </td>
                   <td>
                     <span style={{ 
@@ -208,29 +277,21 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
                       color: isSurat ? '#fbbf24' : '#34d399',
                       border: isSurat ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)'
                     }}>
-                      {a.zone_name || 'City-D'}
+                      {a.zone_name || 'N/A'}
                     </span>
-                    <div style={{ fontSize: '0.725rem', color: '#38bdf8', marginTop: 3 }}>{a.area_name}, {a.city}</div>
+                    <div style={{ fontSize: '0.725rem', color: '#38bdf8', marginTop: 3 }}>{a.area_name || 'N/A'}, {a.city || 'N/A'}</div>
                   </td>
                   <td>
                     <code style={{ background: '#0f172a', padding: '0.2rem 0.5rem', borderRadius: 4, color: '#34d399', fontSize: '0.75rem' }}>{a.gstin || a.gst_number || 'N/A'}</code>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>{a.account_group || 'Sundry Debtors'}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>{a.account_group || 'N/A'}</div>
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600, color: '#f8fafc' }}>{a.contact_person || 'Field Dealer'}</div>
-                    <div style={{ fontSize: '0.725rem', color: '#94a3b8' }}>{a.mobile || '+91 98250 00000'}</div>
-                  </td>
-                  <td>
-                    <div style={{ fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <Landmark size={12} color="#38bdf8" /> {a.bank_name || 'HDFC Bank'}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>
-                      {a.account_number ? `A/C: ${a.account_number}` : 'A/C: Pending'} {a.ifsc_code ? `(${a.ifsc_code})` : ''}
-                    </div>
+                    <div style={{ fontWeight: 600, color: '#f8fafc' }}>{a.contact_person || 'N/A'}</div>
+                    <div style={{ fontSize: '0.725rem', color: '#94a3b8' }}>{a.mobile || 'N/A'}</div>
                   </td>
                   <td>
                     <span style={{ fontSize: '0.725rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.12)', border: '1px solid rgba(52, 211, 153, 0.25)', padding: '0.15rem 0.5rem', borderRadius: 6, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <UserCheck size={12} /> {a.assigned_salesperson || 'Chirag Patel'}
+                      <UserCheck size={12} /> {a.assigned_salesperson || 'N/A'}
                     </span>
                   </td>
                   <td><span style={{ fontWeight: 800, color: '#38bdf8' }}>₹{(a.credit_limit || 250000).toLocaleString()}</span></td>

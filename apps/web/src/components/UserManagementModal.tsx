@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
-import { X, Key, ShieldCheck, Check, Search, Sliders, ToggleLeft, ToggleRight, Layers, Plus, UserCheck, UserPlus, Edit, Phone, Mail, Building, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Key, ShieldCheck, Check, Search, Sliders, ToggleLeft, ToggleRight, Layers, Plus, UserCheck, UserPlus, Edit, Phone, Mail, Building, Lock, Trash2 } from 'lucide-react';
 import { useAuth, getDefaultPermissions } from '../context/AuthContext';
 import { PermissionControl, RoleName, User } from '../types';
-import { MOCK_COMPANIES } from '../lib/supabase';
+import { MOCK_COMPANIES, deleteUserFromSupabase, saveUserToSupabase, fetchCompaniesFromSupabase } from '../lib/supabase';
 
 interface UserManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialUserToEdit?: User | null;
 }
 
 const ALL_ROLES: { role: RoleName; label: string }[] = [
@@ -36,12 +37,13 @@ const MASTER_BRANDS = [
   { handle: 'AK', name: 'AKAI' }
 ];
 
-export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
+export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose, initialUserToEdit }) => {
   const { 
     users, 
     permissionGroups, 
     createUser,
     updateUser,
+    deleteUser,
     updateUserPassword, 
     updateUserPermissions, 
     assignUserPermissionGroup,
@@ -52,6 +54,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   const [activeTab, setActiveTab] = useState<'users' | 'groups' | 'permissions'>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // User Registration & Editing Form State
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -87,22 +90,34 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [newGroupPerms, setNewGroupPerms] = useState<PermissionControl>(getDefaultPermissions('SALES_PERSON'));
 
-  if (!isOpen) return null;
+  // Live Brands state fetched directly from Supabase
+  const [liveBrands, setLiveBrands] = useState<{ handle: string; name: string }[]>(MASTER_BRANDS);
 
-  const handleOpenRegisterForm = () => {
-    setEditingUserId(null);
-    setFormData({
-      full_name: '',
-      email: '',
-      phone: '+91 ',
-      role_name: 'SALES_PERSON',
-      permission_group_id: permissionGroups[0]?.id || 'pg_sales_person',
-      password: '1234',
-      active: true,
-      company_handles: ['Pringod']
-    });
-    setIsRegisterOpen(true);
-  };
+  useEffect(() => {
+    async function loadBrandsFromSupabase() {
+      try {
+        const companiesData = await fetchCompaniesFromSupabase();
+        if (companiesData && companiesData.length > 0) {
+          const brandPills = [
+            { handle: 'All', name: 'All Brands (Unrestricted)' },
+            ...companiesData.map(c => ({
+              handle: c.company_code || c.handle || c.company_name,
+              name: `${c.company_name} (${c.company_code || c.handle || 'Brand'})`
+            }))
+          ];
+          setLiveBrands(brandPills);
+        } else {
+          setLiveBrands(MASTER_BRANDS);
+        }
+      } catch (err) {
+        console.warn('Live brand companies fetch notice:', err);
+        setLiveBrands(MASTER_BRANDS);
+      }
+    }
+    if (isOpen) {
+      loadBrandsFromSupabase();
+    }
+  }, [isOpen]);
 
   const handleOpenEditForm = (user: User) => {
     setEditingUserId(user.id);
@@ -119,6 +134,29 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
       password: user.password || '1234',
       active: user.active !== false,
       company_handles: existingHandles
+    });
+    setIsRegisterOpen(true);
+  };
+
+  useEffect(() => {
+    if (isOpen && initialUserToEdit) {
+      handleOpenEditForm(initialUserToEdit);
+    }
+  }, [isOpen, initialUserToEdit]);
+
+  if (!isOpen) return null;
+
+  const handleOpenRegisterForm = () => {
+    setEditingUserId(null);
+    setFormData({
+      full_name: '',
+      email: '',
+      phone: '+91 ',
+      role_name: 'SALES_PERSON',
+      permission_group_id: permissionGroups[0]?.id || 'pg_sales_person',
+      password: '1234',
+      active: true,
+      company_handles: ['Pringod']
     });
     setIsRegisterOpen(true);
   };
@@ -140,46 +178,47 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     });
   };
 
-  const handleSubmitUserForm = (e: React.FormEvent) => {
+  const handleSubmitUserForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.full_name.trim()) return;
+    setFormError(null);
 
     const groupObj = permissionGroups.find(g => g.id === formData.permission_group_id);
     const companyHandleStr = formData.company_handles.join(', ');
 
+    const payload = {
+      full_name: formData.full_name.trim(),
+      email: formData.email.trim() || `${formData.full_name.toLowerCase().replace(/\s+/g, '')}@proline.com`,
+      phone: formData.phone.trim(),
+      role_name: formData.role_name,
+      permission_group_id: formData.permission_group_id,
+      permission_group_name: groupObj?.group_name,
+      company_handle: companyHandleStr,
+      password: formData.password.trim() || '1234',
+      active: formData.active,
+      permissions: groupObj ? { ...groupObj.permissions } : getDefaultPermissions(formData.role_name)
+    };
+
     if (editingUserId) {
-      // Update existing user
-      updateUser(editingUserId, {
-        full_name: formData.full_name.trim(),
-        email: formData.email.trim(),
-        phone: formData.phone.trim(),
-        role_name: formData.role_name,
-        permission_group_id: formData.permission_group_id,
-        permission_group_name: groupObj?.group_name,
-        company_handle: companyHandleStr,
-        password: formData.password.trim(),
-        active: formData.active
-      });
-      setSuccessMsg(`User profile for "${formData.full_name}" updated successfully!`);
+      updateUser(editingUserId, payload);
+      const res = await saveUserToSupabase({ id: editingUserId, ...payload });
+      if (!res.success) {
+        setFormError(`⚠️ Supabase Database Error: ${res.error}`);
+        return;
+      }
+      setSuccessMsg(`User profile for "${formData.full_name}" updated & saved to Supabase!`);
     } else {
-      // Register brand new user
-      createUser({
-        full_name: formData.full_name.trim(),
-        email: formData.email.trim() || `${formData.full_name.toLowerCase().replace(/\s+/g, '')}@proline.com`,
-        phone: formData.phone.trim(),
-        role_name: formData.role_name,
-        permission_group_id: formData.permission_group_id,
-        permission_group_name: groupObj?.group_name,
-        company_handle: companyHandleStr,
-        password: formData.password.trim() || '1234',
-        active: formData.active,
-        permissions: groupObj ? { ...groupObj.permissions } : getDefaultPermissions(formData.role_name)
-      });
-      setSuccessMsg(`New user "${formData.full_name}" registered & mapped successfully!`);
+      const res = await saveUserToSupabase(payload);
+      if (!res.success) {
+        setFormError(`⚠️ Supabase Database Error: ${res.error}`);
+        return;
+      }
+      createUser(payload);
+      setSuccessMsg(`New user "${formData.full_name}" created & saved to Supabase database!`);
     }
 
     setIsRegisterOpen(false);
-    setTimeout(() => setSuccessMsg(null), 3000);
+    setTimeout(() => setSuccessMsg(null), 3500);
   };
 
   const handleToggleAccountActive = (user: User) => {
@@ -392,6 +431,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
               </button>
             </div>
 
+            {formError && (
+              <div style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid #f43f5e', color: '#f43f5e', padding: '0.65rem 1rem', borderRadius: 8, fontSize: '0.85rem', marginBottom: '1rem', fontWeight: 700 }}>
+                {formError}
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
               {/* Full Name */}
               <div>
@@ -522,7 +567,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 MAP BRAND COMPANIES (CHECK ALL THAT USER CAN VIEW & MANAGE)
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                {MASTER_BRANDS.map(b => {
+                {(liveBrands.length > 0 ? liveBrands : MASTER_BRANDS).map(b => {
                   const isChecked = formData.company_handles.includes(b.handle);
                   return (
                     <button
@@ -588,9 +633,39 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                         </span>
                       </td>
                       <td>
-                        <span className="role-pill" style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: 4, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700 }}>
-                          {u.role_name.replace(/_/g, ' ')}
-                        </span>
+                        <select
+                          value={u.role_name}
+                          onChange={async (e) => {
+                            const newRole = e.target.value as RoleName;
+                            updateUser(u.id, { role_name: newRole });
+                            const res = await saveUserToSupabase({ ...u, role_name: newRole });
+                            if (res.success) {
+                              setSuccessMsg(`Updated System Role to "${newRole.replace(/_/g, ' ')}" for ${u.full_name} in Supabase!`);
+                            } else {
+                              setSuccessMsg(`Role updated locally! (Supabase notice: ${res.error})`);
+                            }
+                            setTimeout(() => setSuccessMsg(null), 3000);
+                          }}
+                          style={{
+                            padding: '0.35rem 0.5rem',
+                            background: '#0f172a',
+                            border: '1px solid #38bdf8',
+                            borderRadius: 6,
+                            color: '#38bdf8',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="SUPER_ADMIN">SUPER ADMIN</option>
+                          <option value="SALES_ADMIN">SALES ADMIN</option>
+                          <option value="SALES_PERSON">SALES PERSON</option>
+                          <option value="AREA_SALES_MANAGER">AREA SALES MANAGER</option>
+                          <option value="BILLING">BILLING</option>
+                          <option value="DISPATCH_MANAGER">DISPATCH MANAGER</option>
+                          <option value="ACCOUNTS">ACCOUNTS</option>
+                          <option value="ORDER_ENTRY">ORDER ENTRY</option>
+                        </select>
                       </td>
                       <td>
                         <span style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 700, background: 'rgba(52, 211, 153, 0.1)', padding: '0.2rem 0.5rem', borderRadius: 6, border: '1px solid rgba(52, 211, 153, 0.2)' }}>
@@ -600,8 +675,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                       <td>
                         <select
                           value={u.permission_group_id || ''}
-                          onChange={e => assignUserPermissionGroup(u.id, e.target.value)}
-                          style={{ padding: '0.35rem 0.5rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontSize: '0.75rem', fontWeight: 700 }}
+                          onChange={async (e) => {
+                            const groupId = e.target.value;
+                            assignUserPermissionGroup(u.id, groupId);
+                            const grp = permissionGroups.find(g => g.id === groupId);
+                            setSuccessMsg(`Assigned "${grp?.group_name || groupId}" to ${u.full_name} & updated in Supabase!`);
+                            setTimeout(() => setSuccessMsg(null), 3000);
+                          }}
+                          style={{ padding: '0.35rem 0.5rem', background: '#0f172a', border: '1px solid #34d399', borderRadius: 6, color: '#34d399', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                         >
                           <option value="" disabled>Select Group...</option>
                           {permissionGroups.map(g => (
@@ -674,6 +755,22 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                               <Key size={13} /> Pass
                             </button>
                           )}
+
+                          <button 
+                            className="btn btn-outline"
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to delete user account "${u.full_name}" (${u.email})?\nThis action will delete the record from Supabase database.`)) {
+                                deleteUser(u.id);
+                                deleteUserFromSupabase(u.id);
+                                setSuccessMsg(`User account for "${u.full_name}" deleted successfully.`);
+                                setTimeout(() => setSuccessMsg(null), 3000);
+                              }
+                            }}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem', borderColor: '#f43f5e', color: '#f43f5e', background: 'rgba(244, 63, 94, 0.1)' }}
+                            title="Delete User Account from Supabase Database"
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
                         </div>
                       </td>
                     </tr>

@@ -41,7 +41,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
   const accessPerm = order ? getOrderAccessPermission(order, currentUser) : { canExecuteActions: false, accessReason: '', isItemBrandOwner: false };
   const canApproveOrHold = isSuperAdmin || (accessPerm.canExecuteActions && (role === 'SALES_ADMIN' || role === 'ACCOUNTS' || hasPermission('order_transfer_to_billing')));
 
-  const [selectedHoldReason, setSelectedHoldReason] = useState<string>(MOCK_HOLD_REASONS[0].id);
+  const [selectedHoldReason, setSelectedHoldReason] = useState<string>(MOCK_HOLD_REASONS[0]?.id || '');
   const [remarks, setRemarks] = useState('');
   const [showHoldPanel, setShowHoldPanel] = useState(false);
   
@@ -179,7 +179,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           </div>
           <div>
             <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>TOTAL VOLUME</div>
-            <div style={{ fontWeight: 700, color: '#f8fafc', marginTop: 2 }}>{order.total_box_qty} Boxes / {order.total_loose_pcs} Loose ({order.total_qty_pcs} PCS)</div>
+            <div style={{ fontWeight: 700, color: '#f8fafc', marginTop: 2 }}>{order.total_box_qty} Boxes ({order.total_qty_pcs} PCS)</div>
           </div>
           <div>
             <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>COSTING STAGE</div>
@@ -273,7 +273,6 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                   <th style={{ textAlign: 'center' }}>Admin Authority</th>
                   <th style={{ textAlign: 'center' }}>Pack Size</th>
                   <th style={{ textAlign: 'center' }}>Boxes</th>
-                  <th style={{ textAlign: 'center' }}>Loose PCS</th>
                   <th style={{ textAlign: 'center' }}>Total Qty</th>
                   <th style={{ textAlign: 'right' }}>MRP Unit Price</th>
                   <th style={{ textAlign: 'right' }}>Total Cost (₹)</th>
@@ -286,7 +285,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                   return (
                     <tr key={idx}>
                       <td><code style={{ color: '#38bdf8', fontSize: '0.75rem' }}>{item.id}</code></td>
-                      <td><strong style={{ color: '#f8fafc' }}>{item.product_name}</strong></td>
+                      <td><strong style={{ color: '#f8fafc' }}>{item?.product_name || 'Product SKU'}</strong></td>
                       <td><span style={{ color: '#fbbf24', fontSize: '0.75rem', fontWeight: 700 }}>{itemBrand}</span></td>
                       <td style={{ textAlign: 'center' }}>
                         {belongsToAdmin ? (
@@ -301,7 +300,6 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                       </td>
                       <td style={{ textAlign: 'center' }}>{item.pcs_per_box} pcs/box</td>
                       <td style={{ textAlign: 'center' }}>{item.box_qty}</td>
-                      <td style={{ textAlign: 'center' }}>{item.loose_pcs}</td>
                       <td style={{ textAlign: 'center', fontWeight: 800, color: '#34d399' }}>{item.total_qty_pcs}</td>
                       <td style={{ textAlign: 'right' }}>₹{item.unit_price}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>₹{item.total_price.toLocaleString()}</td>

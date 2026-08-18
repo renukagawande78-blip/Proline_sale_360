@@ -24,7 +24,7 @@ import { LoginPage } from './components/LoginPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { INITIAL_ORDERS, MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, MOCK_HOLD_REASONS } from './lib/supabase';
-import { Order, GlobalFilterState, Agency, Product } from './types';
+import { Order, GlobalFilterState, Agency, Product, User } from './types';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -100,6 +100,7 @@ const MainLayout: React.FC = () => {
   const [selectedOrderForProcessReturn, setSelectedOrderForProcessReturn] = useState<Order | null>(null);
   const [selectedOrderForPOD, setSelectedOrderForPOD] = useState<Order | null>(null);
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
+  const [userToEditInMgmt, setUserToEditInMgmt] = useState<User | null>(null);
   const [isZoneMasterOpen, setIsZoneMasterOpen] = useState(false);
   const [isRegisterAgencyOpen, setIsRegisterAgencyOpen] = useState(false);
 
@@ -563,11 +564,11 @@ const MainLayout: React.FC = () => {
         )}
 
         {currentTab === 'masters' && (
-          <MastersPage initialTab="agencies" />
+          <MastersPage initialTab="agencies" onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} />
         )}
 
         {currentTab === 'zones' && (
-          <MastersPage initialTab="zones" />
+          <MastersPage initialTab="areas" onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} />
         )}
 
         {currentTab === 'dispatch' && (
@@ -652,7 +653,8 @@ const MainLayout: React.FC = () => {
 
       <UserManagementModal 
         isOpen={isUserMgmtOpen}
-        onClose={() => setIsUserMgmtOpen(false)}
+        onClose={() => { setIsUserMgmtOpen(false); setUserToEditInMgmt(null); }}
+        initialUserToEdit={userToEditInMgmt}
       />
 
       <ZoneMasterModal 

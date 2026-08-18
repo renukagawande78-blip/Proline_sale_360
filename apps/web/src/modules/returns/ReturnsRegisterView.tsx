@@ -487,7 +487,7 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                                     const settledQty = isDamaged ? (item.damaged_returned_qty_pcs ?? null) : (item.replaced_qty_pcs ?? null);
                                     return (
                                       <tr key={idx} style={{ borderBottom: '1px solid #0d1527' }}>
-                                        <td style={{ padding: '0.5rem 0.75rem', color: '#f8fafc', fontWeight: 600 }}>{item.product_name}</td>
+                                        <td style={{ padding: '0.5rem 0.75rem', color: '#f8fafc', fontWeight: 600 }}>{item?.product_name || 'Product SKU'}</td>
                                         <td style={{ padding: '0.5rem 0.75rem', color: '#fbbf24', fontWeight: 800, textAlign: 'center' }}>{item.requested_qty_pcs}</td>
                                         <td style={{ padding: '0.5rem 0.75rem', fontWeight: 800, textAlign: 'center', color: isDamaged ? '#f97316' : '#a78bfa' }}>
                                           {settledQty !== null ? settledQty : <span style={{ color: '#475569' }}>Pending</span>}

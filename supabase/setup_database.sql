@@ -779,19 +779,9 @@ INSERT INTO public.areas (id, area_code, area_name, region) VALUES
 ('a3333333-3333-3333-3333-333333333333', 'SOUTH-BLR', 'Bangalore Urban Area', 'South')
 ON CONFLICT (area_code) DO NOTHING;
 
--- 7. Agencies Seed
-INSERT INTO public.agencies (id, agency_code, agency_name, company_id, area_id, address, contact_person, mobile, email, gst_number, credit_limit) VALUES
-('a0111111-1111-1111-1111-111111111111', 'AG-KRS-01', 'Krishna Trading Agency', 'c1111111-1111-1111-1111-111111111111', 'a1111111-1111-1111-1111-111111111111', '102 Commercial Complex, Connaught Place, New Delhi', 'Rajesh Sharma', '+91 98765 43210', 'rajesh@krishnatrading.com', '07AAAAA0000A1Z5', 250000.00),
-('a0222222-2222-2222-2222-222222222222', 'AG-APX-02', 'Apex Distributors Pvt Ltd', 'c5555555-5555-5555-5555-555555555555', 'a2222222-2222-2222-2222-222222222222', 'G-45 MIDC Industrial Area, Andheri East, Mumbai', 'Vikram Mehta', '+91 98111 22334', 'orders@apexdistributors.com', '27BBBBB1111B1Z2', 500000.00),
-('a0333333-3333-3333-3333-333333333333', 'AG-STR-03', 'Star Retail Logistics', 'c4444444-4444-4444-4444-444444444444', 'a3333333-3333-3333-3333-333333333333', '88 Ring Road, Indiranagar, Bangalore', 'Suresh Reddy', '+91 99000 55443', 'suresh@starlogistics.com', '29CCCCC2222C1Z9', 150000.00)
-ON CONFLICT (agency_code) DO NOTHING;
+-- 7. Agencies Seed (Cleared as requested)
 
--- 8. Agency Financials Seed
-INSERT INTO public.agency_financials (agency_id, outstanding_amount, overdue_amount, advance_amount, oldest_overdue_days) VALUES
-('a0111111-1111-1111-1111-111111111111', 125000.00, 35000.00, 20000.00, 18),
-('a0222222-2222-2222-2222-222222222222', 480000.00, 120000.00, 0.00, 45),
-('a0333333-3333-3333-3333-333333333333', 25000.00, 0.00, 50000.00, 0)
-ON CONFLICT (agency_id) DO NOTHING;
+-- 8. Agency Financials Seed (Cleared as requested)
 
 -- 9. Hold Reasons Seed
 INSERT INTO public.hold_reasons (id, reason_code, reason_description) VALUES

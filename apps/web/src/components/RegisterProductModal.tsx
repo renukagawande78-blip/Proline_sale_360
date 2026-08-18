@@ -335,23 +335,17 @@ export const RegisterProductModal: React.FC<RegisterProductModalProps> = ({
               <span style={{ fontSize: '0.675rem', color: '#94a3b8', fontWeight: 600 }}>Auto-Calculated MRP</span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem', textAlign: 'center' }}>
-              <div style={{ background: '#0f172a', padding: '0.5rem', borderRadius: 8, border: '1px solid #1e293b' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', textAlign: 'center' }}>
+              <div style={{ background: '#0f172a', padding: '0.55rem', borderRadius: 8, border: '1px solid #1e293b' }}>
                 <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', display: 'block', textTransform: 'uppercase' }}>1. MRP per PCS</span>
                 <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#34d399' }}>₹{Number(mrpPrice).toLocaleString()}</span>
                 <span style={{ fontSize: '0.65rem', color: '#64748b', display: 'block' }}>/ Standard Piece</span>
               </div>
 
-              <div style={{ background: '#0f172a', padding: '0.5rem', borderRadius: 8, border: '1px solid #1e293b' }}>
+              <div style={{ background: '#0f172a', padding: '0.55rem', borderRadius: 8, border: '1px solid #1e293b' }}>
                 <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', display: 'block', textTransform: 'uppercase' }}>2. MRP per Full BOX</span>
                 <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#38bdf8' }}>₹{(Number(mrpPrice) * Number(pcsPerBox)).toLocaleString()}</span>
                 <span style={{ fontSize: '0.65rem', color: '#64748b', display: 'block' }}>({pcsPerBox} PCS / Box)</span>
-              </div>
-
-              <div style={{ background: '#0f172a', padding: '0.5rem', borderRadius: 8, border: '1px solid #1e293b' }}>
-                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', display: 'block', textTransform: 'uppercase' }}>3. MRP per Loose PCS</span>
-                <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#fbbf24' }}>₹{Number(mrpPrice).toLocaleString()}</span>
-                <span style={{ fontSize: '0.65rem', color: '#64748b', display: 'block' }}>/ Loose Piece</span>
               </div>
             </div>
           </div>
@@ -373,52 +367,27 @@ export const RegisterProductModal: React.FC<RegisterProductModalProps> = ({
               <span style={{ color: '#34d399' }}>Total Initial Stock: {calculatedTotalPcs.toLocaleString()} PCS</span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 800, color: '#94a3b8', marginBottom: 4 }}>
-                  Full Boxes Stock
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={stockBoxQty}
-                  onChange={(e) => setStockBoxQty(Number(e.target.value))}
-                  style={{
-                    width: '100%',
-                    padding: '0.55rem 0.75rem',
-                    background: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: 8,
-                    color: '#f8fafc',
-                    fontWeight: 800,
-                    fontSize: '0.85rem',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 800, color: '#94a3b8', marginBottom: 4 }}>
-                  Loose PCS Stock
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={stockLoosePcs}
-                  onChange={(e) => setStockLoosePcs(Number(e.target.value))}
-                  style={{
-                    width: '100%',
-                    padding: '0.55rem 0.75rem',
-                    background: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: 8,
-                    color: '#f8fafc',
-                    fontWeight: 800,
-                    fontSize: '0.85rem',
-                    outline: 'none'
-                  }}
-                />
-              </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 800, color: '#94a3b8', marginBottom: 4 }}>
+                Full Boxes Stock Qty
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={stockBoxQty}
+                onChange={(e) => setStockBoxQty(Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 8,
+                  color: '#f8fafc',
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  outline: 'none'
+                }}
+              />
             </div>
           </div>
 

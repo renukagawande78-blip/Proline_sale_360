@@ -4,28 +4,18 @@ import { useAuth } from '../context/AuthContext';
 
 export const LoginPage: React.FC = () => {
   const { login, users } = useAuth();
-  const [usernameInput, setUsernameInput] = useState('Chirag Patel');
-  const [passwordInput, setPasswordInput] = useState('123456');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    const res = login(usernameInput, passwordInput);
+    const res = await login(usernameInput, passwordInput);
     if (!res.success) {
-      setErrorMsg(res.error || 'Invalid credentials. Please check name and password.');
+      setErrorMsg(res.error || 'Invalid credentials. Please check user ID / email and password.');
     }
   };
-
-  const handleQuickLogin = (userItem: any) => {
-    const res = login(userItem.full_name, userItem.password || '123456');
-    if (!res.success) {
-      login(userItem.email, '123456');
-    }
-  };
-
-  // Featured Demo Personas for Quick Login
-  const featuredPersonas = users.slice(0, 6);
 
   return (
     <div 
@@ -149,6 +139,46 @@ export const LoginPage: React.FC = () => {
 
           {/* Login Form */}
           <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.75rem' }}>
+            {users && users.length > 0 && (
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', letterSpacing: '0.04em', marginBottom: 6 }}>
+                  ⚡ SELECT DATABASE ACCOUNT TO SIGN IN
+                </label>
+                <select
+                  value={usernameInput}
+                  onChange={e => {
+                    const selVal = e.target.value;
+                    setUsernameInput(selVal);
+                    const matchedUser = users.find(u => u.email === selVal || u.full_name === selVal || u.id === selVal);
+                    if (matchedUser && matchedUser.password) {
+                      setPasswordInput(matchedUser.password);
+                    } else {
+                      setPasswordInput('1234');
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    background: '#0f172a',
+                    border: '1px solid #38bdf8',
+                    borderRadius: 8,
+                    padding: '0.65rem 0.85rem',
+                    color: '#38bdf8',
+                    fontSize: '0.85rem',
+                    outline: 'none',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="">-- Choose Account from Database --</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.email || u.full_name}>
+                      {u.full_name} ({u.role_name}) - {u.email || u.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.04em', marginBottom: 6 }}>
                 USER ID / PERSON NAME / EMAIL
@@ -224,44 +254,6 @@ export const LoginPage: React.FC = () => {
               Sign In to Session <ArrowRight size={18} />
             </button>
           </form>
-
-          {/* Quick Demo Login Grid */}
-          <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1.25rem' }}>
-            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
-              ⚡ 1-Click Quick Demo Sign In:
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              {featuredPersonas.map(u => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => handleQuickLogin(u)}
-                  style={{
-                    background: '#1e293b',
-                    border: '1px solid #334155',
-                    borderRadius: 8,
-                    padding: '0.5rem 0.65rem',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = '#38bdf8'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = '#334155'}
-                >
-                  <span style={{ fontSize: '0.775rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {u.full_name}
-                  </span>
-                  <span style={{ fontSize: '0.65rem', color: '#38bdf8', fontWeight: 700 }}>
-                    {u.role_name.replace(/_/g, ' ')}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
         </div>
       </div>
     </div>

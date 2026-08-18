@@ -9,21 +9,21 @@ export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const res = login(userInput, passwordInput);
+    const res = await login(userInput, passwordInput);
     if (!res.success) {
       setError(res.error || 'Authentication failed');
     }
   };
 
-  const handleSelectQuickUser = (userEmail: string, userPass?: string) => {
+  const handleSelectQuickUser = async (userEmail: string, userPass?: string) => {
     setUserInput(userEmail);
     setPasswordInput(userPass || '1234');
     setError(null);
-    login(userEmail, userPass || '1234');
+    await login(userEmail, userPass || '1234');
   };
 
   return (
@@ -118,7 +118,46 @@ export const LoginPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          
+          {users && users.length > 0 && (
+            <div>
+              <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 800, color: '#38bdf8', marginBottom: 6, letterSpacing: '0.04em' }}>
+                ⚡ QUICK SELECT DATABASE USER ACCOUNT
+              </label>
+              <select
+                value={userInput}
+                onChange={e => {
+                  const selVal = e.target.value;
+                  setUserInput(selVal);
+                  const matchedUser = users.find(u => u.email === selVal || u.full_name === selVal || u.id === selVal);
+                  if (matchedUser && matchedUser.password) {
+                    setPasswordInput(matchedUser.password);
+                  } else {
+                    setPasswordInput('1234');
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  background: '#0f172a',
+                  border: '1px solid #38bdf8',
+                  borderRadius: 12,
+                  padding: '0.75rem 1rem',
+                  color: '#38bdf8',
+                  fontSize: '0.875rem',
+                  outline: 'none',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">-- Choose Account from Database --</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.email || u.full_name}>
+                    {u.full_name} ({u.role_name}) - {u.email || u.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* User ID / Person Name Input */}
           <div>
             <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#94a3b8', marginBottom: 6, letterSpacing: '0.04em' }}>

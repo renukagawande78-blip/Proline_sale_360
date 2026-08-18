@@ -4,6 +4,7 @@ import { User } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { downloadSampleCSV } from '../../lib/masterImportExport';
 import { BulkImportModal } from '../../components/BulkImportModal';
+import { checkIsSuperAdmin, deleteUserFromSupabase, saveUserToSupabase } from '../../lib/supabase';
 
 interface UsersMasterViewProps {
   users: User[];
@@ -12,8 +13,8 @@ interface UsersMasterViewProps {
 }
 
 export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users: initialUsers, searchQuery, onOpenUserMgmtModal }) => {
-  const { currentUser, updateUser } = useAuth();
-  const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
+  const { currentUser, updateUser, deleteUser } = useAuth();
+  const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const isAdmin = isSuperAdmin;
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -21,16 +22,29 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users: initial
 
   const activeUsers = localUsers.length > 0 ? localUsers : initialUsers;
 
-  const handleDeleteUser = (userId: string, userName: string) => {
+  const handleDeleteUser = async (userId: string, userName: string) => {
     if (window.confirm(`Are you sure you want to delete user account "${userName}"? This action is restricted to Super Admin authority.`)) {
       setLocalUsers(prev => prev.filter(u => u.id !== userId));
+      await deleteUserFromSupabase(userId);
+      if (deleteUser) {
+        deleteUser(userId);
+      }
     }
   };
 
-  const handleEditUser = (u: User) => {
-    const newName = window.prompt(`Update User Full Name for ${u.email}:`, u.full_name);
-    if (newName && newName.trim()) {
-      setLocalUsers(prev => prev.map(item => item.id === u.id ? { ...item, full_name: newName.trim() } : item));
+  const handleEditUser = async (u: User) => {
+    if (onOpenUserMgmtModal) {
+      onOpenUserMgmtModal(u);
+    } else {
+      const newName = window.prompt(`Update User Full Name for ${u.email}:`, u.full_name);
+      if (newName && newName.trim()) {
+        const updated = { ...u, full_name: newName.trim() };
+        setLocalUsers(prev => prev.map(item => item.id === u.id ? updated : item));
+        await saveUserToSupabase(updated);
+        if (updateUser) {
+          updateUser(u.id, updated);
+        }
+      }
     }
   };
 
@@ -66,45 +80,15 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users: initial
       />
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <button
-          onClick={() => setIsImportModalOpen(true)}
-          title="Upload CSV sheet for bulk importing system users & brand roles"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.55rem 1rem',
-            background: 'rgba(2, 132, 199, 0.15)',
-            color: '#38bdf8',
-            border: '1px solid rgba(2, 132, 199, 0.4)',
-            fontWeight: 800,
-            fontSize: '0.8rem',
-            borderRadius: '10px',
-            cursor: 'pointer'
-          }}
-        >
-          <FileSpreadsheet size={15} /> 📥 Import Sheet (.CSV)
-        </button>
-
-        <button
-          onClick={() => downloadSampleCSV('users')}
-          title="Download sample sheet template used for bulk uploading system users & roles"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.55rem 1rem',
-            background: 'rgba(56, 189, 248, 0.1)',
-            color: '#38bdf8',
-            border: '1px solid rgba(56, 189, 248, 0.3)',
-            fontWeight: 800,
-            fontSize: '0.8rem',
-            borderRadius: '10px',
-            cursor: 'pointer'
-          }}
-        >
-          <FileSpreadsheet size={15} /> Download Sample Sheet (.CSV)
-        </button>
+        {onOpenUserMgmtModal && isSuperAdmin && (
+          <button
+            className="btn btn-primary"
+            onClick={() => onOpenUserMgmtModal()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, fontSize: '0.8rem' }}
+          >
+            + Register New User
+          </button>
+        )}
       </div>
 
       <div className="data-table-container">

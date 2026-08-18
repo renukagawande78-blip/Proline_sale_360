@@ -7,7 +7,6 @@ import {
   Receipt, 
   BarChart3, 
   Building2,
-  MapPin,
   X,
   ChevronLeft,
   ChevronRight,
@@ -60,7 +59,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, fallbackRoles: ['ALL'] },
     { id: 'returns', label: 'Returns & Damage', icon: PackageX, fallbackRoles: ['ALL'] },
     { id: 'tracker', label: 'Order Tracker', icon: ScanSearch, fallbackRoles: ['ALL'] },
-    { id: 'zones', label: 'Zone Master', icon: MapPin, fallbackRoles: ['ALL'] },
     { id: 'masters', label: 'Master Data', icon: Building2, permissionKey: 'party_view', fallbackRoles: ['ALL'] }
   ];
 

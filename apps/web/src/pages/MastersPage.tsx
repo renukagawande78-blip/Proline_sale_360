@@ -11,9 +11,17 @@ import {
   Download,
   Upload,
   FileSpreadsheet,
-  MapPin
+  MapPin,
+  Trash2
 } from 'lucide-react';
-import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, isCompanyAllowedForUser } from '../lib/supabase';
+import { 
+  MOCK_COMPANIES, 
+  MOCK_AGENCIES, 
+  MOCK_PRODUCTS, 
+  isCompanyAllowedForUser, 
+  fetchAgenciesFromSupabaseTable, 
+  deduplicateAgencies 
+} from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Company, Agency, Product } from '../types';
 
@@ -21,22 +29,25 @@ import { AgenciesMasterView } from '../views/masters/AgenciesMasterView';
 import { ProductsMasterView } from '../views/masters/ProductsMasterView';
 import { BrandsMasterView } from '../views/masters/BrandsMasterView';
 import { UsersMasterView } from '../views/masters/UsersMasterView';
+import { AreasMasterView } from '../views/masters/AreasMasterView';
 import { ZonesMasterView } from '../views/masters/ZonesMasterView';
 import { RegisterAgencyModal } from '../components/RegisterAgencyModal';
+import { AddProductModal } from '../components/AddProductModal';
 import { BulkImportModal } from '../components/BulkImportModal';
 import { MasterType, downloadSampleCSV, exportMasterCSV } from '../lib/masterImportExport';
 
 interface MastersPageProps {
-  initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'zones';
+  initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones';
+  onOpenUserMgmtModal?: (user?: any) => void;
 }
 
-export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies' }) => {
+export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies', onOpenUserMgmtModal }) => {
   const { users, currentUser, hasPermission, createUser } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
   const isSalesPerson = role === 'SALES_PERSON';
   const canAddMaster = hasPermission('new_party') || hasPermission('product_mgmt') || role === 'SUPER_ADMIN';
 
-  const [activeTab, setActiveTab] = useState<'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'zones'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones'>(initialTab);
 
   useEffect(() => {
     if (initialTab) {
@@ -53,8 +64,24 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
   const [isRegisterAgencyOpen, setIsRegisterAgencyOpen] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
 
+  // Load live agencies from Supabase table on page mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadLiveAgencies = async () => {
+      const { agencies: liveList } = await fetchAgenciesFromSupabaseTable();
+      if (isMounted) {
+        setAgenciesList(deduplicateAgencies(liveList));
+      }
+    };
+    loadLiveAgencies();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Mapped Data Filtered by Brand Handle Scope
   const mappedAgencies = agenciesList.filter(a => {
+    if (!a.company_id || currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag')) return true;
     const parentCompany = companiesList.find(c => c.id === a.company_id);
     return isCompanyAllowedForUser(parentCompany?.company_name, currentUser?.company_handle);
   });
@@ -70,6 +97,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
 
   // Add Item Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [newItemCode, setNewItemCode] = useState('');
   const [newItemPrice, setNewItemPrice] = useState(100);
@@ -105,7 +133,11 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         product_code: newItemCode || 'SKU-NEW',
         product_name: newItemName.trim(),
         pcs_per_box: newItemPack || 24,
-        unit_price: newItemPrice || 100
+        unit_price: newItemPrice || 100,
+        mrp_price: newItemPrice || 120,
+        category: 'General',
+        account_group: 'FMCG',
+        segment: 'FMCG'
       };
       setProductsList(prev => [...prev, newP]);
       setSuccessNotice(`New Product SKU "${newItemName}" added!`);
@@ -123,9 +155,25 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
     else if (activeTab === 'products') currentData = mappedProducts;
     else if (activeTab === 'companies') currentData = mappedCompanies;
     else if (activeTab === 'users') currentData = users;
-    else if (activeTab === 'zones') currentData = mappedAgencies;
+    else if (activeTab === 'areas') currentData = mappedAgencies;
 
     exportMasterCSV(activeTab === 'reasons' ? 'agencies' : (activeTab as MasterType), currentData);
+  };
+
+  const handleClearCurrentMasterData = () => {
+    const isConfirmed = window.confirm(
+      `⚠️ SUPER ADMIN MASTER CLEAR GATEWAY:\n\n` +
+      `Are you sure you want to DELETE ALL Master Data records (Products, Agencies, & Brands) to clear wrong data?\n\n` +
+      `Click OK to proceed with deleting all master records.`
+    );
+
+    if (isConfirmed) {
+      setProductsList([]);
+      setAgenciesList([]);
+      setCompaniesList([]);
+      setSuccessNotice(`🔥 ALL Master Data records (Products, Agencies & Brands) cleared successfully by Super Admin!`);
+      setTimeout(() => setSuccessNotice(null), 5000);
+    }
   };
 
   const handleImportSuccess = (importedRecords: any[], masterType: MasterType) => {
@@ -155,7 +203,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         unit_price: Number(r.unit_price) || 120,
         mrp_price: Number(r.mrp_price) || 150,
         stock_box_qty: Number(r.stock_box_qty) || 200,
-        stock_loose_pcs: Number(r.stock_loose_pcs) || 0,
+        stock_loose_pcs: 0,
         segment: r.segment || 'FMCG'
       }));
       setProductsList(prev => [...formatted, ...prev]);
@@ -232,10 +280,36 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
             <Download size={15} /> Export Master CSV
           </button>
 
-          {canAddMaster && activeTab !== 'agencies' && activeTab !== 'zones' && (
+          {/* Clear Current Master Data Button (Super Admin Only) */}
+          {role === 'SUPER_ADMIN' && (
+            <button 
+              className="btn btn-outline"
+              onClick={handleClearCurrentMasterData}
+              title="Super Admin 1-Click Gateway to delete wrong/unwanted master data records"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                borderColor: '#f43f5e',
+                color: '#f43f5e',
+                fontWeight: 800,
+                fontSize: '0.8rem',
+                background: 'rgba(244, 63, 94, 0.15)',
+                boxShadow: '0 0 12px rgba(244, 63, 94, 0.25)'
+              }}
+            >
+              <Trash2 size={15} /> 🗑️ Clear All Master Data
+            </button>
+          )}
+
+          {canAddMaster && activeTab !== 'agencies' && activeTab !== 'areas' && (
             <button 
               className="btn btn-primary"
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={() => {
+                if (activeTab === 'products') setIsAddProductOpen(true);
+                else if (activeTab === 'users' && onOpenUserMgmtModal) onOpenUserMgmtModal();
+                else setIsAddModalOpen(true);
+              }}
               style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', fontSize: '0.8rem' }}
             >
               <Plus size={15} /> Add {activeTab.slice(0, -1).toUpperCase()}
@@ -293,6 +367,26 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         </button>
 
         <button
+          onClick={() => setActiveTab('areas')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.5rem 1rem',
+            borderRadius: 8,
+            border: 'none',
+            background: activeTab === 'areas' ? '#38bdf8' : 'transparent',
+            color: activeTab === 'areas' ? '#0f172a' : '#f8fafc',
+            fontWeight: 800,
+            fontSize: '0.825rem',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <MapPin size={16} /> Area Master (Supabase `areas`)
+        </button>
+
+        <button
           onClick={() => setActiveTab('zones')}
           style={{
             display: 'flex',
@@ -309,7 +403,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
             whiteSpace: 'nowrap'
           }}
         >
-          <MapPin size={16} /> Zone Master (9 Zones)
+          <Building2 size={16} /> Zone Master (Mapped Areas)
         </button>
 
         <button
@@ -369,11 +463,19 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
 
       {/* Sub-Views */}
       {activeTab === 'agencies' && (
-        <AgenciesMasterView agencies={mappedAgencies} searchQuery={searchQuery} />
+        <AgenciesMasterView 
+          agencies={mappedAgencies} 
+          searchQuery={searchQuery} 
+          onAgencyRegistered={(newAgency) => setAgenciesList(prev => [newAgency, ...prev])}
+        />
       )}
 
       {activeTab === 'products' && (
         <ProductsMasterView products={mappedProducts} companies={companiesList} searchQuery={searchQuery} />
+      )}
+
+      {activeTab === 'areas' && (
+        <AreasMasterView agencies={mappedAgencies} searchQuery={searchQuery} />
       )}
 
       {activeTab === 'zones' && (
@@ -385,7 +487,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
       )}
 
       {activeTab === 'users' && !isSalesPerson && (
-        <UsersMasterView users={users} searchQuery={searchQuery} />
+        <UsersMasterView users={users} searchQuery={searchQuery} onOpenUserMgmtModal={onOpenUserMgmtModal} />
       )}
 
       {/* Add Item Modal */}
@@ -422,29 +524,6 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
                 />
               </div>
 
-              {activeTab === 'products' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>PACK SIZE (PCS/BOX)</label>
-                    <input 
-                      type="number" 
-                      value={newItemPack}
-                      onChange={e => setNewItemPack(parseInt(e.target.value) || 24)}
-                      style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>MRP PRICE (INR)</label>
-                    <input 
-                      type="number" 
-                      value={newItemPrice}
-                      onChange={e => setNewItemPrice(parseFloat(e.target.value) || 0)}
-                      style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white' }}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
@@ -454,6 +533,16 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
           </div>
         </div>
       )}
+
+      <AddProductModal
+        isOpen={isAddProductOpen}
+        onClose={() => setIsAddProductOpen(false)}
+        onSuccess={(newP) => {
+          setProductsList(prev => [newP, ...prev]);
+          setSuccessNotice(`New Product SKU "${newP.product_name}" registered!`);
+          setTimeout(() => setSuccessNotice(null), 3000);
+        }}
+      />
 
       <BulkImportModal
         isOpen={isBulkImportOpen}

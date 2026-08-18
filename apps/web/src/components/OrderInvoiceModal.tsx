@@ -120,7 +120,6 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                 <th style={{ padding: '0.65rem 0.75rem' }}>Product Line Item ID & Description</th>
                 <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>Pack</th>
                 <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>Box Qty</th>
-                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>Loose PCS</th>
                 <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>Total Qty</th>
                 <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>MRP (₹)</th>
                 <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', borderRadius: '0 6px 0 0' }}>Total Cost (₹)</th>
@@ -131,13 +130,12 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                 <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
                   <td style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>{idx + 1}</td>
                   <td style={{ padding: '0.65rem 0.75rem' }}>
-                    <div style={{ fontWeight: 800, color: '#0f172a' }}>{item.product_name}</div>
+                    <div style={{ fontWeight: 800, color: '#0f172a' }}>{item?.product_name || 'Product SKU'}</div>
                     <div style={{ fontSize: '0.725rem', color: '#2563eb', fontWeight: 700 }}>ID: {item.id}</div>
                     {item.remark && <div style={{ fontSize: '0.7rem', color: '#64748b', fontStyle: 'italic' }}>Note: {item.remark}</div>}
                   </td>
                   <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', color: '#475569' }}>{item.pcs_per_box} pcs/box</td>
                   <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700 }}>{item.box_qty}</td>
-                  <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700 }}>{item.loose_pcs}</td>
                   <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 800, color: '#16a34a' }}>{item.total_qty_pcs}</td>
                   <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 600 }}>₹{item.unit_price}</td>
                   <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>₹{item.total_price.toLocaleString()}</td>

@@ -2,16 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   Boxes, 
   X, 
-  DollarSign, 
   CheckCircle2, 
   Tag, 
   Save, 
-  History,
-  FileText,
-  Building2,
+  Layers,
+  Sparkles,
   Package
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, PRODUCT_GROUP_NAMES, getGroupCode } from '../types';
 import { updateProductStockAndDetails, MOCK_COMPANIES, generateNewBarcodeSKUCode } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
@@ -31,12 +29,12 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
   const { currentUser } = useAuth();
   const [productName, setProductName] = useState('');
   const [productCode, setProductCode] = useState('');
-  const [unitPrice, setUnitPrice] = useState<number>(0);
   const [mrpPrice, setMrpPrice] = useState<number>(0);
   const [pcsPerBox, setPcsPerBox] = useState<number>(24);
-  const [stockBoxQty, setStockBoxQty] = useState<number>(0);
-  const [stockLoosePcs, setStockLoosePcs] = useState<number>(0);
-  const [reason, setReason] = useState<string>('');
+  const [category, setCategory] = useState<string>('General');
+  const [accountGroup, setAccountGroup] = useState<string>('FMCG');
+  const [segment, setSegment] = useState<string>('FMCG');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
@@ -44,12 +42,11 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
     if (isOpen && product) {
       setProductName(product.product_name || '');
       setProductCode(product.product_code || '');
-      setUnitPrice(product.unit_price || 0);
-      setMrpPrice(product.mrp_price || Math.round(product.unit_price * 1.15) || 0);
+      setMrpPrice(product.mrp_price || (product.unit_price ? Math.round(product.unit_price * 1.15) : 100));
       setPcsPerBox(product.pcs_per_box || 24);
-      setStockBoxQty(product.stock_box_qty || 100);
-      setStockLoosePcs(product.stock_loose_pcs || 0);
-      setReason('');
+      setCategory(product.category || 'General');
+      setAccountGroup(product.account_group || 'FMCG');
+      setSegment(product.segment || 'FMCG');
       setSuccessNotice(null);
     }
   }, [isOpen, product]);
@@ -68,16 +65,15 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
       product_name: productName.trim(),
       product_code: productCode.trim(),
       pcs_per_box: Number(pcsPerBox),
-      unit_price: Number(unitPrice),
       mrp_price: Number(mrpPrice),
-      stock_box_qty: Number(stockBoxQty),
-      stock_loose_pcs: Number(stockLoosePcs),
-      reason: reason.trim() || 'Inventory stock & MRP update',
-      updated_by: currentUser?.full_name || 'Dispatch Manager'
+      category: category.trim(),
+      account_group: accountGroup,
+      segment: segment,
+      updated_by: currentUser?.full_name || 'Admin'
     });
 
     setIsSubmitting(false);
-    setSuccessNotice(`Warehouse stock & MRP for "${productName}" updated successfully!`);
+    setSuccessNotice(`Product SKU "${productName}" updated successfully!`);
 
     if (onSuccess) {
       onSuccess(updated);
@@ -88,7 +84,6 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
     }, 1200);
   };
 
-  const calculatedTotalPcs = (Number(stockBoxQty) * Number(pcsPerBox)) + Number(stockLoosePcs);
   const mrpBox = Number(mrpPrice) * Number(pcsPerBox);
 
   return (
@@ -128,12 +123,12 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
               justifyContent: 'center',
               color: '#38bdf8'
             }}>
-              <Boxes size={22} />
+              <Package size={22} />
             </div>
             <div>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff' }}>Update Product Details & MRP</h2>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff' }}>Update Product Master SKU</h2>
               <p style={{ fontSize: '0.775rem', color: '#94a3b8', marginTop: 2 }}>
-                Dispatch Manager Stock Management | Brand: <strong style={{ color: '#fbbf24' }}>{company?.company_name || 'General'}</strong>
+                Configure Product Name, MRP, Pack Size, Category, Group & Segment
               </p>
             </div>
           </div>
@@ -174,16 +169,17 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
             </div>
           )}
 
-          {/* Product Name & Code */}
+          {/* 1. Product Name & Code */}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.85rem' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', marginBottom: 6 }}>
-                Product SKU Description <span style={{ color: '#fb7185' }}>*</span>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#cbd5e1', marginBottom: 6 }}>
+                Product Name <span style={{ color: '#fb7185' }}>*</span>
               </label>
               <input
                 type="text"
                 value={productName}
                 onChange={(e) => setProductName(e.target.value)}
+                placeholder="e.g. Priyagold Butter Delite Biscuit"
                 style={{
                   width: '100%',
                   padding: '0.65rem 0.85rem',
@@ -201,7 +197,7 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
 
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#cbd5e1' }}>
                   SKU Code / Barcode <span style={{ color: '#fb7185' }}>*</span>
                 </label>
                 <button
@@ -219,7 +215,7 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
                   }}
                   title="Regenerate barcode SKU code"
                 >
-                  ⚡ Regenerate Barcode
+                  ⚡ Barcode
                 </button>
               </div>
               <input
@@ -243,10 +239,10 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
             </div>
           </div>
 
-          {/* Pricing & Pack Size Grid */}
+          {/* 2. MRP & Pack Size Grid */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr',
+            gridTemplateColumns: '1fr 1fr',
             gap: '0.85rem',
             padding: '1rem',
             background: '#141f36',
@@ -254,7 +250,7 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
             border: '1px solid #1e293b'
           }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 800, color: '#34d399', marginBottom: 4 }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#34d399', marginBottom: 4 }}>
                 MRP per PCS (₹)
               </label>
               <input
@@ -265,45 +261,21 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
                 onChange={(e) => setMrpPrice(Number(e.target.value))}
                 style={{
                   width: '100%',
-                  padding: '0.5rem 0.65rem',
+                  padding: '0.55rem 0.75rem',
                   background: '#0f172a',
                   border: '1px solid rgba(52, 211, 153, 0.4)',
                   borderRadius: 8,
                   color: '#34d399',
                   fontWeight: 800,
-                  fontSize: '0.85rem',
+                  fontSize: '0.9rem',
                   outline: 'none'
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 800, color: '#94a3b8', marginBottom: 4 }}>
-                Wholesale Rate per PCS (₹)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                min="0"
-                value={unitPrice}
-                onChange={(e) => setUnitPrice(Number(e.target.value))}
-                style={{
-                  width: '100%',
-                  padding: '0.5rem 0.65rem',
-                  background: '#0f172a',
-                  border: '1px solid #334155',
-                  borderRadius: 8,
-                  color: '#f8fafc',
-                  fontWeight: 800,
-                  fontSize: '0.85rem',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 800, color: '#38bdf8', marginBottom: 4 }}>
-                PCS Per Box (Pack Size)
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', marginBottom: 4 }}>
+                Pack Size (PCS Per Box)
               </label>
               <input
                 type="number"
@@ -312,164 +284,112 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
                 onChange={(e) => setPcsPerBox(Number(e.target.value))}
                 style={{
                   width: '100%',
-                  padding: '0.5rem 0.65rem',
+                  padding: '0.55rem 0.75rem',
                   background: '#0f172a',
                   border: '1px solid rgba(56, 189, 248, 0.4)',
                   borderRadius: 8,
                   color: '#38bdf8',
                   fontWeight: 800,
-                  fontSize: '0.85rem',
+                  fontSize: '0.9rem',
                   outline: 'none'
                 }}
               />
             </div>
           </div>
 
-          {/* MRP Breakdown Card */}
+          {/* MRP Box Summary Card */}
           <div style={{
             padding: '0.85rem 1rem',
-            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(15, 23, 42, 0.9), rgba(16, 185, 129, 0.1))',
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(15, 23, 42, 0.9))',
             border: '1px solid rgba(16, 185, 129, 0.3)',
-            borderRadius: 14,
+            borderRadius: 12,
             display: 'flex',
-            flexDirection: 'column',
-            gap: '0.6rem'
+            alignItems: 'center',
+            justifyContent: 'space-between'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', fontWeight: 800, color: '#34d399' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <Tag size={14} /> Updated MRP Structure (PCS, BOX & Loose)
-              </span>
-              <span style={{ fontSize: '0.675rem', color: '#94a3b8', fontWeight: 600 }}>Live MRP Summary</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#34d399', fontSize: '0.8rem', fontWeight: 800 }}>
+              <Tag size={16} />
+              <span>MRP Box Rate Summary:</span>
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem', textAlign: 'center' }}>
-              <div style={{ background: '#0f172a', padding: '0.5rem', borderRadius: 8, border: '1px solid #1e293b' }}>
-                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', display: 'block', textTransform: 'uppercase' }}>1. MRP per PCS</span>
-                <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#34d399' }}>₹{Number(mrpPrice).toLocaleString()}</span>
-                <span style={{ fontSize: '0.65rem', color: '#64748b', display: 'block' }}>/ Piece</span>
-              </div>
-
-              <div style={{ background: '#0f172a', padding: '0.5rem', borderRadius: 8, border: '1px solid #1e293b' }}>
-                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', display: 'block', textTransform: 'uppercase' }}>2. MRP per Full BOX</span>
-                <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#38bdf8' }}>₹{mrpBox.toLocaleString()}</span>
-                <span style={{ fontSize: '0.65rem', color: '#64748b', display: 'block' }}>({pcsPerBox} PCS / Box)</span>
-              </div>
-
-              <div style={{ background: '#0f172a', padding: '0.5rem', borderRadius: 8, border: '1px solid #1e293b' }}>
-                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', display: 'block', textTransform: 'uppercase' }}>3. MRP per Loose PCS</span>
-                <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#fbbf24' }}>₹{Number(mrpPrice).toLocaleString()}</span>
-                <span style={{ fontSize: '0.65rem', color: '#64748b', display: 'block' }}>/ Loose Piece</span>
-              </div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 900, color: '#38bdf8' }}>
+              📦 Full Box MRP: ₹{mrpBox.toLocaleString()} <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>({pcsPerBox} PCS @ ₹{mrpPrice}/PCS)</span>
             </div>
           </div>
 
-          {/* Physical Inventory Stock Level */}
-          <div style={{
-            padding: '1rem',
-            background: 'rgba(56, 189, 248, 0.08)',
-            border: '1px solid rgba(56, 189, 248, 0.25)',
-            borderRadius: 14,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.775rem', fontWeight: 800, color: '#38bdf8' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <Boxes size={15} /> Physical Warehouse Stock Level
-              </span>
-              <span style={{ color: '#34d399' }}>Total Physical Stock: {calculatedTotalPcs.toLocaleString()} PCS</span>
+          {/* 3. Product Category, Group Name & Segment Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#cbd5e1', marginBottom: 4 }}>
+                Product Category
+              </label>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="e.g. Biscuits, Beverages"
+                style={{
+                  width: '100%',
+                  padding: '0.6rem 0.75rem',
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  color: '#f8fafc',
+                  fontSize: '0.825rem',
+                  fontWeight: 700,
+                  outline: 'none'
+                }}
+              />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 800, color: '#94a3b8', marginBottom: 4 }}>
-                  Full Boxes Stock
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={stockBoxQty}
-                  onChange={(e) => setStockBoxQty(Number(e.target.value))}
-                  style={{
-                    width: '100%',
-                    padding: '0.55rem 0.75rem',
-                    background: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: 8,
-                    color: '#f8fafc',
-                    fontWeight: 800,
-                    fontSize: '0.85rem',
-                    outline: 'none'
-                  }}
-                />
-              </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#cbd5e1', marginBottom: 4 }}>
+                Group Name
+              </label>
+              <select
+                value={accountGroup}
+                onChange={(e) => setAccountGroup(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.6rem 0.75rem',
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  color: '#fbbf24',
+                  fontSize: '0.825rem',
+                  fontWeight: 800,
+                  outline: 'none'
+                }}
+              >
+                {PRODUCT_GROUP_NAMES.map(b => (
+                  <option key={b} value={b} style={{ background: '#0f172a', color: '#fff' }}>{b} ({getGroupCode(b)})</option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 800, color: '#94a3b8', marginBottom: 4 }}>
-                  Loose PCS Stock
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={stockLoosePcs}
-                  onChange={(e) => setStockLoosePcs(Number(e.target.value))}
-                  style={{
-                    width: '100%',
-                    padding: '0.55rem 0.75rem',
-                    background: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: 8,
-                    color: '#f8fafc',
-                    fontWeight: 800,
-                    fontSize: '0.85rem',
-                    outline: 'none'
-                  }}
-                />
-              </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#cbd5e1', marginBottom: 4 }}>
+                Segment
+              </label>
+              <select
+                value={segment}
+                onChange={(e) => setSegment(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.6rem 0.75rem',
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  color: '#34d399',
+                  fontSize: '0.825rem',
+                  fontWeight: 800,
+                  outline: 'none'
+                }}
+              >
+                <option value="FMCG">FMCG</option>
+                <option value="FMCD">FMCD</option>
+              </select>
             </div>
           </div>
-
-          {/* Revision Reason / Audit Note */}
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', marginBottom: 4 }}>
-              <FileText size={14} color="#6366f1" />
-              <span>MRP Revision / Audit Log Reason (Optional)</span>
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Raw material price surge adjustment / Company price revision memo #421"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.6rem 0.85rem',
-                background: '#1e293b',
-                border: '1px solid #334155',
-                borderRadius: 10,
-                color: '#f8fafc',
-                fontSize: '0.8rem',
-                outline: 'none'
-              }}
-            />
-          </div>
-
-          {/* Previous MRP Revision Audit Trail (if exists) */}
-          {product.mrp_history && product.mrp_history.length > 0 && (
-            <div style={{
-              padding: '0.75rem 1rem',
-              background: '#141f36',
-              borderRadius: 12,
-              border: '1px solid #1e293b',
-              fontSize: '0.75rem'
-            }}>
-              <div style={{ fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: 4 }}>
-                <History size={13} /> MRP Audit History Trail ({product.mrp_history.length} Revisions)
-              </div>
-              <div style={{ color: '#94a3b8' }}>
-                Latest: ₹{product.mrp_history[0].previous_mrp} ➔ ₹{product.mrp_history[0].new_mrp} by <strong>{product.mrp_history[0].updated_by}</strong> on {product.mrp_history[0].updated_at.substring(0, 10)}
-              </div>
-            </div>
-          )}
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '0.85rem', borderTop: '1px solid #1e293b' }}>
@@ -480,36 +400,36 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
                 padding: '0.55rem 1.15rem',
                 background: '#1e293b',
                 border: '1px solid #334155',
-                color: '#cbd5e1',
-                fontWeight: 700,
-                fontSize: '0.8rem',
+                color: '#94a3b8',
                 borderRadius: 10,
+                fontSize: '0.8rem',
+                fontWeight: 700,
                 cursor: 'pointer'
               }}
             >
               Cancel
             </button>
+            
             <button
               type="submit"
               disabled={isSubmitting}
               style={{
+                padding: '0.6rem 1.4rem',
+                background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
+                border: 'none',
+                color: '#ffffff',
+                borderRadius: 10,
+                fontSize: '0.825rem',
+                fontWeight: 800,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.4rem',
-                padding: '0.6rem 1.35rem',
-                background: 'linear-gradient(135deg, #38bdf8, #0284c7)',
-                color: 'white',
-                fontWeight: 800,
-                fontSize: '0.825rem',
-                borderRadius: 10,
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 4px 15px rgba(56, 189, 248, 0.35)',
-                opacity: isSubmitting ? 0.6 : 1
+                boxShadow: '0 4px 15px rgba(14, 165, 233, 0.4)'
               }}
             >
               <Save size={16} />
-              <span>{isSubmitting ? 'Saving Product Details...' : 'Save Product Details & MRP'}</span>
+              <span>{isSubmitting ? 'Saving Changes...' : 'Save Product Master'}</span>
             </button>
           </div>
 

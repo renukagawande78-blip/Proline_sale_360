@@ -274,7 +274,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               <th>Company</th>
               <th>Agency / Party</th>
               <th>Salesperson / Exec</th>
-              <th>Boxes / Loose</th>
+              <th>Box Qty</th>
               <th>Total PCS</th>
               <th>Pricing Stage</th>
               <th>Status</th>
@@ -314,7 +314,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                   <td>{order.company_name}</td>
                   <td>{order.agency_name}</td>
                   <td><span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24' }}>{order.salesperson_name || 'Field Exec'}</span></td>
-                  <td>{order.total_box_qty} Boxes / {order.total_loose_pcs} Loose</td>
+                  <td>{order.total_box_qty} Boxes</td>
                   <td><span style={{ fontWeight: 800, color: '#34d399' }}>{order.total_qty_pcs}</span></td>
                   <td><span style={{ fontSize: '0.725rem', color: '#94a3b8', background: '#0f172a', padding: '0.2rem 0.5rem', borderRadius: 4, border: '1px solid #334155' }}>🔒 Next Phase (Billing)</span></td>
                   <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>

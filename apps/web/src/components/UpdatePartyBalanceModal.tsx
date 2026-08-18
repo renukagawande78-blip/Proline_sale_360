@@ -44,7 +44,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
   const [currentOutstanding, setCurrentOutstanding] = useState<number>(0);
   const [overdueAmount, setOverdueAmount] = useState<number>(0);
   const [advanceAmount, setAdvanceAmount] = useState<number>(0);
-  const [accountType, setAccountType] = useState<string>('Sundry Debtors-Electronics');
+  const [accountType, setAccountType] = useState<string>('FMCG');
   const [remarks, setRemarks] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -71,7 +71,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
     setCurrentOutstanding(fin.current_outstanding || fin.outstanding_amount || 0);
     setOverdueAmount(fin.overdue_amount || 0);
     setAdvanceAmount(fin.advance_amount || 0);
-    setAccountType(fin.account_type || 'Sundry Debtors-Electronics');
+    setAccountType(fin.account_type || 'FMCG');
     setRemarks(fin.remarks || '');
     setSuccessMsg(null);
   };
@@ -476,12 +476,8 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
                   outline: 'none'
                 }}
               >
-                <option value="Sundry Debtors-Electronics">Sundry Debtors-Electronics</option>
-                <option value="Sundry Debtors-FMCG">Sundry Debtors-FMCG</option>
-                <option value="Sundry Debtors-Retail">Sundry Debtors-Retail</option>
-                <option value="Advance Deposit Account">Advance Deposit Account</option>
-                <option value="VIP Priority Dealer">VIP Priority Dealer</option>
-                <option value="Regular Credit Account">Regular Credit Account</option>
+                <option value="FMCG">FMCG</option>
+                <option value="FMCD">FMCD</option>
               </select>
             </div>
 

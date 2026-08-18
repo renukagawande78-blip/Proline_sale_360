@@ -342,36 +342,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
                 </div>
               </div>
 
-              {/* Logged-In Persona Switcher (Chirag Sir Only) */}
-              {isChiragAdmin && (
-                <div style={{ marginBottom: '0.75rem', padding: '0.6rem', background: 'rgba(56, 189, 248, 0.08)', borderRadius: 8, border: '1px solid rgba(56, 189, 248, 0.2)' }}>
-                  <span style={{ display: 'block', fontSize: '0.65rem', fontWeight: 800, color: '#38bdf8', letterSpacing: '0.04em', marginBottom: 4 }}>
-                    👑 LOGGED-IN PERSONA SWITCHER (ADMIN):
-                  </span>
-                  <select
-                    value={activeUser.id}
-                    onChange={e => switchUserById(e.target.value)}
-                    style={{
-                      width: '100%',
-                      background: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: 6,
-                      color: '#38bdf8',
-                      fontWeight: 800,
-                      fontSize: '0.775rem',
-                      padding: '0.4rem',
-                      outline: 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {users.map(u => (
-                      <option key={u.id} value={u.id} style={{ background: '#0f172a', color: 'white' }}>
-                        {u.full_name} ({u.role_name.replace(/_/g, ' ')})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Logged-In Persona Switcher Hidden */}
 
               {/* Options Menu */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -399,60 +370,10 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
                       textAlign: 'left',
                       transition: 'background 0.15s ease'
                     }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.1)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
                     <KeyRound size={15} /> User Passwords & Authority
                   </button>
                 )}
-
-                {/* Role Switcher Section (Chirag Sir Only) */}
-                {isChiragAdmin && (
-                  <div style={{ padding: '0.4rem 0.5rem 0.2rem' }}>
-                    <div style={{ fontSize: '0.675rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <ShieldCheck size={12} color="#38bdf8" /> Switch Role:
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', maxHeight: 150, overflowY: 'auto' }}>
-                      {rolesList.map(r => {
-                        const isCurrent = activeUser.role_name === r.role;
-                        return (
-                          <button
-                            key={r.role}
-                            onClick={() => {
-                              switchRole(r.role);
-                              setShowMenu(false);
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '0.4rem 0.55rem',
-                              borderRadius: 6,
-                              border: 'none',
-                              background: isCurrent ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                              color: isCurrent ? '#38bdf8' : '#cbd5e1',
-                              fontSize: '0.75rem',
-                              fontWeight: isCurrent ? 800 : 600,
-                              cursor: 'pointer',
-                              textAlign: 'left'
-                            }}
-                            onMouseEnter={e => {
-                              if (!isCurrent) e.currentTarget.style.background = '#0f172a';
-                            }}
-                            onMouseLeave={e => {
-                              if (!isCurrent) e.currentTarget.style.background = 'transparent';
-                            }}
-                          >
-                            <span>{r.label}</span>
-                            {isCurrent && <Check size={13} color="#38bdf8" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
               </div>
 
               {/* Logout Option */}

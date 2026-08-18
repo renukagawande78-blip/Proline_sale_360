@@ -7,6 +7,48 @@ export type RoleName =
   | 'AREA_SALES_MANAGER'
   | 'SALES_PERSON';
 
+export const PRODUCT_GROUP_NAMES = [
+  'AKAI',
+  'GANDOUR',
+  'HELL',
+  'MOGU MOGU',
+  'ORION',
+  'PG-OTHER',
+  'PRAN',
+  'PRIYAGOLD',
+  'RCPL',
+  'Waiwai',
+  'WHIRLPOOL',
+  'Daikin',
+  'Cruise'
+] as const;
+
+export type ProductGroupName = typeof PRODUCT_GROUP_NAMES[number];
+
+export const GROUP_CODE_MAP: Record<string, string> = {
+  'AKAI': 'AK',
+  'GANDOUR': 'GN',
+  'HELL': 'HL',
+  'MOGU MOGU': 'MM',
+  'ORION': 'OR',
+  'PG-OTHER': 'PO',
+  'PRAN': 'PR',
+  'PRIYAGOLD': 'PG',
+  'RCPL': 'RC',
+  'Waiwai': 'WW',
+  'WHIRLPOOL': 'WP',
+  'Daikin': 'DK',
+  'Cruise': 'CR'
+};
+
+export const getGroupCode = (groupName?: string): string => {
+  if (!groupName) return 'AK';
+  const g = groupName.trim();
+  if (GROUP_CODE_MAP[g]) return GROUP_CODE_MAP[g];
+  const clean = g.replace(/[^a-zA-Z]/g, '').toUpperCase();
+  return clean.length >= 2 ? clean.substring(0, 2) : 'AK';
+};
+
 export type OrderStatus =
   | 'DRAFT'
   | 'SUBMITTED'
@@ -78,6 +120,7 @@ export interface Company {
   company_code: string;
   company_name: string;
   segment?: SegmentType;
+  handle?: string;
 }
 
 export interface Area {
@@ -169,9 +212,12 @@ export interface Product {
   company_id: string;
   product_code: string;
   product_name: string;
+  mrp_price: number;
   pcs_per_box: number;
   unit_price: number;
-  mrp_price?: number;
+  category?: string;
+  account_group?: 'FMCG' | 'FMCD' | string;
+  segment?: 'FMCG' | 'FMCD' | string;
   previous_mrp?: number;
   mrp_updated_at?: string;
   mrp_updated_by?: string;
@@ -180,7 +226,6 @@ export interface Product {
   stock_loose_pcs?: number;
   total_stock_pcs?: number;
   reserved_stock_pcs?: number;
-  segment?: 'FMCG' | 'FMCD';
 }
 
 export interface OrderItem {
@@ -327,4 +372,15 @@ export interface GlobalFilterState {
   startDate?: string;
   endDate?: string;
   isActive: boolean;
+}
+
+export interface AreaMaster {
+  id: string;
+  area_code: string;
+  area_name: string;
+  city: string;
+  zone_code?: string;
+  region?: string;
+  description?: string;
+  created_at?: string;
 }

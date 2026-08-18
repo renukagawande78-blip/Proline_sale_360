@@ -51,12 +51,15 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
   });
 
   const filteredProducts = scopedProducts.filter(p => {
+    if (!p) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const parentCompany = MOCK_COMPANIES.find(c => c.id === p.company_id);
+    const name = p.product_name || '';
+    const code = p.product_code || '';
     return (
-      p.product_name.toLowerCase().includes(q) ||
-      p.product_code.toLowerCase().includes(q) ||
+      name.toLowerCase().includes(q) ||
+      code.toLowerCase().includes(q) ||
       (parentCompany?.company_name || '').toLowerCase().includes(q)
     );
   });
@@ -398,7 +401,6 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                   <th>Wholesale Price</th>
                   <th>Pack Size</th>
                   <th>Stock In Boxes</th>
-                  <th>Loose PCS Stock</th>
                   <th>Total Available Stock (PCS)</th>
                   <th>Stock Status</th>
                   <th style={{ textAlign: 'center' }}>Action</th>
@@ -407,14 +409,14 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
               <tbody>
                 {filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                       No product SKUs found matching search query. Click "+ Register New Product SKU" to add new products into catalog.
                     </td>
                   </tr>
                 ) : (
                   filteredProducts.map(p => {
                     const comp = MOCK_COMPANIES.find(c => c.id === p.company_id);
-                    const totalPcs = p.total_stock_pcs || ((p.stock_box_qty || 0) * (p.pcs_per_box || 1) + (p.stock_loose_pcs || 0));
+                    const totalPcs = p.total_stock_pcs || ((p.stock_box_qty || 0) * (p.pcs_per_box || 1));
                     const isLowStock = totalPcs < 50;
 
                     return (
@@ -422,11 +424,10 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                         <td><code style={{ color: '#38bdf8', fontWeight: 800, fontSize: '0.75rem' }}>{p.product_code}</code></td>
                         <td><strong style={{ color: '#f8fafc' }}>{p.product_name}</strong></td>
                         <td><span style={{ color: '#fbbf24', fontSize: '0.75rem', fontWeight: 700 }}>{comp?.company_name || 'Brand SKU'}</span></td>
-                        <td><strong style={{ color: '#34d399' }}>₹{(p.mrp_price || Math.round(p.unit_price * 1.15)).toLocaleString()}</strong></td>
-                        <td><span>₹{p.unit_price.toLocaleString()}</span></td>
+                        <td><strong style={{ color: '#34d399' }}>₹{(p.mrp_price || (p.unit_price ? Math.round(p.unit_price * 1.15) : 100)).toLocaleString()}</strong></td>
+                        <td><span>₹{(p.unit_price || p.mrp_price || 100).toLocaleString()}</span></td>
                         <td><span style={{ fontWeight: 700, color: '#38bdf8' }}>{p.pcs_per_box} pcs/box</span></td>
                         <td><strong style={{ color: '#f8fafc' }}>{p.stock_box_qty || 0} Boxes</strong></td>
-                        <td><span>{p.stock_loose_pcs || 0} PCS</span></td>
                         <td><strong style={{ color: isLowStock ? '#f43f5e' : '#34d399', fontSize: '0.85rem' }}>{totalPcs.toLocaleString()} PCS</strong></td>
                         <td>
                           {isLowStock ? (

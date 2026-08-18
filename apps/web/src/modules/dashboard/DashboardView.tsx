@@ -152,7 +152,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <td><strong style={{ color: '#38bdf8' }}>{order.order_number}</strong></td>
                   <td>{order.company_name}</td>
                   <td>{order.agency_name}</td>
-                  <td>{order.total_box_qty} Box / {order.total_loose_pcs} Pcs</td>
+                  <td>{order.total_box_qty} Boxes</td>
                   <td><strong style={{ color: '#38bdf8' }}>{order.total_qty_pcs} Pcs</strong></td>
                   <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
                   <td>

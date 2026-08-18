@@ -4,8 +4,22 @@
 -- https://supabase.com/dashboard/project/psaguppgoigpxumzgvjx/sql/new
 -- ============================================================================
 
--- 1. SYSTEM USERS TABLE
+-- 1. SYSTEM USERS TABLE & USERS TABLE
 CREATE TABLE IF NOT EXISTS public.system_users (
+    id TEXT PRIMARY KEY,
+    sno INT,
+    full_name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    role_name TEXT NOT NULL,
+    permission_group_id TEXT,
+    permission_group_name TEXT,
+    company_handle TEXT,
+    password TEXT DEFAULT '1234',
+    active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.users (
     id TEXT PRIMARY KEY,
     sno INT,
     full_name TEXT NOT NULL,
@@ -263,3 +277,74 @@ INSERT INTO public.products (id, product_code, product_name, company_id, pcs_per
 ON CONFLICT (id) DO UPDATE SET 
   product_name = EXCLUDED.product_name,
   unit_price = EXCLUDED.unit_price;
+
+-- ============================================================================
+-- 6. AUTOMATIC CREATED_AT & UPDATED_AT TIMESTAMP TRIGGERS
+-- ============================================================================
+CREATE OR REPLACE FUNCTION set_updated_at_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  IF (TG_OP = 'INSERT' AND (NEW.created_at IS NULL OR NEW.created_at = '')) THEN
+    NEW.created_at = NOW();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- AGENCIES TRIGGER
+DROP TRIGGER IF EXISTS trg_agencies_timestamp ON public.agencies;
+CREATE TRIGGER trg_agencies_timestamp
+BEFORE INSERT OR UPDATE ON public.agencies
+FOR EACH ROW EXECUTE FUNCTION set_updated_at_timestamp();
+
+-- AREAS TRIGGER
+DROP TRIGGER IF EXISTS trg_areas_timestamp ON public.areas;
+CREATE TRIGGER trg_areas_timestamp
+BEFORE INSERT OR UPDATE ON public.areas
+FOR EACH ROW EXECUTE FUNCTION set_updated_at_timestamp();
+
+-- ZONES TRIGGER
+DROP TRIGGER IF EXISTS trg_zones_timestamp ON public.zones;
+CREATE TRIGGER trg_zones_timestamp
+BEFORE INSERT OR UPDATE ON public.zones
+FOR EACH ROW EXECUTE FUNCTION set_updated_at_timestamp();
+
+-- PRODUCTS TRIGGER
+DROP TRIGGER IF EXISTS trg_products_timestamp ON public.products;
+CREATE TRIGGER trg_products_timestamp
+BEFORE INSERT OR UPDATE ON public.products
+FOR EACH ROW EXECUTE FUNCTION set_updated_at_timestamp();
+
+-- ============================================================================
+-- 7. UPDATE QUERY TO POPULATE CREATED_AT & UPDATED_AT TIMESTAMPS IN SUPABASE
+-- ============================================================================
+ALTER TABLE public.agencies 
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+UPDATE public.agencies
+SET 
+  created_at = COALESCE(created_at, NOW()),
+  updated_at = NOW()
+WHERE created_at IS NULL OR updated_at IS NULL;
+
+-- ============================================================================
+-- 8. AUTOMATIC AGENCY CODE GENERATION SEQUENCE & TRIGGER IN SUPABASE
+-- ============================================================================
+CREATE SEQUENCE IF NOT EXISTS agency_code_seq START 1;
+
+CREATE OR REPLACE FUNCTION auto_generate_agency_code()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.agency_code IS NULL OR NEW.agency_code = '' THEN
+    NEW.agency_code := 'AG-' || COALESCE(UPPER(SUBSTRING(NEW.city FROM 1 FOR 3)), 'SUR') || '-' || LPAD(nextval('agency_code_seq')::text, 3, '0');
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_auto_agency_code ON public.agencies;
+CREATE TRIGGER trg_auto_agency_code
+BEFORE INSERT ON public.agencies
+FOR EACH ROW EXECUTE FUNCTION auto_generate_agency_code();

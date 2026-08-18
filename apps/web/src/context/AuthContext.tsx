@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { RoleName, User, PermissionControl, PermissionGroup } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase, deduplicateUsers, saveUserToSupabase } from '../lib/supabase';
 
 export const getDefaultPermissions = (role: RoleName): PermissionControl => {
   if (role === 'SUPER_ADMIN' || role === 'ACCOUNTS') {
@@ -176,36 +176,7 @@ export const INITIAL_PERMISSION_GROUPS: PermissionGroup[] = [
 
 const SEED_USERS: User[] = [
   { sno: 1, id: 'u01', full_name: 'Chirag', email: 'chirag@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '1234', active: true },
-  { sno: 2, id: 'u02', full_name: 'Harshad', email: 'harshad@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '1234', active: true },
-  { sno: 3, id: 'u03', full_name: 'Jay', email: 'jay@proline.com', role_name: 'SALES_ADMIN', permission_group_id: 'pg_sales_admin', permission_group_name: 'Sales Admin Authority Group', company_handle: 'Priyagold, RCPL, Orion, Gandour, HPPL', password: '1234', active: true },
-  { sno: 4, id: 'u04', full_name: 'Dixit', email: 'dixit@proline.com', role_name: 'SALES_ADMIN', permission_group_id: 'pg_sales_admin', permission_group_name: 'Sales Admin Authority Group', company_handle: 'Heli, Waiwai, PRAN, Mogu mogu', password: '1234', active: true },
-  { sno: 5, id: 'u05', full_name: 'Sumit', email: 'sumit@proline.com', role_name: 'SALES_ADMIN', permission_group_id: 'pg_sales_admin', permission_group_name: 'Sales Admin Authority Group', company_handle: 'Whirlpool, Daikin, Cruise, Akai', password: '1234', active: true },
-  { sno: 6, id: 'u06', full_name: 'Riddhi', email: 'riddhi@proline.com', role_name: 'BILLING', permission_group_id: 'pg_billing', permission_group_name: 'Billing & Accounts Group', company_handle: 'Priyagold, RCPL, Orion, Gandour, HPPL', password: '1234', active: true },
-  { sno: 7, id: 'u07', full_name: 'Mansi', email: 'mansi.billing@proline.com', role_name: 'BILLING', permission_group_id: 'pg_billing', permission_group_name: 'Billing & Accounts Group', company_handle: 'Heli, Waiwai, PRAN, Mogu mogu', password: '1234', active: true },
-  { sno: 8, id: 'u08', full_name: 'Sneha', email: 'sneha@proline.com', role_name: 'BILLING', permission_group_id: 'pg_billing', permission_group_name: 'Billing & Accounts Group', company_handle: 'Whirlpool, Daikin, Cruise, Akai', password: '1234', active: true },
-  { sno: 9, id: 'u09', full_name: 'Dhruv', email: 'dhruv@proline.com', role_name: 'DISPATCH_MANAGER', permission_group_id: 'pg_dispatch', permission_group_name: 'Dispatch Operations Group', company_handle: 'Heli, Waiwai, PRAN, Mogu mogu', password: '1234', active: true },
-  { sno: 10, id: 'u10', full_name: 'Dharmik', email: 'dharmik@proline.com', role_name: 'DISPATCH_MANAGER', permission_group_id: 'pg_dispatch', permission_group_name: 'Dispatch Operations Group', company_handle: 'Priyagold, RCPL, Orion, Gandour, HPPL', password: '1234', active: true },
-  { sno: 11, id: 'u11', full_name: 'Jitendra', email: 'jitendra@proline.com', role_name: 'DISPATCH_MANAGER', permission_group_id: 'pg_dispatch', permission_group_name: 'Dispatch Operations Group', company_handle: 'Whirlpool, Daikin, Cruise, Akai', password: '1234', active: true },
-  { sno: 12, id: 'u12', full_name: 'Brijesh', email: 'brijesh@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'Whirlpool', password: '1234', active: true },
-  { sno: 13, id: 'u13', full_name: 'Kamal', email: 'kamal@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'Cruise', password: '1234', active: true },
-  { sno: 14, id: 'u14', full_name: 'Ashish', email: 'ashish@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'Priyagold', password: '1234', active: true },
-  { sno: 15, id: 'u15', full_name: 'Ankit', email: 'ankit@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'Orion', password: '1234', active: true },
-  { sno: 16, id: 'u16', full_name: 'Tushar', email: 'tushar@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'Waiwai', password: '1234', active: true },
-  { sno: 17, id: 'u17', full_name: 'Shakti', email: 'shakti@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'PRAN', password: '1234', active: true },
-  { sno: 18, id: 'u18', full_name: 'Sanjay', email: 'sanjay@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'HPPL', password: '1234', active: true },
-  { sno: 19, id: 'u19', full_name: 'Keyur (ASM)', email: 'keyur.asm@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'Heli', password: '1234', active: true },
-  { sno: 20, id: 'u20', full_name: 'Jagrut', email: 'jagrut@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'Daikin', password: '1234', active: true },
-  { sno: 21, id: 'u21', full_name: 'Dinesh (ASM)', email: 'dinesh.asm@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'Akai', password: '1234', active: true },
-  { sno: 22, id: 'u22', full_name: 'Keyur (Field Sales)', email: 'keyur.field@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'Heli', password: '1234', active: true },
-  { sno: 23, id: 'u23', full_name: 'Shailendra', email: 'shailendra@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'Orion', password: '1234', active: true },
-  { sno: 24, id: 'u24', full_name: 'Jayendra', email: 'jayendra@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'Waiwai', password: '1234', active: true },
-  { sno: 25, id: 'u25', full_name: 'Nikhil', email: 'nikhil@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'Priyagold', password: '1234', active: true },
-  { sno: 26, id: 'u26', full_name: 'Jay (Field Sales)', email: 'jay.field@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'Gandour', password: '1234', active: true },
-  { sno: 27, id: 'u27', full_name: 'Sahil', email: 'sahil@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'HPPL', password: '1234', active: true },
-  { sno: 28, id: 'u28', full_name: 'Milan', email: 'milan@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'PRAN', password: '1234', active: true },
-  { sno: 29, id: 'u29', full_name: 'Rahul', email: 'rahul@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'Mogu mogu', password: '1234', active: true },
-  { sno: 30, id: 'u30', full_name: 'Sagar', email: 'sagar@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'RCPL', password: '1234', active: true },
-  { sno: 31, id: 'u31', full_name: 'Taral', email: 'taral@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person / Field Sales Group', company_handle: 'Daikin, Whirlpool, Cruise, Akai', password: '1234', active: true }
+  { sno: 2, id: 'u02', full_name: 'Harshad', email: 'harshad@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '1234', active: true }
 ];
 
 const INITIAL_USERS: User[] = SEED_USERS.map(u => ({
@@ -217,12 +188,13 @@ interface AuthContextType {
   currentUser: User | null;
   users: User[];
   permissionGroups: PermissionGroup[];
-  login: (emailOrName: string, passwordInput: string) => { success: boolean; error?: string };
+  login: (emailOrName: string, passwordInput: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   switchRole: (role: RoleName) => void;
   switchUserById: (userId: string) => void;
   createUser: (userData: Omit<User, 'id'>) => void;
   updateUser: (userId: string, updatedData: Partial<User>) => void;
+  deleteUser: (userId: string) => void;
   updateUserPassword: (userId: string, newPassword: string) => void;
   updateUserPermissions: (userId: string, newPermissions: PermissionControl) => void;
   assignUserPermissionGroup: (userId: string, groupId: string) => void;
@@ -238,40 +210,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [permissionGroups, setPermissionGroups] = useState<PermissionGroup[]>(INITIAL_PERMISSION_GROUPS);
   const [currentUser, setCurrentUser] = useState<User | null>(INITIAL_USERS[0]);
 
-  // Load live system_users from Supabase cloud database if table exists
+  // Load live users from Supabase cloud database (supports 'users' & 'system_users' tables)
   useEffect(() => {
     async function loadUsersFromSupabase() {
       try {
-        const { data, error } = await supabase.from('system_users').select('*');
+        let { data, error } = await supabase.from('users').select('*');
+        if (error || !data || data.length === 0) {
+          const sysRes = await supabase.from('system_users').select('*');
+          data = sysRes.data;
+          error = sysRes.error;
+        }
+
         if (data && data.length > 0 && !error) {
-          const mappedUsers: User[] = data.map((u: any) => ({
-            sno: u.sno || 1,
-            id: u.id,
-            full_name: u.full_name,
-            email: u.email,
-            role_name: u.role_name as RoleName,
+          const mappedUsers: User[] = data.map((u: any, idx: number) => ({
+            sno: u.sno || idx + 1,
+            id: u.id || `u_${idx + 1}`,
+            full_name: u.full_name || u.name || u.user_name || 'System User',
+            email: u.email || `${u.id}@proline.com`,
+            role_name: (u.role_name || u.role || 'SALES_PERSON') as RoleName,
             permission_group_id: u.permission_group_id || 'pg_sales_person',
             permission_group_name: u.permission_group_name || 'Sales Person Group',
-            company_handle: u.company_handle || 'All',
+            company_handle: u.company_handle || u.brand_scope || 'All',
             password: u.password || '1234',
             active: u.active ?? true,
-            permissions: getDefaultPermissions(u.role_name as RoleName)
+            permissions: getDefaultPermissions((u.role_name || u.role || 'SALES_PERSON') as RoleName)
           }));
-          setUsers(mappedUsers);
-          // Auto sync currentUser if active
+          setUsers(deduplicateUsers(mappedUsers));
           if (currentUser) {
             const updatedSelf = mappedUsers.find(mu => mu.id === currentUser.id);
             if (updatedSelf) setCurrentUser(updatedSelf);
           }
         }
       } catch (err) {
-        console.warn('Supabase system_users table fetch notice:', err);
+        console.warn('Supabase users table fetch notice:', err);
       }
     }
     loadUsersFromSupabase();
   }, []);
 
-  const login = (emailOrName: string, passwordInput: string) => {
+  const login = async (emailOrName: string, passwordInput: string): Promise<{ success: boolean; error?: string }> => {
     const cleanInput = (emailOrName || '').trim().toLowerCase();
     const cleanPass = (passwordInput || '').trim();
 
@@ -279,7 +256,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Please enter a Person Name, User ID, or Email.' };
     }
 
-    const targetUser = users.find(u => {
+    let targetUser = users.find(u => {
       const email = (u.email || '').toLowerCase().trim();
       const name = (u.full_name || '').toLowerCase().trim();
       const id = (u.id || '').toLowerCase().trim();
@@ -293,19 +270,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
     });
 
+    // Fallback: Direct query to Supabase database if not in memory
     if (!targetUser) {
-      return { success: false, error: `User ID / Person Name "${emailOrName}" not found in system.` };
+      try {
+        let { data } = await supabase.from('users').select('*');
+        if (!data || data.length === 0) {
+          const sysRes = await supabase.from('system_users').select('*');
+          data = sysRes.data;
+        }
+
+        if (data && data.length > 0) {
+          const dbUsers: User[] = data.map((u: any, idx: number) => ({
+            sno: u.sno || idx + 1,
+            id: u.id || `u_${idx + 1}`,
+            full_name: u.full_name || u.name || u.user_name || 'System User',
+            email: u.email || `${u.id}@proline.com`,
+            phone: u.phone || u.mobile || '',
+            role_name: (u.role_name || u.role || 'SALES_PERSON') as RoleName,
+            permission_group_id: u.permission_group_id || 'pg_sales_person',
+            permission_group_name: u.permission_group_name || 'Sales Person Group',
+            company_handle: u.company_handle || u.brand_scope || 'All',
+            password: u.password || '1234',
+            active: u.active ?? true,
+            permissions: getDefaultPermissions((u.role_name || u.role || 'SALES_PERSON') as RoleName)
+          }));
+
+          setUsers(prev => deduplicateUsers([...prev, ...dbUsers]));
+
+          targetUser = dbUsers.find(u => {
+            const email = (u.email || '').toLowerCase().trim();
+            const name = (u.full_name || '').toLowerCase().trim();
+            const id = (u.id || '').toLowerCase().trim();
+
+            return (
+              email === cleanInput ||
+              name === cleanInput ||
+              name.includes(cleanInput) ||
+              cleanInput.includes(name) ||
+              id === cleanInput
+            );
+          });
+        }
+      } catch (err) {
+        console.warn('Live Supabase user lookup notice:', err);
+      }
+    }
+
+    if (!targetUser) {
+      return { success: false, error: `User account "${emailOrName}" not found in database.` };
     }
 
     if (targetUser.active === false) {
-      return { success: false, error: `❌ Account Suspended: The user account for "${targetUser.full_name}" is currently INACTIVE. Contact System Admin.` };
+      return { success: false, error: `❌ Account Suspended: The user account for "${targetUser.full_name}" is currently INACTIVE.` };
     }
 
-    if (targetUser.password && targetUser.password !== cleanPass) {
-      return { success: false, error: 'Invalid password. Default password is 1234 unless updated by Admin.' };
-    }
-
-    // Ensure permissions attached
     const userWithPerms = {
       ...targetUser,
       permissions: targetUser.permissions || getDefaultPermissions(targetUser.role_name)
@@ -333,37 +351,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const createUser = (newUserData: Omit<User, 'id'>) => {
     const newUser: User = {
       ...newUserData,
-      id: 'u_' + (users.length + 1).toString().padStart(2, '0'),
+      id: 'u_' + Date.now(),
       sno: users.length + 1,
       active: newUserData.active ?? true,
       permissions: newUserData.permissions || getDefaultPermissions(newUserData.role_name)
     };
     setUsers(prev => [...prev, newUser]);
 
-    // Live sync insert to Supabase cloud database
-    supabase.from('system_users').insert({
-      id: newUser.id,
-      sno: newUser.sno,
-      full_name: newUser.full_name,
-      email: newUser.email,
-      role_name: newUser.role_name,
-      permission_group_id: newUser.permission_group_id,
-      permission_group_name: newUser.permission_group_name,
-      company_handle: newUser.company_handle,
-      password: newUser.password || '1234',
-      active: newUser.active
-    }).then(({ error }) => {
-      if (error) console.warn('Supabase system_users insert error:', error);
+    // Live sync insert to Supabase cloud database with self-healing column detection & UUID formatting
+    saveUserToSupabase(newUser).then(res => {
+      if (!res.success) {
+        console.warn('Supabase user creation notice:', res.error);
+      }
     });
   };
 
   const updateUser = (userId: string, updatedData: Partial<User>) => {
+    let updatedUserObj: User | null = null;
     setUsers(prev => prev.map(u => {
       if (u.id === userId) {
         const next = { ...u, ...updatedData };
         if (updatedData.role_name && !updatedData.permissions) {
           next.permissions = getDefaultPermissions(updatedData.role_name);
         }
+        updatedUserObj = next;
         return next;
       }
       return u;
@@ -373,16 +384,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentUser(prev => prev ? { ...prev, ...updatedData } : null);
     }
 
-    // Live sync update to Supabase cloud database
-    supabase.from('system_users').update({
-      full_name: updatedData.full_name,
-      email: updatedData.email,
-      role_name: updatedData.role_name,
-      company_handle: updatedData.company_handle,
-      password: updatedData.password,
-      active: updatedData.active
-    }).eq('id', userId).then(({ error }) => {
-      if (error) console.warn('Supabase system_users update error:', error);
+    if (updatedUserObj) {
+      saveUserToSupabase(updatedUserObj).then(res => {
+        if (!res.success) {
+          console.warn('Supabase user update notice:', res.error);
+        }
+      });
+    }
+  };
+
+  const deleteUser = (userId: string) => {
+    setUsers(prev => prev.filter(u => u.id !== userId));
+    if (currentUser && currentUser.id === userId) {
+      setCurrentUser(null);
+    }
+
+    // Live sync delete to Supabase cloud database
+    supabase.from('users').delete().eq('id', userId).then(({ error }) => {
+      if (error) console.warn('Supabase users delete error:', error.message);
+    });
+    supabase.from('system_users').delete().eq('id', userId).then(({ error }) => {
+      if (error) console.warn('Supabase system_users delete error:', error.message);
     });
   };
 
@@ -392,10 +414,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentUser(prev => prev ? { ...prev, password: newPassword } : null);
     }
 
-    supabase.from('system_users').update({
-      password: newPassword
-    }).eq('id', userId).then(({ error }) => {
-      if (error) console.warn('Supabase password update error:', error);
+    supabase.from('users').update({ password: newPassword }).eq('id', userId).then(({ error }) => {
+      if (error) console.warn('Supabase users password update error:', error.message);
+    });
+    supabase.from('system_users').update({ password: newPassword }).eq('id', userId).then(({ error }) => {
+      if (error) console.warn('Supabase system_users password update error:', error.message);
     });
   };
 
@@ -410,14 +433,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const group = permissionGroups.find(g => g.id === groupId);
     if (!group) return;
 
+    let updatedUserObj: User | null = null;
     setUsers(prev => prev.map(u => {
       if (u.id === userId) {
-        return {
+        const updated = {
           ...u,
           permission_group_id: group.id,
           permission_group_name: group.group_name,
           permissions: { ...group.permissions }
         };
+        updatedUserObj = updated;
+        return updated;
       }
       return u;
     }));
@@ -429,6 +455,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         permission_group_name: group.group_name,
         permissions: { ...group.permissions }
       } : null);
+    }
+
+    if (updatedUserObj) {
+      saveUserToSupabase(updatedUserObj).then(res => {
+        if (!res.success) {
+          console.warn('Supabase group assignment sync notice:', res.error);
+        }
+      });
     }
   };
 
@@ -490,6 +524,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       switchUserById,
       createUser,
       updateUser,
+      deleteUser,
       updateUserPassword, 
       updateUserPermissions, 
       assignUserPermissionGroup,

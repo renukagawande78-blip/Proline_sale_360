@@ -17,7 +17,8 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { Agency } from '../types';
-import { updateAgencyDetails, resolveZoneForAreaAndCity, MOCK_COMPANIES } from '../lib/supabase';
+import { Plus } from 'lucide-react';
+import { updateAgencyDetails, resolveZoneForAreaAndCity, MOCK_COMPANIES, saveAgencyToSupabase, saveAreaToSupabase, saveZoneToSupabase, fetchAreasFromSupabaseTable } from '../lib/supabase';
 
 interface UpdateAgencyModalProps {
   isOpen: boolean;
@@ -112,7 +113,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
   const [agencyName, setAgencyName] = useState('');
   const [agencyCode, setAgencyCode] = useState('');
   const [companyId, setCompanyId] = useState(MOCK_COMPANIES[0]?.id || 'c01');
-  const [accountGroup, setAccountGroup] = useState('Sundry Debtors-Electronics');
+  const [accountGroup, setAccountGroup] = useState('FMCG');
   const [gstin, setGstin] = useState('');
 
   const [contactPerson, setContactPerson] = useState('');
@@ -131,13 +132,71 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
+
+  // Dynamic Lists for City, Area, Zone Dropdowns & Inline Master Addition
+  const [citiesList, setCitiesList] = useState<string[]>([
+    'Surat', 'Surat Rural', 'Navsari', 'Valsad', 'Vapi', 'Bharuch', 'Ankleshwar', 'Bardoli', 'Vyara', 'Ahmedabad', 'Vadodara', 'Rajkot', 'Jamnagar', 'Bhavnagar', 'Gandhinagar'
+  ]);
+
+  const [areasMap, setAreasMap] = useState<Record<string, string[]>>({
+    'Surat': ['Katargam', 'Varachha', 'Amroli', 'Udhna', 'Adajan', 'Vesu', 'Parle Point', 'Piplod', 'Bhatar', 'Ring Road', 'Salabatpura', 'Begumpura', 'Rander', 'Palanpur Jakatnaka', 'Dindoli', 'Pandesara', 'Limbayat'],
+    'Surat Rural': ['Kamrej', 'Bardoli', 'Kadodara', 'Kim', 'Kosamba', 'Mandvi', 'Valod', 'Mahuva', 'Palsana', 'Pasodara', 'Kathor', 'Niyol', 'Kholvad'],
+    'Navsari': ['Navsari City', 'Gandevi', 'Chikhli', 'Jalalpore', 'Vansda', 'Bilimora'],
+    'Valsad': ['Valsad City', 'Pardi', 'Umbergaon', 'Dharampur', 'Kaprada'],
+    'Vapi': ['Vapi GIDC', 'Vapi Town', 'Chanod', 'Dungra', 'Salvav'],
+    'Bharuch': ['Bharuch City', 'Jambusar', 'Zagadia', 'Vagra', 'Amod'],
+    'Ankleshwar': ['Ankleshwar GIDC', 'Ankleshwar Town', 'Panoli', 'Kosamba'],
+    'Bardoli': ['Bardoli Town', 'Mota', 'Valod', 'Buhari', 'Bajipura'],
+    'Vyara': ['Vyara Town', 'Songadh', 'Valod', 'Uchchhal']
+  });
+
+  const [showAddCity, setShowAddCity] = useState(false);
+  const [newCityInput, setNewCityInput] = useState('');
+
+  const [showAddArea, setShowAddArea] = useState(false);
+  const [newAreaInput, setNewAreaInput] = useState('');
+
+  const handleAddCityInline = () => {
+    if (!newCityInput.trim()) return;
+    const cName = newCityInput.trim();
+    if (!citiesList.includes(cName)) {
+      setCitiesList(prev => [...prev, cName]);
+    }
+    setCity(cName);
+    setNewCityInput('');
+    setShowAddCity(false);
+  };
+
+  const handleAddAreaInline = async () => {
+    if (!newAreaInput.trim()) return;
+    const aName = newAreaInput.trim();
+    setAreasMap(prev => ({
+      ...prev,
+      [city]: Array.from(new Set([...(prev[city] || []), aName]))
+    }));
+    setAreaName(aName);
+
+    await saveAreaToSupabase({
+      id: `ar_${Date.now()}`,
+      area_code: `AR-${(city || 'SUR').substring(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`,
+      area_name: aName,
+      city: city,
+      zone_code: 'ZN-SUR-A',
+      region: resolvedZone.region || 'Surat City Zone',
+      description: `New Area added via Agency Master Update: ${aName}`
+    });
+
+    setNewAreaInput('');
+    setShowAddArea(false);
+  };
 
   useEffect(() => {
     if (isOpen && agency) {
       setAgencyName(agency.agency_name || '');
       setAgencyCode(agency.agency_code || '');
       setCompanyId(agency.company_id || MOCK_COMPANIES[0]?.id || 'c01');
-      setAccountGroup(agency.account_group || 'Sundry Debtors-Electronics');
+      setAccountGroup(agency.account_group || 'FMCG');
       setGstin(agency.gstin || agency.gst_number || '');
       setContactPerson(agency.contact_person || '');
       setMobile(agency.mobile || '');
@@ -151,6 +210,33 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
       setBranchName(agency.branch_name || '');
       setCreditLimit(agency.credit_limit || 250000);
       setSuccessNotice(null);
+
+      // Fetch live Areas from Supabase `public.areas`
+      fetchAreasFromSupabaseTable().then(sbAreas => {
+        if (sbAreas && sbAreas.length > 0) {
+          const dynamicCitiesSet = new Set<string>([
+            'Surat', 'Surat Rural', 'Navsari', 'Valsad', 'Vapi', 'Bharuch', 'Ankleshwar', 'Bardoli', 'Vyara'
+          ]);
+          const dynamicAreasMap: Record<string, string[]> = { ...areasMap };
+
+          sbAreas.forEach(item => {
+            const cName = (item.city || 'Surat').trim();
+            const aName = (item.area_name || '').trim();
+
+            dynamicCitiesSet.add(cName);
+
+            if (!dynamicAreasMap[cName]) {
+              dynamicAreasMap[cName] = [];
+            }
+            if (aName && !dynamicAreasMap[cName].includes(aName)) {
+              dynamicAreasMap[cName].push(aName);
+            }
+          });
+
+          setCitiesList(Array.from(dynamicCitiesSet));
+          setAreasMap(dynamicAreasMap);
+        }
+      });
     }
   }, [isOpen, agency]);
 
@@ -159,10 +245,11 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
   const resolvedZone = resolveZoneForAreaAndCity(areaName, city);
   const isSuratZone = resolvedZone.region === 'Surat City Zone';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agencyName.trim() || !city.trim()) return;
     setIsSubmitting(true);
+    setErrorNotice(null);
 
     const updated = updateAgencyDetails(agency.id, {
       agency_name: agencyName.trim(),
@@ -183,8 +270,15 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
       credit_limit: Number(creditLimit)
     });
 
+    const res = await saveAgencyToSupabase(updated);
+    if (!res.success && res.error) {
+      setIsSubmitting(false);
+      setErrorNotice(`⚠️ Supabase Server Error: ${res.error}`);
+      return;
+    }
+
     setIsSubmitting(false);
-    setSuccessNotice(`Party details for "${agencyName}" updated successfully!`);
+    setSuccessNotice(`Party details for "${agencyName}" updated successfully in Supabase!`);
     if (onSuccess) onSuccess(updated);
     setTimeout(() => onClose(), 1400);
   };
@@ -251,8 +345,18 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
           </button>
         </div>
 
-        {/* ── FORM BODY ────────────────────────────── */}
-        <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '1.5rem', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {/* ── MODAL BODY FORM ────────────────────── */}
+        <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+
+          {errorNotice && (
+            <div style={{
+              background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.4)',
+              borderRadius: 12, padding: '0.85rem 1rem', color: '#fb7185',
+              fontSize: '0.825rem', fontWeight: 800
+            }}>
+              {errorNotice}
+            </div>
+          )}
 
           {/* Success Notice */}
           {successNotice && (
@@ -280,27 +384,17 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
                 <FieldInput value={agencyCode} onChange={setAgencyCode} placeholder="AG-XXX-001" mono />
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
               <div>
                 <FieldLabel>Account Group</FieldLabel>
                 <FieldSelect value={accountGroup} onChange={setAccountGroup}>
-                  <option value="Sundry Debtors-Electronics">Sundry Debtors-Electronics</option>
-                  <option value="Sundry Debtors-FMCG">Sundry Debtors-FMCG</option>
-                  <option value="Sundry Debtors-Retail">Sundry Debtors-Retail</option>
-                  <option value="Sundry Debtors-General">Sundry Debtors-General</option>
+                  <option value="FMCG">FMCG</option>
+                  <option value="FMCD">FMCD</option>
                 </FieldSelect>
               </div>
               <div>
                 <FieldLabel>15-Digit GSTIN</FieldLabel>
                 <FieldInput value={gstin} onChange={setGstin} placeholder="24AABCC1234D1Z5" mono />
-              </div>
-              <div>
-                <FieldLabel>Brand / Company Scope</FieldLabel>
-                <FieldSelect value={companyId} onChange={setCompanyId}>
-                  {MOCK_COMPANIES.map(c => (
-                    <option key={c.id} value={c.id}>{c.company_name}</option>
-                  ))}
-                </FieldSelect>
               </div>
             </div>
           </section>
@@ -327,18 +421,148 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
           {/* ── SECTION 3: Territory & Zone ── */}
           <section style={{ background: '#0a1525', border: '1px solid #1e293b', borderRadius: 14, padding: '1.15rem' }}>
             <SectionHeader icon={MapPin} label="3 · Territory, City & Auto-Zone Assignment" color="52,211,153" />
+            
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
               <div>
-                <FieldLabel required>City</FieldLabel>
-                <FieldInput value={city} onChange={setCity} placeholder="Surat" required />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                  <FieldLabel required>City</FieldLabel>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCity(!showAddCity)}
+                    style={{
+                      background: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid rgba(56, 189, 248, 0.35)',
+                      color: '#38bdf8',
+                      borderRadius: 6,
+                      padding: '0.1rem 0.45rem',
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.2rem'
+                    }}
+                  >
+                    <Plus size={10} /> Add City
+                  </button>
+                </div>
+
+                {showAddCity ? (
+                  <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder="New City"
+                      value={newCityInput}
+                      onChange={(e) => setNewCityInput(e.target.value)}
+                      style={{
+                        flex: 1, background: '#141f36', border: '1px solid #38bdf8',
+                        borderRadius: 6, padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCityInline}
+                      style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: 6, padding: '0.35rem 0.6rem', fontSize: '0.725rem', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                ) : null}
+
+                <FieldSelect value={city} onChange={(v) => {
+                  setCity(v);
+                  const avail = areasMap[v] || [];
+                  if (avail.length > 0) setAreaName(avail[0]);
+                }}>
+                  {citiesList.map((c, idx) => (
+                    <option key={idx} value={c}>{c}</option>
+                  ))}
+                </FieldSelect>
               </div>
+
               <div>
-                <FieldLabel>Area / Locality</FieldLabel>
-                <FieldInput value={areaName} onChange={setAreaName} placeholder="Katargam" />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                  <FieldLabel>Area / Locality</FieldLabel>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddArea(!showAddArea)}
+                    style={{
+                      background: 'rgba(52, 211, 153, 0.15)',
+                      border: '1px solid rgba(52, 211, 153, 0.35)',
+                      color: '#34d399',
+                      borderRadius: 6,
+                      padding: '0.1rem 0.45rem',
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.2rem'
+                    }}
+                  >
+                    <Plus size={10} /> Add Area
+                  </button>
+                </div>
+
+                {showAddArea ? (
+                  <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder={`New Area for ${city}`}
+                      value={newAreaInput}
+                      onChange={(e) => setNewAreaInput(e.target.value)}
+                      style={{
+                        flex: 1, background: '#141f36', border: '1px solid #34d399',
+                        borderRadius: 6, padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddAreaInline}
+                      style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, padding: '0.35rem 0.6rem', fontSize: '0.725rem', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      Save Area
+                    </button>
+                  </div>
+                ) : null}
+
+                <FieldSelect value={areaName} onChange={setAreaName}>
+                  {(areasMap[city] || [areaName || city]).map((a, idx) => (
+                    <option key={idx} value={a}>{a}</option>
+                  ))}
+                </FieldSelect>
               </div>
+
               <div>
-                <FieldLabel>Assigned Salesperson</FieldLabel>
-                <FieldInput value={assignedSalesperson} onChange={setAssignedSalesperson} placeholder="Salesperson name" />
+                <FieldLabel>Assigned Field Salesperson</FieldLabel>
+                <FieldSelect value={assignedSalesperson} onChange={setAssignedSalesperson}>
+                  {[
+                    'Chirag Desai',
+                    'Chirag Patel',
+                    'Amit Shah',
+                    'Vikram Desai',
+                    'Jay',
+                    'Dixit',
+                    'Sumit',
+                    'Keyur (Field Sales)',
+                    'Shailendra',
+                    'Jayendra',
+                    'Nikhil',
+                    'Jay (Field Sales)',
+                    'Sahil',
+                    'Milan',
+                    'Brijesh',
+                    'Kamal',
+                    'Ashish',
+                    'Ankit',
+                    'Tushar',
+                    'Shakti',
+                    'Sanjay',
+                    'Jagrut'
+                  ].map(rep => (
+                    <option key={rep} value={rep}>{rep}</option>
+                  ))}
+                </FieldSelect>
               </div>
             </div>
 
@@ -370,47 +594,23 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
                 {resolvedZone.zone_name} · {resolvedZone.region}
               </span>
             </div>
-          </section>
 
-          {/* ── SECTION 4: Bank & Financial ── */}
-          <section style={{ background: '#0a1525', border: '1px solid #1e293b', borderRadius: 14, padding: '1.15rem' }}>
-            <SectionHeader icon={Landmark} label="4 · Bank Account & Financial Credit Terms" color="249,115,22" />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
-              <div>
-                <FieldLabel>Bank Name</FieldLabel>
-                <FieldInput value={bankName} onChange={setBankName} placeholder="HDFC Bank" />
-              </div>
-              <div>
-                <FieldLabel>Bank Account Number</FieldLabel>
-                <FieldInput value={accountNumber} onChange={setAccountNumber} placeholder="XXXXXXXXXXXX" mono />
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem' }}>
-              <div>
-                <FieldLabel>IFSC Code</FieldLabel>
-                <FieldInput value={ifscCode} onChange={setIfscCode} placeholder="HDFC0001234" mono />
-              </div>
-              <div>
-                <FieldLabel>Branch Name</FieldLabel>
-                <FieldInput value={branchName} onChange={setBranchName} placeholder="Ring Road Branch" />
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginTop: '0.85rem' }}>
               <div>
                 <FieldLabel>Approved Credit Limit (₹)</FieldLabel>
                 <FieldInput type="number" value={creditLimit} onChange={v => setCreditLimit(Number(v))} />
               </div>
-            </div>
-
-            {/* Credit Limit Visual */}
-            <div style={{
-              marginTop: '0.75rem', padding: '0.65rem 1rem',
-              background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.2)',
-              borderRadius: 10, display: 'flex', alignItems: 'center', gap: '0.6rem'
-            }}>
-              <ShieldCheck size={15} color="#38bdf8" />
-              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Approved Credit Limit:</span>
-              <span style={{ fontSize: '0.9rem', fontWeight: 900, color: '#38bdf8' }}>
-                ₹{Number(creditLimit).toLocaleString('en-IN')}
-              </span>
+              <div style={{
+                padding: '0.5rem 0.85rem',
+                background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.2)',
+                borderRadius: 10, display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '1.4rem'
+              }}>
+                <ShieldCheck size={15} color="#38bdf8" />
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Limit:</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 900, color: '#38bdf8' }}>
+                  ₹{Number(creditLimit).toLocaleString('en-IN')}
+                </span>
+              </div>
             </div>
           </section>
         </form>

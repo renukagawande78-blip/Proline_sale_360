@@ -4,6 +4,7 @@ import { Company, SegmentType } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { downloadSampleCSV } from '../../lib/masterImportExport';
 import { BulkImportModal } from '../../components/BulkImportModal';
+import { checkIsSuperAdmin, deleteCompanyFromSupabase, saveCompanyToSupabase } from '../../lib/supabase';
 
 interface BrandsMasterViewProps {
   companies: Company[];
@@ -12,22 +13,67 @@ interface BrandsMasterViewProps {
 
 export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, searchQuery }) => {
   const { currentUser } = useAuth();
-  const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
+  const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const [selectedSegment, setSelectedSegment] = useState<'ALL' | SegmentType>('ALL');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
 
-  const handleDeleteBrand = (companyId: string, companyName: string) => {
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+
+  const handleDeleteBrand = async (companyId: string, companyName: string) => {
     if (window.confirm(`Are you sure you want to delete Brand Master "${companyName}"? This action is restricted to Super Admin authority.`)) {
       setLocalCompanies(prev => prev.filter(c => c.id !== companyId));
+      await deleteCompanyFromSupabase(companyId);
+      setFeedbackMsg(`Deleted brand "${companyName}" from Supabase!`);
+      setTimeout(() => setFeedbackMsg(null), 2500);
     }
   };
 
-  const handleEditBrand = (c: Company) => {
+  const handleEditBrand = async (c: Company) => {
     const newName = window.prompt(`Update Brand / Company Name for ${c.company_code}:`, c.company_name);
-    if (newName && newName.trim()) {
-      setLocalCompanies(prev => prev.map(item => item.id === c.id ? { ...item, company_name: newName.trim() } : item));
+    if (newName === null) return;
+    const isFmcgChoice = window.confirm(`Set Segment to FMCG? Click OK for FMCG, Cancel for FMCD. (Current: ${c.segment || 'FMCG'})`);
+    const newSegment: SegmentType = isFmcgChoice ? 'FMCG' : 'FMCD';
+
+    const updated: Company = { 
+      ...c, 
+      company_name: newName.trim() || c.company_name,
+      segment: newSegment
+    };
+
+    setLocalCompanies(prev => prev.map(item => item.id === c.id ? updated : item));
+    const res = await saveCompanyToSupabase(updated);
+    if (res.success) {
+      setFeedbackMsg(`Updated "${updated.company_name}" (${updated.segment}) in Supabase database!`);
+    } else {
+      setFeedbackMsg(`Updated locally! (Supabase notice: ${res.error})`);
     }
+    setTimeout(() => setFeedbackMsg(null), 3500);
+  };
+
+  const handleAddNewBrand = async () => {
+    const name = window.prompt('Enter New Brand Company Name (e.g. Acme FMCG):');
+    if (!name || !name.trim()) return;
+    const code = window.prompt('Enter Brand Code (e.g. ACME):', name.slice(0, 4).toUpperCase());
+    if (!code || !code.trim()) return;
+    const segment = window.confirm('Click OK for FMCG, Cancel for FMCD') ? 'FMCG' : 'FMCD';
+
+    const newCompany: Company = {
+      id: 'c_' + Date.now(),
+      company_code: code.trim().toUpperCase(),
+      company_name: name.trim(),
+      handle: code.trim().toUpperCase(),
+      segment: segment as SegmentType
+    };
+
+    setLocalCompanies(prev => [...prev, newCompany]);
+    const res = await saveCompanyToSupabase(newCompany);
+    if (res.success) {
+      setFeedbackMsg(`New Brand "${newCompany.company_name}" saved to Supabase!`);
+    } else {
+      setFeedbackMsg(`New Brand created! (Supabase notice: ${res.error})`);
+    }
+    setTimeout(() => setFeedbackMsg(null), 3500);
   };
 
   const activeCompanies = localCompanies.length > 0 ? localCompanies : companies;
@@ -63,46 +109,6 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
       }}>
         {/* Segmented Filter Pills */}
         <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setIsImportModalOpen(true)}
-            title="Upload CSV sheet for bulk importing brand master records"
-            style={{
-              padding: '0.45rem 0.85rem',
-              borderRadius: '8px',
-              border: '1px solid rgba(2, 132, 199, 0.4)',
-              background: 'rgba(2, 132, 199, 0.15)',
-              color: '#38bdf8',
-              fontWeight: 800,
-              fontSize: '0.75rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem'
-            }}
-          >
-            <FileSpreadsheet size={14} /> 📥 Import Sheet (.CSV)
-          </button>
-
-          <button
-            onClick={() => downloadSampleCSV('companies')}
-            title="Download sample sheet for bulk uploading brands"
-            style={{
-              padding: '0.45rem 0.85rem',
-              borderRadius: '8px',
-              border: '1px solid #38bdf8',
-              background: 'rgba(56, 189, 248, 0.12)',
-              color: '#38bdf8',
-              fontWeight: 800,
-              fontSize: '0.75rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              marginRight: '0.5rem'
-            }}
-          >
-            <FileSpreadsheet size={14} /> Download Sample Sheet (.CSV)
-          </button>
           <button
             onClick={() => setSelectedSegment('ALL')}
             style={{
@@ -161,10 +167,25 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
           </button>
         </div>
 
-        <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>
-          Segment Scope: <strong style={{ color: '#38bdf8' }}>{selectedSegment === 'ALL' ? 'FMCG & FMCD Brands' : selectedSegment}</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            onClick={handleAddNewBrand}
+            className="btn btn-primary"
+            style={{ padding: '0.45rem 0.85rem', fontSize: '0.775rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <Building2 size={14} /> + Register New Brand
+          </button>
+          <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>
+            Segment Scope: <strong style={{ color: '#38bdf8' }}>{selectedSegment === 'ALL' ? 'FMCG & FMCD Brands' : selectedSegment}</strong>
+          </div>
         </div>
       </div>
+
+      {feedbackMsg && (
+        <div style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid #38bdf8', color: '#38bdf8', padding: '0.6rem 1rem', borderRadius: 8, fontSize: '0.825rem', fontWeight: 700 }}>
+          {feedbackMsg}
+        </div>
+      )}
 
       {/* Brand Table */}
       <div className="data-table-container">
@@ -187,21 +208,34 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
                   <td><code style={{ color: '#38bdf8', fontWeight: 800 }}>{c.company_code}</code></td>
                   <td><strong style={{ color: '#f8fafc' }}>{c.company_name}</strong></td>
                   <td>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.3rem',
-                      padding: '0.25rem 0.65rem',
-                      borderRadius: '8px',
-                      fontSize: '0.75rem',
-                      fontWeight: 800,
-                      background: isFmcg ? 'rgba(16, 185, 129, 0.15)' : 'rgba(251, 191, 36, 0.15)',
-                      color: isFmcg ? '#34d399' : '#fbbf24',
-                      border: isFmcg ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(251, 191, 36, 0.3)'
-                    }}>
-                      {isFmcg ? <ShoppingBag size={12} /> : <Zap size={12} />}
-                      {c.segment || 'FMCG'}
-                    </span>
+                    <select
+                      value={c.segment || 'FMCG'}
+                      onChange={async (e) => {
+                        const newSegment = e.target.value as SegmentType;
+                        const updated = { ...c, segment: newSegment };
+                        setLocalCompanies(prev => prev.map(item => item.id === c.id ? updated : item));
+                        const res = await saveCompanyToSupabase(updated);
+                        if (res.success) {
+                          setFeedbackMsg(`Updated Segment to "${newSegment}" for ${c.company_name} in Supabase!`);
+                        } else {
+                          setFeedbackMsg(`Segment updated locally! (Supabase notice: ${res.error})`);
+                        }
+                        setTimeout(() => setFeedbackMsg(null), 3000);
+                      }}
+                      style={{
+                        padding: '0.35rem 0.65rem',
+                        borderRadius: '8px',
+                        fontSize: '0.775rem',
+                        fontWeight: 800,
+                        background: isFmcg ? '#064e3b' : '#78350f',
+                        color: isFmcg ? '#34d399' : '#fbbf24',
+                        border: isFmcg ? '1px solid #10b981' : '1px solid #f59e0b',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="FMCG">🛒 FMCG (Fast-Moving Goods)</option>
+                      <option value="FMCD">⚡ FMCD (Durables & Electronics)</option>
+                    </select>
                   </td>
                   <td>
                     <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>

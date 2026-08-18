@@ -1,20 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare, UserCheck, Layers } from 'lucide-react';
-import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, isCompanyAllowedForUser, resolveSegmentForUser } from '../lib/supabase';
+import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, isCompanyAllowedForUser, resolveSegmentForUser, fetchCompaniesFromSupabase, fetchAgenciesFromSupabase, fetchProductsFromSupabase } from '../lib/supabase';
 import { Order, OrderItem, Agency, Product } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface SearchableAgencySelectProps {
   selectedAgencyId: string;
   onSelectAgency: (agencyId: string) => void;
+  agencies?: Agency[];
 }
 
-export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ selectedAgencyId, onSelectAgency }) => {
+export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ selectedAgencyId, onSelectAgency, agencies }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const selectedAgency = MOCK_AGENCIES.find(a => a.id === selectedAgencyId) || MOCK_AGENCIES[0];
+  const activeAgencies = (agencies && agencies.length > 0) ? agencies : MOCK_AGENCIES;
+  const selectedAgency = activeAgencies.find(a => a.id === selectedAgencyId) || activeAgencies[0] || null;
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -26,7 +28,7 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredAgencies = MOCK_AGENCIES.filter(a => {
+  const filteredAgencies = activeAgencies.filter(a => {
     const q = searchQuery.toLowerCase();
     const nameMatch = a.agency_name.toLowerCase().includes(q);
     const areaMatch = (a.area_name || '').toLowerCase().includes(q);
@@ -35,7 +37,8 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
     return nameMatch || areaMatch || cityMatch || codeMatch;
   });
 
-  const formatAgencyLabel = (agency: Agency) => {
+  const formatAgencyLabel = (agency: Agency | null) => {
+    if (!agency) return 'Select Agency...';
     const areaStr = agency.area_name ? ` - ${agency.area_name}` : '';
     const cityStr = agency.city ? ` - ${agency.city}` : '';
     return `${agency.agency_name}${areaStr}${cityStr}`;
@@ -199,8 +202,8 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
 
     // 3. Search Query Match
     const q = searchQuery.toLowerCase();
-    const nameMatch = p.product_name.toLowerCase().includes(q);
-    const codeMatch = p.product_code.toLowerCase().includes(q);
+    const nameMatch = (p?.product_name || '').toLowerCase().includes(q);
+    const codeMatch = (p?.product_code || '').toLowerCase().includes(q);
 
     return matchesCompany && matchesSegment && (nameMatch || codeMatch);
   });
@@ -225,7 +228,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
         }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {selectedProduct.product_name}
+          {selectedProduct?.product_name || 'Select Product'}
         </span>
         <ChevronDown size={14} color="#94a3b8" />
       </div>
@@ -296,7 +299,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                   >
                     <div>
                       <div style={{ fontSize: '0.825rem', fontWeight: 700, color: isSelected ? '#38bdf8' : '#f8fafc' }}>
-                        {p.product_name}
+                        {p?.product_name || 'Product Item'}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: '#34d399', marginTop: 2, fontWeight: 600 }}>
                         Brand: {parentCompany?.company_name || 'General'} | Pack: {p.pcs_per_box} pcs/box | MRP: ₹{p.unit_price}
@@ -351,7 +354,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   });
 
   const [companyId, setCompanyId] = useState<string>('ALL'); // Default to 'ALL' Brands!
-  const [agencyId, setAgencyId] = useState(MOCK_AGENCIES[0].id);
+  const [agencyId, setAgencyId] = useState(MOCK_AGENCIES[0]?.id || '');
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
   const [remarks, setRemarks] = useState('');
   const [items, setItems] = useState<Array<{
@@ -364,12 +367,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     remark?: string;
   }>>([
     {
-      product_id: MOCK_PRODUCTS[0].id,
-      pcs_per_box: MOCK_PRODUCTS[0].pcs_per_box,
+      product_id: MOCK_PRODUCTS[0]?.id || '',
+      pcs_per_box: MOCK_PRODUCTS[0]?.pcs_per_box || 24,
       box_qty: 10,
-      loose_pcs: 5,
+      loose_pcs: 0,
       free_pcs: 0,
-      unit_price: MOCK_PRODUCTS[0].unit_price,
+      unit_price: MOCK_PRODUCTS[0]?.unit_price || 0,
       remark: ''
     }
   ]);
@@ -409,7 +412,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             ...item,
             product_id: defaultProd.id,
             pcs_per_box: defaultProd.pcs_per_box,
-            unit_price: defaultProd.unit_price
+            unit_price: defaultProd.unit_price || defaultProd.mrp_price || 100
           };
         }
         return item;
@@ -420,7 +423,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   useEffect(() => {
     if (orderToEdit) {
       setCompanyId(orderToEdit.company_id || 'ALL');
-      setAgencyId(orderToEdit.agency_id || MOCK_AGENCIES[0].id);
+      setAgencyId(orderToEdit.agency_id || MOCK_AGENCIES[0]?.id || '');
       setDeliveryType(orderToEdit.delivery_type || 'F.O.R');
       setRemarks(orderToEdit.remarks || '');
       if (orderToEdit.salesperson_id) {
@@ -452,13 +455,13 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         ...updated[index],
         product_id: prod.id,
         pcs_per_box: prod.pcs_per_box,
-        unit_price: prod.unit_price
+        unit_price: prod.unit_price || prod.mrp_price || 100
       };
       return updated;
     });
   };
 
-  const handleQuantityChange = (index: number, field: 'box_qty' | 'loose_pcs' | 'free_pcs', val: number) => {
+  const handleQuantityChange = (index: number, field: 'box_qty' | 'free_pcs', val: number) => {
     setItems(prev => {
       const updated = [...prev];
       updated[index] = {
@@ -485,12 +488,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     setItems(prev => [
       ...prev,
       {
-        product_id: firstProd.id,
-        pcs_per_box: firstProd.pcs_per_box,
+        product_id: firstProd?.id || '',
+        pcs_per_box: firstProd?.pcs_per_box || 24,
         box_qty: 5,
         loose_pcs: 0,
         free_pcs: 0,
-        unit_price: firstProd.unit_price,
+        unit_price: firstProd?.unit_price || 0,
         remark: ''
       }
     ]);
@@ -503,24 +506,32 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
   // Auto Calculations
   const processedItems = items.map((item, idx) => {
-    const prod = MOCK_PRODUCTS.find(p => p.id === item.product_id) || MOCK_PRODUCTS[0];
+    const rawItem = item as any;
+    const prod = MOCK_PRODUCTS.find(p => p.id === item.product_id || (p.product_name && p.product_name === rawItem.product_name)) || MOCK_PRODUCTS[0] || {
+      id: item.product_id || `prd_${idx + 1}`,
+      product_name: rawItem.product_name || 'Selected Product SKU',
+      product_code: rawItem.product_code || 'SKU-001',
+      pcs_per_box: 24,
+      unit_price: item.unit_price || 100,
+      mrp_price: rawItem.mrp_price || 120
+    };
     const boxQty = item.box_qty || 0;
-    const loosePcs = item.loose_pcs || 0;
+    const loosePcs = 0;
     const freePcs = item.free_pcs || 0;
-    const pcsPerBox = prod.pcs_per_box || 24;
-    const totalQtyPcs = (boxQty * pcsPerBox) + loosePcs + freePcs;
-    const unitPrice = item.unit_price || prod.unit_price;
-    const mrpPrice = prod.mrp_price || Math.round(unitPrice * 1.15);
-    const totalPrice = (boxQty * pcsPerBox + loosePcs) * unitPrice; // Free pcs not billed in base price
+    const pcsPerBox = prod?.pcs_per_box || 24;
+    const totalQtyPcs = (boxQty * pcsPerBox) + freePcs;
+    const unitPrice = item.unit_price || prod?.unit_price || prod?.mrp_price || 0;
+    const mrpPrice = prod?.mrp_price || Math.round(unitPrice * 1.15);
+    const totalPrice = (boxQty * pcsPerBox) * unitPrice;
 
     return {
       id: `item-${idx + 1}`,
-      product_id: prod.id,
-      product_name: prod.product_name,
-      product_code: prod.product_code,
+      product_id: prod?.id || item.product_id || `prd_${idx + 1}`,
+      product_name: prod?.product_name || rawItem.product_name || 'Selected Product SKU',
+      product_code: prod?.product_code || rawItem.product_code || 'SKU-001',
       pcs_per_box: pcsPerBox,
       box_qty: boxQty,
-      loose_pcs: loosePcs,
+      loose_pcs: 0,
       free_pcs: freePcs,
       total_qty_pcs: totalQtyPcs,
       dispatched_qty_pcs: 0,
@@ -533,7 +544,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   });
 
   const totalBoxQty = processedItems.reduce((acc, curr) => acc + curr.box_qty, 0);
-  const totalLoosePcs = processedItems.reduce((acc, curr) => acc + curr.loose_pcs, 0);
+  const totalLoosePcs = 0;
   const totalFreePcs = processedItems.reduce((acc, curr) => acc + (curr.free_pcs || 0), 0);
   const totalQtyPcs = processedItems.reduce((acc, curr) => acc + curr.total_qty_pcs, 0);
   const totalAmount = processedItems.reduce((acc, curr) => acc + curr.total_price, 0);
@@ -742,7 +753,6 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                 <th style={{ width: 300 }}>Product / SKU Selection</th>
                 <th style={{ textAlign: 'center' }}>MRP Price</th>
                 <th style={{ textAlign: 'center' }}>BOX Qty</th>
-                <th style={{ textAlign: 'center' }}>PCS Qty</th>
                 <th style={{ textAlign: 'center' }}>Free PCS</th>
                 <th style={{ textAlign: 'center' }}>Total Qty (Pcs)</th>
                 <th style={{ width: 140 }}>Remark</th>
@@ -771,16 +781,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                       min="0"
                       value={item.box_qty}
                       onChange={e => handleQuantityChange(index, 'box_qty', parseInt(e.target.value) || 0)}
-                      style={{ width: 55, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
-                    />
-                  </td>
-                  <td>
-                    <input 
-                      type="number" 
-                      min="0"
-                      value={item.loose_pcs}
-                      onChange={e => handleQuantityChange(index, 'loose_pcs', parseInt(e.target.value) || 0)}
-                      style={{ width: 55, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
+                      style={{ width: 65, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
                     />
                   </td>
                   <td>
@@ -789,12 +790,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                       min="0"
                       value={item.free_pcs || 0}
                       onChange={e => handleQuantityChange(index, 'free_pcs', parseInt(e.target.value) || 0)}
-                      style={{ width: 55, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #fbbf24', borderRadius: 4, color: '#fbbf24', fontWeight: 800, margin: '0 auto', display: 'block' }}
+                      style={{ width: 65, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #fbbf24', borderRadius: 4, color: '#fbbf24', fontWeight: 800, margin: '0 auto', display: 'block' }}
                     />
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <span style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.925rem' }}>{item.total_qty_pcs} Pcs</span>
-                    <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>({item.box_qty}B + {item.loose_pcs}L + {item.free_pcs || 0}Free)</span>
+                    <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>({item.box_qty} Box + {item.free_pcs || 0} Free)</span>
                   </td>
                   <td>
                     <input 
@@ -836,7 +837,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', padding: '1rem 1.25rem', borderRadius: 8, border: '1px solid #334155' }}>
           <div>
             <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 700 }}>
-              Total Order Volume: <strong style={{ color: '#38bdf8' }}>{totalBoxQty} Boxes / {totalLoosePcs} Loose / {totalFreePcs} Free ({totalQtyPcs} Total PCS)</strong>
+              Total Order Volume: <strong style={{ color: '#38bdf8' }}>{totalBoxQty} Boxes / {totalFreePcs} Free ({totalQtyPcs} Total PCS)</strong>
             </div>
             <div style={{ fontSize: '0.75rem', color: '#34d399', marginTop: 3 }}>
               🏷️ Order MRP Standard Applied | 🔒 Order Costing Managed by Accounts Gate

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   MapPin, 
   Building2, 
@@ -22,7 +22,16 @@ import {
 } from 'lucide-react';
 import { ZoneMaster, Agency, ZoneRegion } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { MOCK_ZONES } from '../../lib/supabase';
+import { 
+  MOCK_ZONES, 
+  checkIsSuperAdmin, 
+  fetchZonesFromSupabaseAreasTable,
+  saveZoneToSupabase,
+  deleteZoneFromSupabase,
+  addAreaTagToSupabaseZone,
+  removeAreaTagFromSupabaseZone,
+  deduplicateZones
+} from '../../lib/supabase';
 import { downloadSampleCSV } from '../../lib/masterImportExport';
 import { BulkImportModal } from '../../components/BulkImportModal';
 
@@ -33,20 +42,30 @@ interface ZonesMasterViewProps {
 
 export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, searchQuery }) => {
   const { currentUser } = useAuth();
-  const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
+  const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [activeRegionFilter, setActiveRegionFilter] = useState<'ALL' | ZoneRegion>('ALL');
-  const [zonesList, setZonesList] = useState<ZoneMaster[]>(MOCK_ZONES);
+  const [zonesList, setZonesList] = useState<ZoneMaster[]>(() => deduplicateZones(MOCK_ZONES));
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [newAreaInputs, setNewAreaInputs] = useState<Record<string, string>>({});
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
+  useEffect(() => {
+    fetchZonesFromSupabaseAreasTable().then(data => {
+      if (data && data.length > 0) {
+        setZonesList(deduplicateZones(data));
+      }
+    });
+  }, []);
+
   const handleDeleteZone = (zoneId: string, zoneName: string) => {
     if (window.confirm(`Are you sure you want to delete Zone Master "${zoneName}"? This action is restricted to Super Admin authority.`)) {
       setZonesList(prev => prev.filter(z => z.id !== zoneId));
-      setSuccessNotice(`Zone "${zoneName}" deleted by Super Admin.`);
+      deleteZoneFromSupabase(zoneId);
+      setSuccessNotice(`Zone "${zoneName}" deleted from database.`);
+      setTimeout(() => setSuccessNotice(null), 3000);
     }
   };
 
@@ -58,7 +77,45 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
   const [newZoneDesc, setNewZoneDesc] = useState('');
   const [newZoneAreas, setNewZoneAreas] = useState('');
 
+  const [viewMode, setViewMode] = useState<'ZONE_WISE' | 'AREA_WISE'>('ZONE_WISE');
+
   const activeAgencies = localAgencies.length > 0 ? localAgencies : agencies;
+
+  // Area-Wise grouped data memoization
+  const areaWiseList = React.useMemo(() => {
+    const map: Record<string, { areaName: string; zone: ZoneMaster; agencies: Agency[] }> = {};
+
+    zonesList.forEach(zone => {
+      if (activeRegionFilter !== 'ALL' && zone.region !== activeRegionFilter) return;
+
+      (zone.major_areas || []).forEach(area => {
+        const cleanArea = (area || '').trim();
+        if (!cleanArea) return;
+
+        const q = searchQuery.toLowerCase().trim();
+        if (q && !cleanArea.toLowerCase().includes(q) && !zone.zone_name.toLowerCase().includes(q) && !zone.region.toLowerCase().includes(q)) {
+          return;
+        }
+
+        const key = cleanArea.toLowerCase();
+
+        const matchingAgencies = activeAgencies.filter(a => {
+          const aArea = (a.area_name || a.city || '').toLowerCase();
+          return aArea.includes(key) || key.includes(aArea);
+        });
+
+        if (!map[key]) {
+          map[key] = {
+            areaName: cleanArea,
+            zone: zone,
+            agencies: matchingAgencies
+          };
+        }
+      });
+    });
+
+    return Object.values(map);
+  }, [zonesList, activeAgencies, activeRegionFilter, searchQuery]);
 
   const filteredZones = zonesList.filter(z => {
     if (activeRegionFilter !== 'ALL' && z.region !== activeRegionFilter) return false;
@@ -94,6 +151,11 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
     const areaText = (newAreaInputs[zoneId] || '').trim();
     if (!areaText) return;
 
+    const targetZone = zonesList.find(z => z.id === zoneId);
+    if (targetZone) {
+      addAreaTagToSupabaseZone(targetZone, areaText);
+    }
+
     setZonesList(prev => prev.map(z => {
       if (z.id === zoneId) {
         return {
@@ -105,12 +167,17 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
     }));
 
     setNewAreaInputs(prev => ({ ...prev, [zoneId]: '' }));
-    setSuccessNotice(`Added locality "${areaText}" to zone!`);
+    setSuccessNotice(`Added locality "${areaText}" to zone & saved to Supabase!`);
     setTimeout(() => setSuccessNotice(null), 3000);
   };
 
   // Remove Area Tag
   const handleRemoveArea = (zoneId: string, areaToRemove: string) => {
+    const targetZone = zonesList.find(z => z.id === zoneId);
+    if (targetZone) {
+      removeAreaTagFromSupabaseZone(targetZone, areaToRemove);
+    }
+
     setZonesList(prev => prev.map(z => {
       if (z.id === zoneId) {
         return {
@@ -162,13 +229,15 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
       major_areas: parsedAreas.length > 0 ? parsedAreas : ['Central Market', 'Main GIDC']
     };
 
+    saveZoneToSupabase(createdZone);
+
     setZonesList(prev => [...prev, createdZone]);
     setIsAddZoneModalOpen(false);
     setNewZoneName('');
     setNewZoneCode('');
     setNewZoneDesc('');
     setNewZoneAreas('');
-    setSuccessNotice(`New Territory Zone "${createdZone.zone_name}" created successfully!`);
+    setSuccessNotice(`New Territory Zone "${createdZone.zone_name}" saved to Supabase!`);
     setTimeout(() => setSuccessNotice(null), 3500);
   };
 
@@ -280,62 +349,106 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
         borderRadius: '14px',
         border: '1px solid #1e293b'
       }}>
-        {/* Segmented Region Pills */}
-        <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b' }}>
-          <button
-            onClick={() => setActiveRegionFilter('ALL')}
-            style={{
-              padding: '0.45rem 0.95rem',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeRegionFilter === 'ALL' ? '#38bdf8' : 'transparent',
-              color: activeRegionFilter === 'ALL' ? '#090d16' : '#94a3b8',
-              fontWeight: 800,
-              fontSize: '0.775rem',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            All 9 Zones ({zonesList.length})
-          </button>
-          <button
-            onClick={() => setActiveRegionFilter('Surat City Zone')}
-            style={{
-              padding: '0.45rem 0.95rem',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeRegionFilter === 'Surat City Zone' ? '#fbbf24' : 'transparent',
-              color: activeRegionFilter === 'Surat City Zone' ? '#090d16' : '#94a3b8',
-              fontWeight: 800,
-              fontSize: '0.775rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Building2 size={13} /> Surat City (5)
-          </button>
-          <button
-            onClick={() => setActiveRegionFilter('South Gujarat Rural Zone')}
-            style={{
-              padding: '0.45rem 0.95rem',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeRegionFilter === 'South Gujarat Rural Zone' ? '#34d399' : 'transparent',
-              color: activeRegionFilter === 'South Gujarat Rural Zone' ? '#090d16' : '#94a3b8',
-              fontWeight: 800,
-              fontSize: '0.775rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Map size={13} /> South Gujarat Rural (4)
-          </button>
+        {/* Segmented Region Pills & View Switcher */}
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b' }}>
+            <button
+              onClick={() => setActiveRegionFilter('ALL')}
+              style={{
+                padding: '0.45rem 0.95rem',
+                borderRadius: '8px',
+                border: 'none',
+                background: activeRegionFilter === 'ALL' ? '#38bdf8' : 'transparent',
+                color: activeRegionFilter === 'ALL' ? '#090d16' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.775rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              All 9 Zones ({zonesList.length})
+            </button>
+            <button
+              onClick={() => setActiveRegionFilter('Surat City Zone')}
+              style={{
+                padding: '0.45rem 0.95rem',
+                borderRadius: '8px',
+                border: 'none',
+                background: activeRegionFilter === 'Surat City Zone' ? '#fbbf24' : 'transparent',
+                color: activeRegionFilter === 'Surat City Zone' ? '#090d16' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.775rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Building2 size={13} /> Surat City (5)
+            </button>
+            <button
+              onClick={() => setActiveRegionFilter('South Gujarat Rural Zone')}
+              style={{
+                padding: '0.45rem 0.95rem',
+                borderRadius: '8px',
+                border: 'none',
+                background: activeRegionFilter === 'South Gujarat Rural Zone' ? '#34d399' : 'transparent',
+                color: activeRegionFilter === 'South Gujarat Rural Zone' ? '#090d16' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.775rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Map size={13} /> South Gujarat Rural (4)
+            </button>
+          </div>
+
+          {/* View Switcher: By Zone vs By Area Wise */}
+          <div style={{ display: 'flex', gap: '0.25rem', background: '#070e20', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b' }}>
+            <button
+              onClick={() => setViewMode('ZONE_WISE')}
+              style={{
+                padding: '0.45rem 0.85rem',
+                borderRadius: '8px',
+                border: 'none',
+                background: viewMode === 'ZONE_WISE' ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'transparent',
+                color: viewMode === 'ZONE_WISE' ? '#fff' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Building2 size={13} /> 🏢 By Zone View
+            </button>
+            <button
+              onClick={() => setViewMode('AREA_WISE')}
+              style={{
+                padding: '0.45rem 0.85rem',
+                borderRadius: '8px',
+                border: 'none',
+                background: viewMode === 'AREA_WISE' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+                color: viewMode === 'AREA_WISE' ? '#fff' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <MapPin size={13} /> 📍 Area Wise View ({areaWiseList.length} Localities)
+            </button>
+          </div>
         </div>
 
         {/* Action Buttons */}
@@ -360,45 +473,7 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
             <Plus size={14} /> Create Custom Zone
           </button>
 
-          <button
-            onClick={() => setIsImportModalOpen(true)}
-            title="Upload CSV sheet for bulk importing sales zones"
-            style={{
-              padding: '0.45rem 0.85rem',
-              borderRadius: '8px',
-              border: '1px solid rgba(2, 132, 199, 0.4)',
-              background: 'rgba(2, 132, 199, 0.15)',
-              color: '#38bdf8',
-              fontWeight: 800,
-              fontSize: '0.75rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem'
-            }}
-          >
-            <FileSpreadsheet size={14} /> 📥 Import Sheet (.CSV)
-          </button>
 
-          <button
-            onClick={() => downloadSampleCSV('zones')}
-            title="Download sample sheet for bulk uploading zones"
-            style={{
-              padding: '0.45rem 0.85rem',
-              borderRadius: '8px',
-              border: '1px solid #38bdf8',
-              background: 'rgba(56, 189, 248, 0.12)',
-              color: '#38bdf8',
-              fontWeight: 800,
-              fontSize: '0.75rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem'
-            }}
-          >
-            <FileSpreadsheet size={14} /> Download Sample Sheet (.CSV)
-          </button>
 
           <button
             onClick={handleDownloadZoneCSV}
@@ -421,9 +496,112 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
         </div>
       </div>
 
-      {/* Zone Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.25rem' }}>
-        {filteredZones.map(zone => {
+      {/* Cards Grid: Area Wise vs Zone Wise */}
+      {viewMode === 'AREA_WISE' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
+          {areaWiseList.map(item => {
+            const isSurat = item.zone.region === 'Surat City Zone';
+            return (
+              <div
+                key={item.areaName}
+                style={{
+                  background: '#141f36',
+                  borderRadius: '16px',
+                  border: '1px solid #1e293b',
+                  padding: '1.25rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3)'
+                }}
+              >
+                <div>
+                  {/* Header Badge */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 10,
+                        background: 'rgba(56, 189, 248, 0.15)',
+                        border: '1px solid rgba(56, 189, 248, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#38bdf8'
+                      }}>
+                        <MapPin size={18} />
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+                          {item.areaName}
+                        </h3>
+                        <div style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 700 }}>
+                          Locality Area Coverage
+                        </div>
+                      </div>
+                    </div>
+
+                    <span style={{
+                      fontSize: '0.675rem',
+                      fontWeight: 900,
+                      padding: '0.2rem 0.55rem',
+                      borderRadius: '8px',
+                      background: isSurat ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                      color: isSurat ? '#fbbf24' : '#34d399',
+                      border: isSurat ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)'
+                    }}>
+                      {item.zone.zone_name} ({item.zone.zone_code})
+                    </span>
+                  </div>
+
+                  {/* Region & Zone Details */}
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', background: '#0b1329', padding: '0.6rem 0.8rem', borderRadius: 10, marginBottom: '0.85rem', border: '1px solid #1e293b' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <span style={{ color: '#64748b', fontWeight: 700 }}>Parent Territory:</span>
+                      <span style={{ color: '#e2e8f0', fontWeight: 800 }}>{item.zone.zone_name}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <span style={{ color: '#64748b', fontWeight: 700 }}>Region Scope:</span>
+                      <span style={{ color: '#e2e8f0', fontWeight: 800 }}>{item.zone.region}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748b', fontWeight: 700 }}>Locality Agencies:</span>
+                      <span style={{ color: item.agencies.length > 0 ? '#34d399' : '#fbbf24', fontWeight: 800 }}>
+                        {item.agencies.length} Mapped B2B Parties
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Mapped Agencies List in this Locality */}
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.4rem' }}>
+                      Registered Parties in {item.areaName} ({item.agencies.length})
+                    </label>
+                    {item.agencies.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '140px', overflowY: 'auto' }}>
+                        {item.agencies.map(a => (
+                          <div key={a.id} style={{ background: '#1e293b', padding: '0.45rem 0.65rem', borderRadius: 8, fontSize: '0.75rem', color: '#cbd5e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 700, color: '#fff' }}>{a.agency_name}</span>
+                            <span style={{ fontSize: '0.65rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '0.1rem 0.35rem', borderRadius: 4 }}>{a.city || item.areaName}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.725rem', color: '#64748b', fontStyle: 'italic', background: '#0b1329', padding: '0.6rem', borderRadius: 8, textAlign: 'center', border: '1px solid #1e293b' }}>
+                        No registered agencies mapped to {item.areaName} locality yet
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Zone Cards Grid */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.25rem' }}>
+          {filteredZones.map(zone => {
           const zoneAgencies = getAgenciesForZone(zone.zone_name);
           const isSelected = selectedZoneId === zone.id;
           const isSurat = zone.region === 'Surat City Zone';
@@ -608,6 +786,7 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
           );
         })}
       </div>
+      )}
 
       {/* Selected Zone Mapped Parties Re-Mapping Panel */}
       {selectedZone && (

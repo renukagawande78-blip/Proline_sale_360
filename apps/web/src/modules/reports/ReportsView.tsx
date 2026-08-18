@@ -45,7 +45,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
           'Salesperson Name',
           'Delivery Type',
           'Total Box Qty',
-          'Total Loose Pcs',
           'Total Quantity (PCS)',
           'Order Status'
         ];
@@ -58,19 +57,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
           o.salesperson_name || 'N/A',
           o.delivery_type || 'F.O.R',
           o.total_box_qty,
-          o.total_loose_pcs,
           o.total_qty_pcs,
           o.status
         ]);
       } else if (reportType === 'AGENCY') {
         filename = `Proline_OMS_Agency_Quantity_Activity_${lastOrderDays}Days_${todayStr}`;
-        headers = ['Agency Name', 'Last Order Date', 'Status', 'Total Box Qty', 'Total Loose Pcs', 'Total Quantity (PCS)'];
+        headers = ['Agency Name', 'Last Order Date', 'Status', 'Total Box Qty', 'Total Quantity (PCS)'];
         rows = scopedOrders.map(o => [
           o.agency_name || 'N/A',
           o.order_date,
           o.status,
           o.total_box_qty,
-          o.total_loose_pcs,
           o.total_qty_pcs
         ]);
       } else {

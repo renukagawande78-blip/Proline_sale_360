@@ -231,7 +231,7 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
               >
                 <option value="ALL">All Products & SKUs ({MOCK_PRODUCTS.length})</option>
                 {MOCK_PRODUCTS.map(p => (
-                  <option key={p.id} value={p.id}>{p.product_name} (₹{p.unit_price})</option>
+                  <option key={p?.id || 'p'} value={p?.id || ''}>{p?.product_name || 'Product'} (₹{p?.unit_price || 0})</option>
                 ))}
               </select>
             </div>

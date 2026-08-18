@@ -165,7 +165,7 @@ export const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
                   const val = affectedQtys[item.id] !== undefined ? affectedQtys[item.id] : 0;
                   return (
                     <tr key={item.id}>
-                      <td><strong style={{ color: '#f8fafc' }}>{item.product_name}</strong></td>
+                      <td><strong style={{ color: '#f8fafc' }}>{item?.product_name || 'Product SKU'}</strong></td>
                       <td style={{ textAlign: 'center' }}>{item.dispatched_qty_pcs || item.total_qty_pcs}</td>
                       <td style={{ textAlign: 'center' }}>₹{item.unit_price}</td>
                       <td style={{ textAlign: 'center' }}>

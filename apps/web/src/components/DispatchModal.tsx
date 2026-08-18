@@ -227,7 +227,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
                   return (
                     <tr key={item.id}>
-                      <td><strong style={{ color: '#f8fafc' }}>{item.product_name}</strong></td>
+                      <td><strong style={{ color: '#f8fafc' }}>{item?.product_name || 'Product SKU'}</strong></td>
                       <td style={{ textAlign: 'center' }}>{item.total_qty_pcs}</td>
                       <td style={{ textAlign: 'center' }}>
                         <span style={{ fontWeight: 800, color: stockAvailable > 0 ? '#34d399' : '#f43f5e' }}>
