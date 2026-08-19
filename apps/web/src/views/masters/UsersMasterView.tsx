@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Mail, Phone, ShieldCheck, Eye, EyeOff, UserCheck, UserX, Building2, Lock, FileSpreadsheet, Edit3, Trash2 } from 'lucide-react';
-import { User } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { Mail, Phone, ShieldCheck, Eye, EyeOff, UserCheck, UserX, Building2, Lock, FileSpreadsheet, Edit3, Trash2, CheckCircle2, RefreshCw } from 'lucide-react';
+import { User, RoleName } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { downloadSampleCSV } from '../../lib/masterImportExport';
 import { BulkImportModal } from '../../components/BulkImportModal';
-import { checkIsSuperAdmin, deleteUserFromSupabase, saveUserToSupabase } from '../../lib/supabase';
+import { checkIsSuperAdmin, deleteUserFromSupabase, saveUserToSupabase, fetchUsersFromSupabase, deduplicateUsers } from '../../lib/supabase';
 
 interface UsersMasterViewProps {
   users: User[];
@@ -19,6 +19,32 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users: initial
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [localUsers, setLocalUsers] = useState<User[]>(initialUsers);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialUsers && initialUsers.length > 0) {
+      setLocalUsers(prev => {
+        const merged = deduplicateUsers([...initialUsers, ...prev]);
+        return merged;
+      });
+    }
+  }, [initialUsers]);
+
+  const handleSyncLiveUsers = async () => {
+    setIsSyncing(true);
+    setNoticeMsg('🔄 Syncing live System Users from Supabase database...');
+    const liveList = await fetchUsersFromSupabase();
+    if (liveList && liveList.length > 0) {
+      const merged = deduplicateUsers([...liveList, ...localUsers]);
+      setLocalUsers(merged);
+      setNoticeMsg(`✅ Live Sync Complete! Loaded ${liveList.length} System Users from Supabase!`);
+    } else {
+      setNoticeMsg('ℹ️ Sync checked: Supabase users table loaded successfully.');
+    }
+    setIsSyncing(false);
+    setTimeout(() => setNoticeMsg(null), 3500);
+  };
 
   const activeUsers = localUsers.length > 0 ? localUsers : initialUsers;
 
@@ -37,16 +63,30 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users: initial
       onOpenUserMgmtModal(u);
     } else {
       const newName = window.prompt(`Update User Full Name for ${u.email}:`, u.full_name);
-      if (newName && newName.trim()) {
-        const updated = { ...u, full_name: newName.trim() };
-        setLocalUsers(prev => prev.map(item => item.id === u.id ? updated : item));
-        await saveUserToSupabase(updated);
-        if (updateUser) {
-          updateUser(u.id, updated);
-        }
+      if (newName === null) return;
+
+      const currentHandle = u.company_handle || 'All';
+      const newScope = window.prompt(
+        `Update Mapped Brand Handles for "${newName.trim() || u.full_name}" (enter multiple brand names comma-separated e.g. Priyagold, Orion, Whirlpool, or 'All'):`, 
+        currentHandle
+      );
+
+      const updated: User = { 
+        ...u, 
+        full_name: newName.trim() || u.full_name,
+        company_handle: newScope !== null ? (newScope.trim() || 'All') : currentHandle
+      };
+
+      setLocalUsers(prev => prev.map(item => item.id === u.id ? updated : item));
+      await saveUserToSupabase(updated);
+      if (updateUser) {
+        updateUser(u.id, updated);
       }
+      setNoticeMsg(`Updated user "${updated.full_name}" (Brand Scope: ${updated.company_handle}) in Supabase!`);
+      setTimeout(() => setNoticeMsg(null), 3500);
     }
   };
+
 
   const filteredUsers = activeUsers.filter(u => 
     u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -71,25 +111,66 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users: initial
     }
   };
 
+  useEffect(() => {
+
+    if (initialUsers && initialUsers.length > 0) {
+      setLocalUsers(prev => {
+        const list = [...prev];
+        initialUsers.forEach(u => {
+          if (!list.some(x => x.id === u.id || x.email === u.email)) {
+            list.push(u);
+          }
+        });
+        return list;
+      });
+    }
+  }, [initialUsers]);
+
   return (
     <>
       <BulkImportModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         masterType="users"
+        onImportSuccess={(newUsers) => {
+          setLocalUsers(prev => [...(newUsers as User[]), ...prev]);
+        }}
       />
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        {onOpenUserMgmtModal && isSuperAdmin && (
-          <button
-            className="btn btn-primary"
-            onClick={() => onOpenUserMgmtModal()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, fontSize: '0.8rem' }}
-          >
-            + Register New User
-          </button>
-        )}
+
+
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 600 }}>
+          System Accounts & Roles ({filteredUsers.length})
+        </div>
+        <button
+          onClick={handleSyncLiveUsers}
+          disabled={isSyncing}
+          style={{
+            padding: '0.45rem 0.85rem',
+            borderRadius: '8px',
+            border: '1px solid #38bdf8',
+            background: 'rgba(56, 189, 248, 0.1)',
+            color: '#38bdf8',
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.35rem'
+          }}
+        >
+          <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} /> {isSyncing ? 'Syncing...' : 'Sync Live DB'}
+        </button>
       </div>
+
+      {noticeMsg && (
+        <div style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid #38bdf8', color: '#38bdf8', padding: '0.65rem 1rem', borderRadius: 8, fontSize: '0.825rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <CheckCircle2 size={16} /> {noticeMsg}
+        </div>
+      )}
+
 
       <div className="data-table-container">
       <table className="data-table">
@@ -122,10 +203,45 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users: initial
                 </td>
 
                 <td>
-                  <span className="role-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <ShieldCheck size={12} /> {u.role_name.replace(/_/g, ' ')}
-                  </span>
+                  <select
+                    value={u.role_name}
+                    onChange={async (e) => {
+                      const newRole = e.target.value as RoleName;
+                      const updatedUser = { ...u, role_name: newRole };
+                      setLocalUsers(prev => prev.map(item => item.id === u.id ? updatedUser : item));
+                      if (updateUser) {
+                        updateUser(u.id, { role_name: newRole });
+                      }
+                      const res = await saveUserToSupabase(updatedUser);
+                      if (res.success) {
+                        setNoticeMsg(`Updated System Role to "${newRole.replace(/_/g, ' ')}" for ${u.full_name} in Supabase!`);
+                      } else {
+                        setNoticeMsg(`Updated role locally! (Supabase notice: ${res.error})`);
+                      }
+                      setTimeout(() => setNoticeMsg(null), 3000);
+                    }}
+                    style={{
+                      padding: '0.35rem 0.6rem',
+                      background: '#0f172a',
+                      border: '1px solid #38bdf8',
+                      borderRadius: '8px',
+                      color: '#38bdf8',
+                      fontSize: '0.775rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="SUPER_ADMIN">SUPER ADMIN</option>
+                    <option value="AREA_SALES_MANAGER">AREA SALES MANAGER (ASM)</option>
+                    <option value="SALES_PERSON">SALES PERSON</option>
+                    <option value="SALES_ADMIN">SALES ADMIN</option>
+                    <option value="ACCOUNTS">ACCOUNTS & FINANCE</option>
+                    <option value="DISPATCH_MANAGER">DISPATCH MANAGER</option>
+                    <option value="BILLING">BILLING CLERK</option>
+                  </select>
                 </td>
+
 
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}>
@@ -142,10 +258,48 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users: initial
                 </td>
 
                 <td>
-                  <span style={{ color: '#34d399', fontWeight: 700, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const currentHandle = u.company_handle || 'All';
+                      const newHandle = window.prompt(
+                        `Update Brand Handle Scope for "${u.full_name}" (enter multiple brand names comma-separated e.g. Priyagold, Orion, Whirlpool, RCPL or 'All'):`, 
+                        currentHandle
+                      );
+                      if (newHandle !== null && newHandle.trim() !== currentHandle) {
+                        const updatedUser = { ...u, company_handle: newHandle.trim() || 'All' };
+                        setLocalUsers(prev => prev.map(item => item.id === u.id ? updatedUser : item));
+                        if (updateUser) {
+                          updateUser(u.id, { company_handle: newHandle.trim() || 'All' });
+                        }
+                        const res = await saveUserToSupabase(updatedUser);
+                        if (res.success) {
+                          setNoticeMsg(`Updated Mapped Brand Scope to "${newHandle.trim() || 'All'}" for ${u.full_name} in Supabase!`);
+                        } else {
+                          setNoticeMsg(`Updated brand scope locally! (Supabase notice: ${res.error})`);
+                        }
+                        setTimeout(() => setNoticeMsg(null), 3500);
+                      }
+                    }}
+                    title="Click to edit multiple mapped brand company handles"
+                    style={{
+                      background: 'rgba(52, 211, 153, 0.12)',
+                      border: '1px solid rgba(52, 211, 153, 0.35)',
+                      color: '#34d399',
+                      padding: '0.3rem 0.65rem',
+                      borderRadius: '8px',
+                      fontSize: '0.775rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}
+                  >
                     <Building2 size={13} /> {u.company_handle || 'All'}
-                  </span>
+                  </button>
                 </td>
+
 
                 <td>
                   <button

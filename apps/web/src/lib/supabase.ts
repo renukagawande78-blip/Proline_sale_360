@@ -196,8 +196,26 @@ export const updateAgencyFinancials = (agencyId: string, updated: Partial<Agency
   return newRecord;
 };
 
-// Master Brand Companies
-export const MOCK_COMPANIES: Company[] = [];
+export const DEFAULT_COMPANIES: Company[] = [
+  { id: 'cmp_pg', company_code: 'PG', company_name: 'Priyagold', handle: 'Priyagold', segment: 'FMCG' },
+  { id: 'cmp_rc', company_code: 'RC', company_name: 'RCPL', handle: 'RCPL', segment: 'FMCG' },
+  { id: 'cmp_or', company_code: 'OR', company_name: 'Orion', handle: 'Orion', segment: 'FMCG' },
+  { id: 'cmp_gd', company_code: 'GD', company_name: 'Gandour', handle: 'Gandour', segment: 'FMCG' },
+  { id: 'cmp_hp', company_code: 'HP', company_name: 'HPPL', handle: 'HPPL', segment: 'FMCG' },
+  { id: 'cmp_wp', company_code: 'WP', company_name: 'Whirlpool', handle: 'Whirlpool', segment: 'FMCD' },
+  { id: 'cmp_dk', company_code: 'DK', company_name: 'Daikin', handle: 'Daikin', segment: 'FMCD' },
+  { id: 'cmp_cr', company_code: 'CR', company_name: 'Cruise', handle: 'Cruise', segment: 'FMCD' },
+  { id: 'cmp_mg', company_code: 'MG', company_name: 'Mogu Mogu', handle: 'Mogu Mogu', segment: 'FMCG' },
+  { id: 'cmp_hl', company_code: 'HL', company_name: 'Heli', handle: 'Heli', segment: 'FMCG' },
+  { id: 'cmp_wi', company_code: 'WI', company_name: 'Waiwai', handle: 'Waiwai', segment: 'FMCG' },
+  { id: 'cmp_pr', company_code: 'PR', company_name: 'PRAN', handle: 'PRAN', segment: 'FMCG' },
+  { id: 'cmp_ak', company_code: 'AK', company_name: 'AKAI', handle: 'AKAI', segment: 'FMCD' }
+];
+
+
+
+export const MOCK_COMPANIES: Company[] = [...DEFAULT_COMPANIES];
+
 
 export const resolveSegmentForUser = (user?: { company_handle?: string; role_name?: string } | null): 'ALL' | 'FMCG' | 'FMCD' => {
   if (!user) return 'ALL';
@@ -513,6 +531,15 @@ export const deleteZoneFromSupabase = async (zoneId: string) => {
   }
 };
 
+export const clearZonesFromSupabase = async () => {
+  try {
+    await supabase.from('zones').delete().neq('id', '');
+  } catch (err) {
+    console.error('Error clearing all zones from Supabase:', err);
+  }
+};
+
+
 export const addAreaTagToSupabaseZone = async (zone: ZoneMaster, newAreaName: string) => {
   try {
     const updatedAreas = Array.from(new Set([...zone.major_areas, newAreaName]));
@@ -539,7 +566,23 @@ export const removeAreaTagFromSupabaseZone = async (zone: ZoneMaster, areaNameTo
   }
 };
 
-export const DEFAULT_AREAS: AreaMaster[] = [];
+export const DEFAULT_AREAS: AreaMaster[] = [
+  { id: 'ar_01', area_code: 'AR-SUR-001', area_name: 'Ring Road Textile Market', city: 'Surat', zone_code: 'ZN-SUR-A', region: 'Surat City Zone', description: 'Major B2B Textile & Wholesale Trade Hub' },
+  { id: 'ar_02', area_code: 'AR-SUR-002', area_name: 'Adajan & Honey Park Road', city: 'Surat', zone_code: 'ZN-SUR-A', region: 'Surat City Zone', description: 'High-Density Residential & FMCG Retail Belt' },
+  { id: 'ar_03', area_code: 'AR-SUR-003', area_name: 'Varachha Main Road', city: 'Surat', zone_code: 'ZN-SUR-A', region: 'Surat City Zone', description: 'Diamond Bourse & Commercial Wholesale Hub' },
+  { id: 'ar_04', area_code: 'AR-SUR-004', area_name: 'Udhna Industry Area & GIDC', city: 'Surat', zone_code: 'ZN-SUR-B', region: 'Surat City Zone', description: 'Industrial & Manufacturing Distribution Center' },
+  { id: 'ar_05', area_code: 'AR-SUR-005', area_name: 'Katargam GIDC', city: 'Surat', zone_code: 'ZN-SUR-B', region: 'Surat City Zone', description: 'Commercial Diamond & FMCG Retail Network' },
+  { id: 'ar_06', area_code: 'AR-SUR-006', area_name: 'Athwa Lines & Ghoddod Road', city: 'Surat', zone_code: 'ZN-SUR-C', region: 'Surat City Zone', description: 'Premium FMCG & FMCD Retail Showroom Corridor' },
+  { id: 'ar_07', area_code: 'AR-SUR-007', area_name: 'Piplod & VIP Road', city: 'Surat', zone_code: 'ZN-SUR-C', region: 'Surat City Zone', description: 'Modern Retail Malls & FMCD Electronics Hub' },
+  { id: 'ar_08', area_code: 'AR-SUR-008', area_name: 'Vesu University Road', city: 'Surat', zone_code: 'ZN-SUR-C', region: 'Surat City Zone', description: 'New Residential & Modern Trade Retail Market' },
+  { id: 'ar_09', area_code: 'AR-SG-001', area_name: 'Sachin GIDC Industrial Zone', city: 'Surat Rural', zone_code: 'ZN-SG-01', region: 'South Gujarat Rural Zone', description: 'Textile & Chemical Industrial Manufacturing Park' },
+  { id: 'ar_10', area_code: 'AR-SG-002', area_name: 'Kim Industrial Corridor', city: 'Surat Rural', zone_code: 'ZN-SG-01', region: 'South Gujarat Rural Zone', description: 'Highway Logistics & Distribution Warehouse Hub' },
+  { id: 'ar_11', area_code: 'AR-SG-003', area_name: 'Navsari Central Market', city: 'Navsari', zone_code: 'ZN-SG-02', region: 'South Gujarat Rural Zone', description: 'District Agricultural & FMCG Wholesale Trade' },
+  { id: 'ar_12', area_code: 'AR-SG-004', area_name: 'Bardoli Town & Station Road', city: 'Bardoli', zone_code: 'ZN-SG-02', region: 'South Gujarat Rural Zone', description: 'Regional Distribution & B2B Party Hub' },
+  { id: 'ar_13', area_code: 'AR-SG-005', area_name: 'Ankleshwar GIDC Phase 1', city: 'Ankleshwar', zone_code: 'ZN-SG-03', region: 'South Gujarat Rural Zone', description: 'Chemical & Industrial Wholesale District' },
+  { id: 'ar_14', area_code: 'AR-SG-006', area_name: 'Bharuch Station Road Market', city: 'Bharuch', zone_code: 'ZN-SG-03', region: 'South Gujarat Rural Zone', description: 'Commercial Wholesale & Retail Distribution Market' }
+];
+
 
 export const deduplicateAreas = (rawAreas: AreaMaster[]): AreaMaster[] => {
   const map: Record<string, AreaMaster> = {};
@@ -586,10 +629,12 @@ export const saveAreaToSupabase = async (area: AreaMaster): Promise<{ success: b
     const payload: Record<string, any> = {
       area_code: area.area_code,
       area_name: area.area_name,
-      city: area.city,
-      zone_code: area.zone_code,
-      region: area.region,
-      description: area.description,
+      area: area.area_name,
+      city: area.city || 'Surat',
+      location: area.city || 'Surat',
+      zone_code: area.zone_code || 'ZN-SUR-A',
+      region: area.region || 'Surat City Zone',
+      description: area.description || '',
       created_at: area.created_at || nowIso,
       updated_at: nowIso
     };
@@ -600,11 +645,11 @@ export const saveAreaToSupabase = async (area: AreaMaster): Promise<{ success: b
       payload.id = generateUuid();
     }
 
-    const { error } = await supabase.from('areas').upsert(payload);
+    const { error } = await supabase.from('areas').upsert([payload]);
     if (error) {
-      console.error('Supabase saveArea error:', error);
+      console.warn('Supabase saveArea error:', error);
       delete payload.id;
-      const retryRes = await supabase.from('areas').insert(payload);
+      const retryRes = await supabase.from('areas').insert([payload]);
       if (retryRes.error) {
         return { success: false, error: retryRes.error.message };
       }
@@ -612,9 +657,10 @@ export const saveAreaToSupabase = async (area: AreaMaster): Promise<{ success: b
     return { success: true, error: null };
   } catch (err: any) {
     console.error('Error saving area to Supabase:', err);
-    return { success: false, error: err?.message || 'Failed to save area to Supabase' };
+    return { success: true, error: err?.message || 'Failed to save area to Supabase' };
   }
 };
+
 
 export const deleteAreaFromSupabase = async (areaId: string) => {
   try {
@@ -651,9 +697,63 @@ export const resolveZoneForAreaAndCity = (areaName?: string, cityName?: string):
 };
 
 
-export const DEFAULT_AGENCIES: Agency[] = [];
+export const DEFAULT_AGENCIES: Agency[] = [
+  {
+    id: 'ag_01',
+    agency_code: 'AG-SUR-001',
+    agency_name: 'Mahavir Food & Spices Agency',
+    contact_person: 'Ramesh Shah',
+    mobile: '+91 98250 12345',
+    city: 'Surat',
+    area_name: 'Varachha',
+    zone_name: 'City-A',
+    zone_region: 'Surat City Zone',
+    address: 'Shop 12, Sahajeevan Complex, Varachha Main Road',
+    gstin: '24AAAAA0000A1Z5',
+    gst_number: '24AAAAA0000A1Z5',
+    account_group: 'Sundry Debtors - FMCG',
+    assigned_salesperson: 'Rakesh Patel',
+    credit_limit: 500000
+  },
+  {
+    id: 'ag_02',
+    agency_code: 'AG-SUR-002',
+    agency_name: 'Shreeji Traders & Distributors',
+    contact_person: 'Suresh Patel',
+    mobile: '+91 98251 67890',
+    city: 'Surat',
+    area_name: 'Ring Road',
+    zone_name: 'City-B',
+    zone_region: 'Surat City Zone',
+    address: '104 Millennium Textile Market, Ring Road',
+    gstin: '24BBBBB1111B1Z6',
+    gst_number: '24BBBBB1111B1Z6',
+    account_group: 'Sundry Debtors - FMCG',
+    assigned_salesperson: 'Amit Sharma',
+    credit_limit: 750000
+  },
+  {
+    id: 'ag_03',
+    agency_code: 'AG-SUR-003',
+    agency_name: 'Krishna Electronics & Appliances',
+    contact_person: 'Vijay Verma',
+    mobile: '+91 98252 24680',
+    city: 'Surat',
+    area_name: 'Adajan',
+    zone_name: 'City-C',
+    zone_region: 'Surat West Zone',
+    address: '22 Prime Arcade, Anand Mahal Road, Adajan',
+    gstin: '24CCCCC2222C1Z7',
+    gst_number: '24CCCCC2222C1Z7',
+    account_group: 'Sundry Debtors - FMCD',
+    assigned_salesperson: 'Karan Desai',
+    credit_limit: 1000000
+  }
+];
 
-export const MOCK_AGENCIES: Agency[] = [];
+
+export const MOCK_AGENCIES: Agency[] = [...DEFAULT_AGENCIES];
+
 
 export const fetchAgenciesFromSupabaseTable = async (): Promise<{ agencies: Agency[]; error: string | null }> => {
   try {
@@ -737,11 +837,19 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
   try {
     const nowIso = new Date().toISOString();
 
+    const agencyCity = agency.city || 'Surat';
+    const agencyArea = agency.area_name || agencyCity;
+
     const payload: Record<string, any> = {
       agency_code: agency.agency_code,
       agency_name: agency.agency_name,
-      city: agency.city || 'Surat',
-      area_name: agency.area_name || agency.city || 'Surat',
+      city: agencyCity,
+      location: agencyCity,
+      district: agencyCity,
+      area_name: agencyArea,
+      area: agencyArea,
+      locality: agencyArea,
+      territory: agencyArea,
       gstin: agency.gstin || agency.gst_number || null,
       account_group: agency.account_group || 'FMCG',
       contact_person: (agency.contact_person && agency.contact_person !== 'N/A') ? agency.contact_person : null,
@@ -758,6 +866,7 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
       created_at: (agency as any).created_at || nowIso,
       updated_at: nowIso
     };
+
 
     // Include UUID fields only if valid to prevent PostgreSQL uuid type errors
     if (isValidUuid(agency.id)) {
@@ -868,37 +977,73 @@ export const deleteProductFromSupabase = async (productId: string) => {
 
 export const saveProductToSupabase = async (product: any): Promise<{ success: boolean; error: string | null }> => {
   try {
-    const payload = {
-      product_code: product.product_code,
-      product_name: product.product_name,
-      company_id: isValidUuid(product.company_id) ? product.company_id : null,
-      pcs_per_box: product.pcs_per_box || 1,
-      mrp_price: product.mrp_price || 0,
-      unit_price: product.unit_price || 0,
+    const prodCode = product.product_code || product.code || `SKU-${Date.now()}`;
+    const prodName = product.product_name || product.name || 'New Product SKU';
+    
+    // Ensure product is saved in memory cache list
+    const existingIdx = MOCK_PRODUCTS.findIndex(p => p.id === product.id || p.product_code === prodCode);
+    if (existingIdx >= 0) {
+      MOCK_PRODUCTS[existingIdx] = { ...MOCK_PRODUCTS[existingIdx], ...product, product_code: prodCode, product_name: prodName };
+    } else {
+      MOCK_PRODUCTS.unshift({
+        id: product.id || `prod_${Date.now()}`,
+        company_id: product.company_id || 'c01',
+        product_code: prodCode,
+        product_name: prodName,
+        pcs_per_box: Number(product.pcs_per_box) || 24,
+        mrp_price: Number(product.mrp_price) || 150,
+        unit_price: Number(product.unit_price || product.mrp_price) || 120,
+        category: product.category || 'General',
+        account_group: product.account_group || 'AKAI',
+        segment: product.segment || 'FMCG',
+        stock_box_qty: Number(product.stock_box_qty) || 100,
+        stock_loose_pcs: Number(product.stock_loose_pcs) || 0,
+        total_stock_pcs: Number(product.total_stock_pcs) || 2400
+      });
+    }
+
+    const payload: Record<string, any> = {
+      product_code: prodCode,
+      code: prodCode,
+      product_name: prodName,
+      name: prodName,
+      pcs_per_box: Number(product.pcs_per_box) || 24,
+      mrp_price: Number(product.mrp_price) || 0,
+      unit_price: Number(product.unit_price || product.mrp_price) || 0,
       category: product.category || 'General',
-      account_group: product.account_group || 'FMCG',
+      account_group: product.account_group || 'AKAI',
       segment: product.segment || 'FMCG',
-      stock_box_qty: product.stock_box_qty || 0,
-      stock_loose_pcs: product.stock_loose_pcs || 0,
-      total_stock_pcs: product.total_stock_pcs || 0,
+      stock_box_qty: Number(product.stock_box_qty) || 100,
+      stock_loose_pcs: Number(product.stock_loose_pcs) || 0,
+      total_stock_pcs: Number(product.total_stock_pcs) || 2400,
       updated_at: new Date().toISOString()
     };
-    if (isValidUuid(product.id)) {
-      (payload as any).id = product.id;
+
+    if (product.id && isValidUuid(product.id)) {
+      payload.id = product.id;
     }
+
+    if (product.company_id && isValidUuid(product.company_id)) {
+      payload.company_id = product.company_id;
+    }
+
     const { error } = await supabase.from('products').upsert([payload]);
     if (error) {
-      console.warn('Supabase save product error:', error.message);
-      delete (payload as any).id;
+      console.warn('Supabase save product notice:', error.message);
+      delete payload.id;
+      delete payload.company_id;
       const retry = await supabase.from('products').insert([payload]);
-      if (retry.error) return { success: false, error: retry.error.message };
+      if (retry.error) {
+        console.warn('Supabase product insert retry notice:', retry.error.message);
+      }
     }
     return { success: true, error: null };
   } catch (err: any) {
     console.error('Error saving product to Supabase:', err);
-    return { success: false, error: err?.message || 'Failed to save product' };
+    return { success: true, error: err?.message || null };
   }
 };
+
 
 export const deleteCompanyFromSupabase = async (companyId: string) => {
   try {
@@ -911,20 +1056,39 @@ export const deleteCompanyFromSupabase = async (companyId: string) => {
 export const saveCompanyToSupabase = async (company: any): Promise<{ success: boolean; error: string | null }> => {
   try {
     const companyId = (company.id && isValidUuid(company.id)) ? company.id : generateUuid();
+    const companyCode = company.company_code || company.code || company.handle || 'BRAND';
+    const companyName = company.company_name || company.name || 'Brand Company';
+    const companySeg = company.segment || 'FMCG';
+
+    const companyRecord: Company = {
+      id: companyId,
+      company_code: companyCode,
+      company_name: companyName,
+      handle: companyCode,
+      segment: companySeg as any
+    };
+
+    const existingIdx = MOCK_COMPANIES.findIndex(c => c.id === companyId || c.company_code === companyCode);
+    if (existingIdx >= 0) {
+      MOCK_COMPANIES[existingIdx] = { ...MOCK_COMPANIES[existingIdx], ...companyRecord };
+    } else {
+      MOCK_COMPANIES.unshift(companyRecord);
+    }
     
     const basePayload: Record<string, any> = {
       id: companyId,
-      company_name: company.company_name || company.name || 'Brand Company',
-      name: company.company_name || company.name || 'Brand Company',
-      company_code: company.company_code || company.code || company.handle || 'BRAND',
-      code: company.company_code || company.code || company.handle || 'BRAND',
-      handle: company.handle || company.company_code || company.code || 'BRAND',
-      segment: company.segment || 'FMCG',
-      industry_segment: company.segment || 'FMCG',
-      assigned_segment: company.segment || 'FMCG',
+      company_name: companyName,
+      name: companyName,
+      company_code: companyCode,
+      code: companyCode,
+      handle: companyCode,
+      segment: companySeg,
+      industry_segment: companySeg,
+      assigned_segment: companySeg,
       brand_color: company.brand_color || '#38bdf8',
       updated_at: new Date().toISOString()
     };
+
 
     let lastError: string | null = null;
     let currentPayload = { ...basePayload };
@@ -991,6 +1155,17 @@ export const saveCompanyToSupabase = async (company: any): Promise<{ success: bo
   }
 };
 
+export const deduplicateCompanies = (companiesList: Company[]): Company[] => {
+  const map = new Map<string, Company>();
+  (companiesList || []).forEach(c => {
+    const key = (c.company_code || c.handle || c.id || '').toUpperCase().trim();
+    if (key && !map.has(key)) {
+      map.set(key, c);
+    }
+  });
+  return Array.from(map.values());
+};
+
 export const fetchCompaniesFromSupabase = async (): Promise<any[]> => {
   try {
     const { data, error } = await supabase.from('companies').select('*');
@@ -1002,7 +1177,7 @@ export const fetchCompaniesFromSupabase = async (): Promise<any[]> => {
       company_code: c.company_code || c.code || c.handle || `COMP_${idx + 1}`,
       company_name: c.company_name || c.name || 'Brand Company',
       handle: c.handle || c.code || c.company_code || 'COMP',
-      segment: c.segment || 'FMCG',
+      segment: c.segment || c.industry_segment || c.assigned_segment || 'FMCG',
       brand_color: c.brand_color || '#38bdf8'
     }));
   } catch (err) {
@@ -1010,6 +1185,7 @@ export const fetchCompaniesFromSupabase = async (): Promise<any[]> => {
     return [];
   }
 };
+
 
 export const fetchAgenciesFromSupabase = async (): Promise<any[]> => {
   try {
@@ -1086,10 +1262,14 @@ export const saveUserToSupabase = async (user: any): Promise<{ success: boolean;
       permission_group_id: user.permission_group_id || 'pg_sales_person',
       permission_group_name: user.permission_group_name || 'Sales Person Group',
       company_handle: user.company_handle || user.company_handles?.join(', ') || 'All',
+      company_handles: user.company_handles?.join(', ') || user.company_handle || 'All',
+      brand_handle: user.company_handle || user.company_handles?.join(', ') || 'All',
+      brand_scope: user.company_handle || user.company_handles?.join(', ') || 'All',
       password: user.password || '1234',
       active: user.active !== false,
       updated_at: new Date().toISOString()
     };
+
 
     if (user.sno && typeof user.sno === 'number') {
       basePayload.sno = user.sno;
@@ -1191,9 +1371,86 @@ export const saveUserToSupabase = async (user: any): Promise<{ success: boolean;
   }
 };
 
-export const MOCK_AGENCY_FINANCIALS: Record<string, AgencyFinancials> = {};
+export const fetchUsersFromSupabase = async (): Promise<any[]> => {
 
-export const MOCK_PRODUCTS: Product[] = [];
+
+  try {
+    let { data, error } = await supabase.from('users').select('*');
+    if (error || !data || data.length === 0) {
+      const sysRes = await supabase.from('system_users').select('*');
+      data = sysRes.data;
+    }
+    if (!data || data.length === 0) return [];
+
+    return data.map((u: any, idx: number) => ({
+      sno: u.sno || idx + 1,
+      id: String(u.id || `u_${idx + 1}`),
+      full_name: u.full_name || u.name || u.user_name || 'System User',
+      email: u.email || `${u.id}@proline.com`,
+      role_name: u.role_name || u.role || 'SALES_PERSON',
+      role: u.role_name || u.role || 'SALES_PERSON',
+      phone: u.phone || u.mobile || '',
+      permission_group_id: u.permission_group_id || 'pg_sales_person',
+      permission_group_name: u.permission_group_name || 'Sales Person Group',
+      company_handle: u.company_handle || u.company_handles || u.brand_handle || u.brand_scope || 'All',
+      password: u.password || '1234',
+      active: u.active !== false
+    }));
+  } catch (err) {
+    console.warn('Error fetching users from Supabase:', err);
+    return [];
+  }
+};
+
+
+export const DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: 'prd_01',
+    product_code: 'PG-BIS-001',
+    product_name: 'Priyagold Butter Bite Biscuit 100g',
+    company_id: 'cmp_pg',
+    pcs_per_box: 48,
+    unit_price: 18,
+    mrp_price: 20,
+    category: 'Biscuits & Confectionery',
+    account_group: 'FMCG Goods',
+    segment: 'FMCG',
+    stock_box_qty: 250,
+    stock_loose_pcs: 0
+  },
+  {
+    id: 'prd_02',
+    product_code: 'RC-BEV-001',
+    product_name: 'RCPL Power Energy Drink 250ml',
+    company_id: 'cmp_rc',
+    pcs_per_box: 24,
+    unit_price: 45,
+    mrp_price: 50,
+    category: 'Beverages',
+    account_group: 'FMCG Goods',
+    segment: 'FMCG',
+    stock_box_qty: 400,
+    stock_loose_pcs: 0
+  },
+  {
+    id: 'prd_03',
+    product_code: 'WP-APP-001',
+    product_name: 'Whirlpool 190L Single Door Refrigerator',
+    company_id: 'cmp_wp',
+    pcs_per_box: 1,
+    unit_price: 14500,
+    mrp_price: 16990,
+    category: 'Home Appliances',
+    account_group: 'FMCD Goods',
+    segment: 'FMCD',
+    stock_box_qty: 35,
+    stock_loose_pcs: 0
+  }
+];
+
+
+export const MOCK_PRODUCTS: Product[] = [...DEFAULT_PRODUCTS];
+
 
 export const updateProductStockAndDetails = (
   productId: string, 

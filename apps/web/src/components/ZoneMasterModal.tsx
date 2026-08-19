@@ -13,10 +13,12 @@ import {
   Users,
   ChevronRight,
   Sparkles,
-  Edit2
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { ZoneMaster, Agency, ZoneRegion } from '../types';
-import { MOCK_ZONES } from '../lib/supabase';
+import { MOCK_ZONES, clearZonesFromSupabase } from '../lib/supabase';
+
 
 interface ZoneMasterModalProps {
   isOpen: boolean;
@@ -82,6 +84,14 @@ export const ZoneMasterModal: React.FC<ZoneMasterModalProps> = ({
       return z;
     }));
   };
+
+  const handleClearAllZones = async () => {
+    if (window.confirm('⚠️ Are you sure you want to CLEAR ALL Zone Master records?')) {
+      setZonesList([]);
+      await clearZonesFromSupabase();
+    }
+  };
+
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
@@ -153,18 +163,22 @@ export const ZoneMasterModal: React.FC<ZoneMasterModalProps> = ({
             </button>
           </div>
 
-          {/* Search Box */}
-          <div className="relative min-w-[240px]">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search zone or area name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-            />
+          {/* Search & Actions */}
+          <div className="flex items-center space-x-2">
+            <div className="relative min-w-[240px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search zone or area name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
+            </div>
           </div>
         </div>
+
+
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">

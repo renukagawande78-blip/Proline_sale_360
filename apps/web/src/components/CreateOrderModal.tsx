@@ -1,6 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare, UserCheck, Layers } from 'lucide-react';
-import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, isCompanyAllowedForUser, resolveSegmentForUser, fetchCompaniesFromSupabase, fetchAgenciesFromSupabase, fetchProductsFromSupabase } from '../lib/supabase';
+import { 
+  MOCK_COMPANIES, 
+  MOCK_AGENCIES, 
+  MOCK_PRODUCTS, 
+  isCompanyAllowedForUser, 
+  resolveSegmentForUser, 
+  fetchCompaniesFromSupabase, 
+  fetchAgenciesFromSupabaseTable, 
+  fetchProductsFromSupabase,
+  deduplicateCompanies,
+  deduplicateAgencies,
+  deduplicateProducts 
+} from '../lib/supabase';
+
 import { Order, OrderItem, Agency, Product } from '../types';
 import { useAuth } from '../context/AuthContext';
 
@@ -158,6 +171,8 @@ interface SearchableProductSelectProps {
   selectedSegment: string;
   userCompanyHandle?: string;
   onSelectProduct: (productId: string) => void;
+  products?: Product[];
+  companies?: any[];
 }
 
 export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({ 
@@ -165,13 +180,18 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
   selectedCompanyId,
   selectedSegment,
   userCompanyHandle,
-  onSelectProduct 
+  onSelectProduct,
+  products,
+  companies
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const selectedProduct = MOCK_PRODUCTS.find(p => p.id === selectedProductId) || MOCK_PRODUCTS[0];
+  const activeProducts = (products && products.length > 0) ? products : MOCK_PRODUCTS;
+  const activeCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES;
+
+  const selectedProduct = activeProducts.find(p => p.id === selectedProductId) || activeProducts[0];
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -183,20 +203,20 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredProducts = MOCK_PRODUCTS.filter(p => {
+  const filteredProducts = activeProducts.filter(p => {
     // 1. Company Brand Filter: if specific company selected, match company_id. If 'ALL', match userCompanyHandle scope!
     let matchesCompany = true;
     if (selectedCompanyId && selectedCompanyId !== 'ALL') {
       matchesCompany = p.company_id === selectedCompanyId;
     } else {
-      const parentCompany = MOCK_COMPANIES.find(c => c.id === p.company_id);
+      const parentCompany = activeCompanies.find(c => c.id === p.company_id);
       matchesCompany = isCompanyAllowedForUser(parentCompany?.company_name, userCompanyHandle, parentCompany?.company_code);
     }
 
     // 2. Segment Filter: if FMCG or FMCD selected, match segment
     let matchesSegment = true;
     if (selectedSegment && selectedSegment !== 'ALL') {
-      const parentCompany = MOCK_COMPANIES.find(c => c.id === p.company_id);
+      const parentCompany = activeCompanies.find(c => c.id === p.company_id);
       matchesSegment = (parentCompany?.segment === selectedSegment) || (p.segment === selectedSegment);
     }
 
@@ -207,6 +227,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
 
     return matchesCompany && matchesSegment && (nameMatch || codeMatch);
   });
+
 
   return (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
@@ -322,9 +343,11 @@ interface CreateOrderModalProps {
   onClose: () => void;
   onSubmitOrder: (order: Order) => void;
   orderToEdit?: Order | null;
+  initialAgencyId?: string;
 }
 
-export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, onSubmitOrder, orderToEdit }) => {
+export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, onSubmitOrder, orderToEdit, initialAgencyId }) => {
+
   const { currentUser, users } = useAuth();
 
   const salesTeamMembers = users.filter(u => 
@@ -346,15 +369,47 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   const activeSalesperson = users.find(u => u.id === salespersonId) || currentUser;
   const activeSalespersonHandle = activeSalesperson?.company_handle || currentUser?.company_handle || 'All';
 
+  // Live state fetched directly from Supabase
+  const [liveCompanies, setLiveCompanies] = useState<any[]>(MOCK_COMPANIES);
+  const [liveAgencies, setLiveAgencies] = useState<Agency[]>(MOCK_AGENCIES);
+  const [liveProducts, setLiveProducts] = useState<Product[]>(MOCK_PRODUCTS);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    async function loadLiveDataFromSupabase() {
+      try {
+        const [compData, agRes, prodData] = await Promise.all([
+          fetchCompaniesFromSupabase(),
+          fetchAgenciesFromSupabaseTable(),
+          fetchProductsFromSupabase()
+        ]);
+        if (isMounted) {
+          if (compData && compData.length > 0) setLiveCompanies(deduplicateCompanies([...compData, ...MOCK_COMPANIES]));
+          if (agRes && agRes.agencies && agRes.agencies.length > 0) setLiveAgencies(deduplicateAgencies([...agRes.agencies, ...MOCK_AGENCIES]));
+          if (prodData && prodData.length > 0) setLiveProducts(deduplicateProducts([...prodData, ...MOCK_PRODUCTS]));
+        }
+      } catch (err) {
+        console.warn('Supabase live fetch notice in CreateOrderModal:', err);
+      }
+    }
+    loadLiveDataFromSupabase();
+    return () => { isMounted = false; };
+  }, [isOpen]);
+
+  const activeCompaniesPool = (liveCompanies && liveCompanies.length > 0) ? liveCompanies : MOCK_COMPANIES;
+  const activeAgenciesPool = (liveAgencies && liveAgencies.length > 0) ? liveAgencies : MOCK_AGENCIES;
+
   // Brands allowed for active salesperson & segment filter
-  const allowedBrandsForActiveSalesperson = MOCK_COMPANIES.filter(c => {
+  const allowedBrandsForActiveSalesperson = activeCompaniesPool.filter(c => {
     const matchesBrand = isCompanyAllowedForUser(c.company_name, activeSalespersonHandle, c.company_code);
     const matchesSegment = selectedSegment === 'ALL' || c.segment === selectedSegment;
     return matchesBrand && matchesSegment;
   });
 
   const [companyId, setCompanyId] = useState<string>('ALL'); // Default to 'ALL' Brands!
-  const [agencyId, setAgencyId] = useState(MOCK_AGENCIES[0]?.id || '');
+  const [agencyId, setAgencyId] = useState(activeAgenciesPool[0]?.id || '');
+
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
   const [remarks, setRemarks] = useState('');
   const [items, setItems] = useState<Array<{
@@ -367,15 +422,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     remark?: string;
   }>>([
     {
-      product_id: MOCK_PRODUCTS[0]?.id || '',
-      pcs_per_box: MOCK_PRODUCTS[0]?.pcs_per_box || 24,
+      product_id: liveProducts[0]?.id || MOCK_PRODUCTS[0]?.id || '',
+      pcs_per_box: liveProducts[0]?.pcs_per_box || MOCK_PRODUCTS[0]?.pcs_per_box || 24,
       box_qty: 10,
       loose_pcs: 0,
       free_pcs: 0,
-      unit_price: MOCK_PRODUCTS[0]?.unit_price || 0,
+      unit_price: liveProducts[0]?.unit_price || MOCK_PRODUCTS[0]?.unit_price || 0,
       remark: ''
     }
   ]);
+
 
   // Auto-sync company brand dropdown and product item list whenever selected Salesperson changes
   useEffect(() => {
@@ -392,21 +448,43 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       setSelectedSegment(spSegment);
     }
 
-    // 2. Reset companyId to 'ALL'
-    setCompanyId('ALL');
+    // 2. Determine allowed companies for this salesperson
+    const allowedCompanies = activeCompaniesPool.filter(c => 
+      isCompanyAllowedForUser(c.company_name, spHandle, c.company_code)
+    );
 
-    // 3. Ensure line items use products belonging to allowed brands for this salesperson
-    const allowedCompanyIds = MOCK_COMPANIES
-      .filter(c => isCompanyAllowedForUser(c.company_name, spHandle, c.company_code))
-      .map(c => c.id);
+    // If single brand mapped to salesperson (e.g. Sagar -> Mogu Mogu), auto-select that single brand!
+    if (allowedCompanies.length === 1) {
+      setCompanyId(allowedCompanies[0].id);
+    } else {
+      setCompanyId('ALL');
+    }
 
-    const validProducts = MOCK_PRODUCTS.filter(p => allowedCompanyIds.length === 0 || allowedCompanyIds.includes(p.company_id));
+    // 3. Auto-sync agency selector if current agency is not allowed for this salesperson
+    const allowedAgencies = activeAgenciesPool.filter(a => {
+      const spName = (activeSp.full_name || '').toLowerCase();
+      const assignedSp = (a.assigned_salesperson || '').toLowerCase();
+      const matchesSp = assignedSp && (assignedSp.includes(spName) || spName.includes(assignedSp));
+      const matchesBrand = isCompanyAllowedForUser(a.account_group || a.agency_name, spHandle);
+      return matchesSp || matchesBrand || spHandle === 'All';
+    });
+
+    if (allowedAgencies.length > 0 && !allowedAgencies.some(a => a.id === agencyId)) {
+      setAgencyId(allowedAgencies[0].id);
+    }
+
+    // 4. Ensure line items use products belonging to allowed brands for this salesperson
+    const allowedCompanyIds = allowedCompanies.map(c => c.id);
+    const activeProductsPool = (liveProducts && liveProducts.length > 0) ? liveProducts : MOCK_PRODUCTS;
+    const validProducts = activeProductsPool.filter(p => 
+      allowedCompanyIds.length === 0 || allowedCompanyIds.includes(p.company_id) || isCompanyAllowedForUser(p.product_name, spHandle)
+    );
 
     if (validProducts.length > 0) {
       const defaultProd = validProducts[0];
       setItems(prev => prev.map(item => {
-        const prod = MOCK_PRODUCTS.find(p => p.id === item.product_id);
-        const isProdValid = prod && (allowedCompanyIds.length === 0 || allowedCompanyIds.includes(prod.company_id));
+        const prod = activeProductsPool.find(p => p.id === item.product_id);
+        const isProdValid = prod && (allowedCompanyIds.length === 0 || allowedCompanyIds.includes(prod.company_id) || isCompanyAllowedForUser(prod.product_name, spHandle));
         if (!isProdValid) {
           return {
             ...item,
@@ -420,7 +498,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     }
   }, [salespersonId, isOpen, orderToEdit, users, currentUser]);
 
+
   useEffect(() => {
+    if (!isOpen) return;
     if (orderToEdit) {
       setCompanyId(orderToEdit.company_id || 'ALL');
       setAgencyId(orderToEdit.agency_id || MOCK_AGENCIES[0]?.id || '');
@@ -440,8 +520,11 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           remark: item.remark || ''
         })));
       }
+    } else if (initialAgencyId) {
+      setAgencyId(initialAgencyId);
     }
-  }, [orderToEdit, isOpen]);
+  }, [orderToEdit, initialAgencyId, isOpen]);
+
 
   if (!isOpen) return null;
 
@@ -675,11 +758,15 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                 }}
                 style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem' }}
               >
-                {salesTeamMembers.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.full_name} ({u.role_name.replace(/_/g, ' ')})
-                  </option>
-                ))}
+                {salesTeamMembers.map(u => {
+                  const scopeStr = u.company_handle ? ` [Mapped: ${u.company_handle}]` : ' [All Brands]';
+                  return (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name} ({u.role_name.replace(/_/g, ' ')}){scopeStr}
+                    </option>
+                  );
+                })}
+
               </select>
             ) : (
               <div style={{ padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -709,8 +796,10 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <SearchableAgencySelect 
               selectedAgencyId={agencyId}
               onSelectAgency={setAgencyId}
+              agencies={activeAgenciesPool}
             />
           </div>
+
 
           {/* 5. DELIVERY TYPE */}
           <div>
@@ -769,7 +858,10 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                       selectedSegment={selectedSegment}
                       userCompanyHandle={activeSalespersonHandle}
                       onSelectProduct={(productId) => handleProductChange(index, productId)}
+                      products={liveProducts}
+                      companies={liveCompanies}
                     />
+
                   </td>
                   <td style={{ textAlign: 'center', fontWeight: 700, color: '#34d399' }}>
                     ₹{item.mrp_price}

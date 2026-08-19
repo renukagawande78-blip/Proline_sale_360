@@ -20,8 +20,15 @@ import {
   MOCK_PRODUCTS, 
   isCompanyAllowedForUser, 
   fetchAgenciesFromSupabaseTable, 
-  deduplicateAgencies 
+  deduplicateAgencies,
+  fetchProductsFromSupabase,
+  deduplicateProducts,
+  fetchCompaniesFromSupabase,
+  deduplicateCompanies,
+  clearZonesFromSupabase
 } from '../lib/supabase';
+
+
 import { useAuth } from '../context/AuthContext';
 import { Company, Agency, Product } from '../types';
 
@@ -39,9 +46,11 @@ import { MasterType, downloadSampleCSV, exportMasterCSV } from '../lib/masterImp
 interface MastersPageProps {
   initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones';
   onOpenUserMgmtModal?: (user?: any) => void;
+  onOpenCreateOrderForAgency?: (agencyId: string) => void;
 }
 
-export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies', onOpenUserMgmtModal }) => {
+export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies', onOpenUserMgmtModal, onOpenCreateOrderForAgency }) => {
+
   const { users, currentUser, hasPermission, createUser } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
   const isSalesPerson = role === 'SALES_PERSON';
@@ -79,21 +88,58 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
     };
   }, []);
 
+  // Load live products from Supabase table on page mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadLiveProducts = async () => {
+      const liveList = await fetchProductsFromSupabase();
+      if (isMounted && liveList && liveList.length > 0) {
+        setProductsList(deduplicateProducts([...liveList, ...MOCK_PRODUCTS]));
+      }
+    };
+    loadLiveProducts();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Load live companies / brands from Supabase table on page mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadLiveCompanies = async () => {
+      const liveList = await fetchCompaniesFromSupabase();
+      if (isMounted && liveList && liveList.length > 0) {
+        setCompaniesList(deduplicateCompanies([...liveList, ...MOCK_COMPANIES]));
+      }
+    };
+    loadLiveCompanies();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+
+
   // Mapped Data Filtered by Brand Handle Scope
+  const isSuperUser = !currentUser || currentUser?.role_name === 'SUPER_ADMIN' || currentUser?.company_handle === 'All' || (currentUser?.full_name || '').toLowerCase().includes('chirag');
+
   const mappedAgencies = agenciesList.filter(a => {
-    if (!a.company_id || currentUser?.role_name === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag')) return true;
+    if (isSuperUser || !a.company_id) return true;
     const parentCompany = companiesList.find(c => c.id === a.company_id);
-    return isCompanyAllowedForUser(parentCompany?.company_name, currentUser?.company_handle);
+    return parentCompany ? isCompanyAllowedForUser(parentCompany.company_name, currentUser?.company_handle) : true;
   });
 
   const mappedProducts = productsList.filter(p => {
+    if (isSuperUser || !p.company_id) return true;
     const parentCompany = companiesList.find(c => c.id === p.company_id);
-    return isCompanyAllowedForUser(parentCompany?.company_name, currentUser?.company_handle);
+    return parentCompany ? isCompanyAllowedForUser(parentCompany.company_name, currentUser?.company_handle) : true;
   });
 
-  const mappedCompanies = companiesList.filter(c => 
-    isCompanyAllowedForUser(c.company_name, currentUser?.company_handle)
-  );
+  const mappedCompanies = companiesList.filter(c => {
+    if (isSuperUser) return true;
+    return isCompanyAllowedForUser(c.company_name, currentUser?.company_handle);
+  });
+
 
   // Add Item Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -160,10 +206,10 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
     exportMasterCSV(activeTab === 'reasons' ? 'agencies' : (activeTab as MasterType), currentData);
   };
 
-  const handleClearCurrentMasterData = () => {
+  const handleClearCurrentMasterData = async () => {
     const isConfirmed = window.confirm(
       `⚠️ SUPER ADMIN MASTER CLEAR GATEWAY:\n\n` +
-      `Are you sure you want to DELETE ALL Master Data records (Products, Agencies, & Brands) to clear wrong data?\n\n` +
+      `Are you sure you want to DELETE ALL Master Data records (Products, Agencies, Brands & Zones) to clear wrong data?\n\n` +
       `Click OK to proceed with deleting all master records.`
     );
 
@@ -171,10 +217,12 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
       setProductsList([]);
       setAgenciesList([]);
       setCompaniesList([]);
-      setSuccessNotice(`🔥 ALL Master Data records (Products, Agencies & Brands) cleared successfully by Super Admin!`);
+      await clearZonesFromSupabase();
+      setSuccessNotice(`🔥 ALL Master Data records (Products, Agencies, Brands & Zones) cleared successfully by Super Admin!`);
       setTimeout(() => setSuccessNotice(null), 5000);
     }
   };
+
 
   const handleImportSuccess = (importedRecords: any[], masterType: MasterType) => {
     if (masterType === 'agencies') {
@@ -249,16 +297,6 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
 
         {/* Master Action Toolbar */}
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {/* Download Sample CSV Template */}
-          <button 
-            className="btn btn-outline"
-            onClick={() => downloadSampleCSV(activeTab === 'reasons' ? 'agencies' : (activeTab as MasterType))}
-            title="Download formatted sample sheet used for bulk data upload"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#38bdf8', color: '#38bdf8', fontWeight: 700, fontSize: '0.8rem' }}
-          >
-            <FileSpreadsheet size={15} /> Download Sample Upload Sheet
-          </button>
-
           {/* Bulk Import CSV */}
           {canAddMaster && (
             <button 
@@ -271,6 +309,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
             </button>
           )}
 
+
           {/* Export Current Master CSV */}
           <button 
             className="btn btn-outline"
@@ -280,29 +319,8 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
             <Download size={15} /> Export Master CSV
           </button>
 
-          {/* Clear Current Master Data Button (Super Admin Only) */}
-          {role === 'SUPER_ADMIN' && (
-            <button 
-              className="btn btn-outline"
-              onClick={handleClearCurrentMasterData}
-              title="Super Admin 1-Click Gateway to delete wrong/unwanted master data records"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                borderColor: '#f43f5e',
-                color: '#f43f5e',
-                fontWeight: 800,
-                fontSize: '0.8rem',
-                background: 'rgba(244, 63, 94, 0.15)',
-                boxShadow: '0 0 12px rgba(244, 63, 94, 0.25)'
-              }}
-            >
-              <Trash2 size={15} /> 🗑️ Clear All Master Data
-            </button>
-          )}
 
-          {canAddMaster && activeTab !== 'agencies' && activeTab !== 'areas' && (
+          {canAddMaster && activeTab !== 'agencies' && activeTab !== 'areas' && activeTab !== 'companies' && (
             <button 
               className="btn btn-primary"
               onClick={() => {
@@ -315,6 +333,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
               <Plus size={15} /> Add {activeTab.slice(0, -1).toUpperCase()}
             </button>
           )}
+
         </div>
       </div>
 
@@ -325,25 +344,38 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
       )}
 
       {/* Master Tabs Bar */}
-      <div style={{ display: 'flex', gap: '0.5rem', background: '#1e293b', padding: '0.4rem', borderRadius: 10, border: '1px solid #334155', marginBottom: '1.5rem', overflowX: 'auto' }}>
+      <div style={{
+        display: 'flex',
+        gap: '0.4rem',
+        background: '#0f172a',
+        padding: '0.4rem',
+        borderRadius: 14,
+        border: '1px solid #1e293b',
+        marginBottom: '1.5rem',
+        overflowX: 'auto',
+        maxWidth: '100%',
+        scrollbarWidth: 'none'
+      }}>
         <button
           onClick={() => setActiveTab('agencies')}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '0.4rem',
-            padding: '0.5rem 1rem',
-            borderRadius: 8,
+            padding: '0.55rem 1rem',
+            borderRadius: 10,
             border: 'none',
-            background: activeTab === 'agencies' ? '#38bdf8' : 'transparent',
-            color: activeTab === 'agencies' ? '#0f172a' : '#f8fafc',
+            background: activeTab === 'agencies' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+            color: activeTab === 'agencies' ? '#ffffff' : '#94a3b8',
             fontWeight: 800,
-            fontSize: '0.825rem',
+            fontSize: '0.8rem',
             cursor: 'pointer',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            boxShadow: activeTab === 'agencies' ? '0 4px 12px rgba(2, 132, 199, 0.4)' : 'none',
+            transition: 'all 0.15s ease'
           }}
         >
-          <Store size={16} /> Mapped Agencies & Parties ({mappedAgencies.length})
+          <Store size={15} /> Mapped Parties ({mappedAgencies.length})
         </button>
 
         <button
@@ -352,78 +384,43 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
             display: 'flex',
             alignItems: 'center',
             gap: '0.4rem',
-            padding: '0.5rem 1rem',
-            borderRadius: 8,
+            padding: '0.55rem 1rem',
+            borderRadius: 10,
             border: 'none',
-            background: activeTab === 'products' ? '#38bdf8' : 'transparent',
-            color: activeTab === 'products' ? '#0f172a' : '#f8fafc',
+            background: activeTab === 'products' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+            color: activeTab === 'products' ? '#ffffff' : '#94a3b8',
             fontWeight: 800,
-            fontSize: '0.825rem',
+            fontSize: '0.8rem',
             cursor: 'pointer',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            boxShadow: activeTab === 'products' ? '0 4px 12px rgba(2, 132, 199, 0.4)' : 'none',
+            transition: 'all 0.15s ease'
           }}
         >
-          <Package size={16} /> Mapped Products & SKUs ({mappedProducts.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('areas')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.5rem 1rem',
-            borderRadius: 8,
-            border: 'none',
-            background: activeTab === 'areas' ? '#38bdf8' : 'transparent',
-            color: activeTab === 'areas' ? '#0f172a' : '#f8fafc',
-            fontWeight: 800,
-            fontSize: '0.825rem',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <MapPin size={16} /> Area Master (Supabase `areas`)
-        </button>
-
-        <button
-          onClick={() => setActiveTab('zones')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.5rem 1rem',
-            borderRadius: 8,
-            border: 'none',
-            background: activeTab === 'zones' ? '#38bdf8' : 'transparent',
-            color: activeTab === 'zones' ? '#0f172a' : '#f8fafc',
-            fontWeight: 800,
-            fontSize: '0.825rem',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <Building2 size={16} /> Zone Master (Mapped Areas)
+          <Package size={15} /> Products & SKUs ({mappedProducts.length})
         </button>
 
         <button
           onClick={() => setActiveTab('companies')}
+
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '0.4rem',
-            padding: '0.5rem 1rem',
-            borderRadius: 8,
+            padding: '0.55rem 1rem',
+            borderRadius: 10,
             border: 'none',
-            background: activeTab === 'companies' ? '#38bdf8' : 'transparent',
-            color: activeTab === 'companies' ? '#0f172a' : '#f8fafc',
+            background: activeTab === 'companies' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+            color: activeTab === 'companies' ? '#ffffff' : '#94a3b8',
             fontWeight: 800,
-            fontSize: '0.825rem',
+            fontSize: '0.8rem',
             cursor: 'pointer',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            boxShadow: activeTab === 'companies' ? '0 4px 12px rgba(2, 132, 199, 0.4)' : 'none',
+            transition: 'all 0.15s ease'
           }}
         >
-          <Building2 size={16} /> Brand / Segments ({mappedCompanies.length})
+          <Building2 size={15} /> Brands & Companies ({mappedCompanies.length})
         </button>
 
         {!isSalesPerson && (
@@ -433,21 +430,24 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
               display: 'flex',
               alignItems: 'center',
               gap: '0.4rem',
-              padding: '0.5rem 1rem',
-              borderRadius: 8,
+              padding: '0.55rem 1rem',
+              borderRadius: 10,
               border: 'none',
-              background: activeTab === 'users' ? '#38bdf8' : 'transparent',
-              color: activeTab === 'users' ? '#0f172a' : '#f8fafc',
+              background: activeTab === 'users' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+              color: activeTab === 'users' ? '#ffffff' : '#94a3b8',
               fontWeight: 800,
-              fontSize: '0.825rem',
+              fontSize: '0.8rem',
               cursor: 'pointer',
-              whiteSpace: 'nowrap'
+              whiteSpace: 'nowrap',
+              boxShadow: activeTab === 'users' ? '0 4px 12px rgba(2, 132, 199, 0.4)' : 'none',
+              transition: 'all 0.15s ease'
             }}
           >
-            <Users size={16} /> Master Users & Roles ({users.length})
+            <Users size={15} /> Users & Roles ({users.length})
           </button>
         )}
       </div>
+
 
       {/* Search Toolbar */}
       <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: '0.85rem 1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', maxWidth: 450 }}>
@@ -467,22 +467,17 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
           agencies={mappedAgencies} 
           searchQuery={searchQuery} 
           onAgencyRegistered={(newAgency) => setAgenciesList(prev => [newAgency, ...prev])}
+          onOpenCreateOrderForAgency={onOpenCreateOrderForAgency}
         />
       )}
+
 
       {activeTab === 'products' && (
         <ProductsMasterView products={mappedProducts} companies={companiesList} searchQuery={searchQuery} />
       )}
 
-      {activeTab === 'areas' && (
-        <AreasMasterView agencies={mappedAgencies} searchQuery={searchQuery} />
-      )}
-
-      {activeTab === 'zones' && (
-        <ZonesMasterView agencies={mappedAgencies} searchQuery={searchQuery} />
-      )}
-
       {activeTab === 'companies' && (
+
         <BrandsMasterView companies={mappedCompanies} searchQuery={searchQuery} />
       )}
 

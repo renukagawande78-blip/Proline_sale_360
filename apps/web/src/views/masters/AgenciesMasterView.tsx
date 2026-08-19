@@ -19,9 +19,11 @@ interface AgenciesMasterViewProps {
   agencies: Agency[];
   searchQuery: string;
   onAgencyRegistered?: (newAgency: Agency) => void;
+  onOpenCreateOrderForAgency?: (agencyId: string) => void;
 }
 
-export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies, searchQuery, onAgencyRegistered }) => {
+export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies, searchQuery, onAgencyRegistered, onOpenCreateOrderForAgency }) => {
+
   const { currentUser } = useAuth();
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -298,6 +300,16 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
                   <td><span className="status-badge status-APPROVED">MAPPED</span></td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                      {onOpenCreateOrderForAgency && (
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => onOpenCreateOrderForAgency(a.id)}
+                          style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: '#38bdf8', color: '#0f172a' }}
+                          title={`Create new sales order for ${a.agency_name}`}
+                        >
+                          <Plus size={13} /> Create Order
+                        </button>
+                      )}
                       <button
                         className="btn btn-outline"
                         onClick={() => setSelectedAgencyToEdit(a)}
@@ -305,6 +317,7 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
                       >
                         <Edit3 size={13} /> Edit Details
                       </button>
+
                       {isSuperAdmin && (
                         <button
                           className="btn btn-danger"

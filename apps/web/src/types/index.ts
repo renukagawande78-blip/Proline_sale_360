@@ -113,7 +113,7 @@ export interface User {
   assigned_segment?: SegmentType | 'ALL';
 }
 
-export type SegmentType = 'FMCG' | 'FMCD';
+export type SegmentType = 'FMCG' | 'FMCD' | 'COMPANY';
 
 export interface Company {
   id: string;

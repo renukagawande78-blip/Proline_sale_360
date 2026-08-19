@@ -191,12 +191,15 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
   const calculatedAvailableCredit = Math.max(0, Number(creditLimit) - Number(currentOutstanding) + Number(advanceAmount));
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 9999 }}>
+    <div className="modal-overlay" style={{ zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
       <div 
         className="modal-card" 
         style={{ 
           maxWidth: 720, 
           width: '95vw', 
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
           background: '#0f172a', 
           border: '1px solid #38bdf8', 
           borderRadius: 20, 
@@ -205,6 +208,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)'
         }}
       >
+
         
         {/* Modal Header */}
         <div style={{
@@ -305,7 +309,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
 
         {/* Modal Form / Bulk CSV Body */}
         {activeTab === 'BULK_CSV' ? (
-          <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', flex: 1 }}>
             <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: 12, padding: '1rem', color: '#38bdf8', fontSize: '0.825rem' }}>
               <strong style={{ display: 'block', fontSize: '0.9rem', marginBottom: 4 }}>Daily Bulk Party Ledger Balance Sync</strong>
               Download the official sample CSV sheet, fill in daily outstanding & overdue balances for parties, and upload to update all accounts in bulk.
@@ -386,7 +390,8 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', flex: 1 }}>
+
             {successMsg && (
               <div style={{
                 padding: '0.85rem 1rem',

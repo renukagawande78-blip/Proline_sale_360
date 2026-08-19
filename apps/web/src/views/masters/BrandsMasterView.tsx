@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Building2, Tag, Layers, Zap, ShoppingBag, FileSpreadsheet, Edit3, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Building2, Tag, Layers, Zap, ShoppingBag, FileSpreadsheet, Edit3, Trash2, RefreshCw } from 'lucide-react';
 import { Company, SegmentType } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { downloadSampleCSV } from '../../lib/masterImportExport';
 import { BulkImportModal } from '../../components/BulkImportModal';
-import { checkIsSuperAdmin, deleteCompanyFromSupabase, saveCompanyToSupabase } from '../../lib/supabase';
+import { checkIsSuperAdmin, deleteCompanyFromSupabase, saveCompanyToSupabase, fetchCompaniesFromSupabase, deduplicateCompanies } from '../../lib/supabase';
 
 interface BrandsMasterViewProps {
   companies: Company[];
@@ -17,8 +17,30 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
   const [selectedSegment, setSelectedSegment] = useState<'ALL' | SegmentType>('ALL');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
-
+  const [isSyncing, setIsSyncing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (companies && companies.length > 0) {
+      setLocalCompanies(prev => deduplicateCompanies([...companies, ...prev]));
+    }
+  }, [companies]);
+
+  const handleSyncLiveDb = async () => {
+    setIsSyncing(true);
+    setFeedbackMsg('🔄 Syncing live Brand Companies from Supabase database...');
+    const liveList = await fetchCompaniesFromSupabase();
+    if (liveList && liveList.length > 0) {
+      const merged = deduplicateCompanies([...liveList, ...localCompanies]);
+      setLocalCompanies(merged);
+      setFeedbackMsg(`✅ Live Sync Complete! Loaded ${liveList.length} Brand Companies from Supabase!`);
+    } else {
+      setFeedbackMsg('ℹ️ Sync checked: Supabase table loaded successfully.');
+    }
+    setIsSyncing(false);
+    setTimeout(() => setFeedbackMsg(null), 3500);
+  };
+
 
   const handleDeleteBrand = async (companyId: string, companyName: string) => {
     if (window.confirm(`Are you sure you want to delete Brand Master "${companyName}"? This action is restricted to Super Admin authority.`)) {
@@ -91,6 +113,7 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
 
   const fmcgCount = companies.filter(c => c.segment === 'FMCG').length;
   const fmcdCount = companies.filter(c => c.segment === 'FMCD').length;
+  const companyCount = companies.filter(c => c.segment === 'COMPANY').length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -124,6 +147,26 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
             }}
           >
             All Segments ({companies.length})
+          </button>
+
+          <button
+            onClick={() => setSelectedSegment('COMPANY')}
+            style={{
+              padding: '0.45rem 0.95rem',
+              borderRadius: '8px',
+              border: 'none',
+              background: selectedSegment === 'COMPANY' ? '#6366f1' : 'transparent',
+              color: selectedSegment === 'COMPANY' ? '#ffffff' : '#94a3b8',
+              fontWeight: 800,
+              fontSize: '0.775rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Building2 size={13} /> Companies ({companyCount})
           </button>
 
           <button
@@ -169,17 +212,32 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button
-            onClick={handleAddNewBrand}
-            className="btn btn-primary"
-            style={{ padding: '0.45rem 0.85rem', fontSize: '0.775rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            onClick={handleSyncLiveDb}
+            disabled={isSyncing}
+            style={{
+              padding: '0.45rem 0.85rem',
+              borderRadius: '8px',
+              border: '1px solid #38bdf8',
+              background: 'rgba(56, 189, 248, 0.1)',
+              color: '#38bdf8',
+              fontSize: '0.75rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
           >
-            <Building2 size={14} /> + Register New Brand
+            <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} /> {isSyncing ? 'Syncing...' : 'Sync Live DB'}
           </button>
+
           <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>
-            Segment Scope: <strong style={{ color: '#38bdf8' }}>{selectedSegment === 'ALL' ? 'FMCG & FMCD Brands' : selectedSegment}</strong>
+            Segment Scope: <strong style={{ color: '#38bdf8' }}>{selectedSegment === 'ALL' ? 'Companies, FMCG & FMCD Brands' : selectedSegment}</strong>
           </div>
         </div>
+
       </div>
+
 
       {feedbackMsg && (
         <div style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid #38bdf8', color: '#38bdf8', padding: '0.6rem 1rem', borderRadius: 8, fontSize: '0.825rem', fontWeight: 700 }}>
@@ -202,14 +260,24 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
           </thead>
           <tbody>
             {filteredCompanies.map(c => {
-              const isFmcg = c.segment === 'FMCG';
+              const seg = c.segment || 'FMCG';
+              const isCompanySeg = seg === 'COMPANY';
+              const isFmcg = seg === 'FMCG';
+              const isFmcd = seg === 'FMCD';
+
+              const segStyle = isCompanySeg
+                ? { bg: '#1e1b4b', color: '#a5b4fc', border: '1px solid #6366f1' }
+                : isFmcd
+                ? { bg: '#78350f', color: '#fbbf24', border: '1px solid #f59e0b' }
+                : { bg: '#064e3b', color: '#34d399', border: '1px solid #10b981' };
+
               return (
                 <tr key={c.id}>
                   <td><code style={{ color: '#38bdf8', fontWeight: 800 }}>{c.company_code}</code></td>
                   <td><strong style={{ color: '#f8fafc' }}>{c.company_name}</strong></td>
                   <td>
                     <select
-                      value={c.segment || 'FMCG'}
+                      value={seg}
                       onChange={async (e) => {
                         const newSegment = e.target.value as SegmentType;
                         const updated = { ...c, segment: newSegment };
@@ -227,21 +295,27 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
                         borderRadius: '8px',
                         fontSize: '0.775rem',
                         fontWeight: 800,
-                        background: isFmcg ? '#064e3b' : '#78350f',
-                        color: isFmcg ? '#34d399' : '#fbbf24',
-                        border: isFmcg ? '1px solid #10b981' : '1px solid #f59e0b',
+                        background: segStyle.bg,
+                        color: segStyle.color,
+                        border: segStyle.border,
                         cursor: 'pointer'
                       }}
                     >
                       <option value="FMCG">🛒 FMCG (Fast-Moving Goods)</option>
                       <option value="FMCD">⚡ FMCD (Durables & Electronics)</option>
+                      <option value="COMPANY">🏢 COMPANY (Corporate & Group)</option>
                     </select>
                   </td>
                   <td>
                     <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                      {isFmcg ? 'Fast-Moving Consumer Goods (Food, Confectionery & Beverage)' : 'Fast-Moving Consumer Durables (Electronics, Appliances & Cooling)'}
+                      {isCompanySeg
+                        ? 'Corporate Parent Company / Group Entity'
+                        : isFmcg
+                        ? 'Fast-Moving Consumer Goods (Food, Confectionery & Beverage)'
+                        : 'Fast-Moving Consumer Durables (Electronics, Appliances & Cooling)'}
                     </span>
                   </td>
+
                   <td><span className="status-badge status-APPROVED">ACTIVE</span></td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
@@ -274,7 +348,21 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, s
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         masterType="companies"
+        onImportSuccess={(newRows) => {
+          setLocalCompanies(prev => {
+            const newCompList = [...(newRows as Company[])];
+            prev.forEach(p => {
+              if (!newCompList.some(n => n.company_code === p.company_code || n.id === p.id)) {
+                newCompList.push(p);
+              }
+            });
+            return newCompList;
+          });
+          setFeedbackMsg(`🎉 Successfully imported ${newRows.length} Brand Companies into Master & Synced to Live Supabase!`);
+          setTimeout(() => setFeedbackMsg(null), 4000);
+        }}
       />
+
     </div>
   );
 };

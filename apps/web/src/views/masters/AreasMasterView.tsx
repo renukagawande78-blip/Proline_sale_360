@@ -451,7 +451,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
               padding: '0.45rem 0.85rem',
               borderRadius: '8px',
               border: 'none',
-              background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+              background: 'linear-gradient(135deg, #10b981, #059669)',
               color: 'white',
               fontWeight: 800,
               fontSize: '0.75rem',
@@ -459,11 +459,12 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
             }}
           >
-            <Plus size={14} /> Create New Area
+            <Plus size={14} /> + Add Area
           </button>
+
 
 
           <button

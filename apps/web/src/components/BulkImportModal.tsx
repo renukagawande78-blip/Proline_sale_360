@@ -18,8 +18,12 @@ import {
 import { MasterType, MASTER_SCHEMAS, downloadSampleCSV } from '../lib/masterImportExport';
 import { 
   saveAgencyToSupabase, 
+  saveProductToSupabase,
+  saveCompanyToSupabase,
+  saveUserToSupabase,
   saveAreaToSupabase, 
   generateNewAgencyCode, 
+  generateNewBarcodeSKUCode,
   resolveZoneForAreaAndCity,
   deduplicateAgencies 
 } from '../lib/supabase';
@@ -129,6 +133,10 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const matchedIdx = headers.findIndex(h => {
         const hLower = h.toLowerCase();
         if (colKeyLower === 'agency_name' && (hLower.includes('party') || hLower.includes('agency') || hLower.includes('firm') || hLower.includes('name'))) return true;
+        if (colKeyLower === 'product_name' && (hLower.includes('product') || hLower.includes('sku') || hLower.includes('item') || hLower.includes('title') || hLower.includes('name'))) return true;
+        if (colKeyLower === 'company_name' && (hLower.includes('brand') || hLower.includes('company') || hLower.includes('manufacturer'))) return true;
+        if (colKeyLower === 'full_name' && (hLower.includes('user') || hLower.includes('full') || hLower.includes('name'))) return true;
+        if (colKeyLower === 'email' && (hLower.includes('email') || hLower.includes('mail'))) return true;
         if (colKeyLower === 'gstin' && (hLower.includes('gst') || hLower.includes('tax'))) return true;
         if (colKeyLower === 'city' && (hLower.includes('city') || hLower.includes('district') || hLower.includes('location'))) return true;
         if (colKeyLower === 'area_name' && (hLower.includes('area') || hLower.includes('locality') || hLower.includes('territory'))) return true;
@@ -137,6 +145,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         if (colKeyLower === 'account_group' && (hLower.includes('group') || hLower.includes('segment') || hLower.includes('type'))) return true;
         if (colKeyLower === 'credit_limit' && (hLower.includes('credit') || hLower.includes('limit'))) return true;
         if (colKeyLower === 'agency_code' && (hLower.includes('code') || hLower.includes('id'))) return true;
+        if (colKeyLower === 'product_code' && (hLower.includes('sku') || hLower.includes('barcode') || hLower.includes('code') || hLower.includes('id'))) return true;
         return hLower === colHeaderLower || hLower === colKeyLower;
       });
 
@@ -173,7 +182,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     setErrorMsg(null);
     setTotalCount(rawRows.length);
 
-    const formattedAgencies: Agency[] = [];
+    const importedItems: any[] = [];
 
     for (let i = 0; i < rawRows.length; i++) {
       setCurrentIndex(i + 1);
@@ -187,77 +196,161 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         return idx !== -1 ? (rowVals[idx] || '').trim() : '';
       };
 
-      const name = getVal('agency_name') || getVal('name') || getVal('party_name') || `Agency ${i + 1}`;
-      const code = getVal('agency_code') || generateNewAgencyCode(getVal('city'));
-      const city = getVal('city') || 'Surat';
-      const area = getVal('area_name') || getVal('area') || city;
-      const gstin = getVal('gstin') || getVal('gst_number') || 'N/A';
-      const contact = getVal('contact_person') || getVal('contact') || 'N/A';
-      const phone = getVal('mobile') || getVal('phone') || 'N/A';
-      const group = getVal('account_group') || getVal('group') || 'FMCG';
-      const limit = Number(getVal('credit_limit')) || 250000;
+      if (masterType === 'products') {
+        const name = getVal('product_name') || getVal('name') || getVal('title') || `Imported Product ${i + 1}`;
+        const group = getVal('account_group') || getVal('group') || 'AKAI';
+        const code = getVal('product_code') || getVal('sku_code') || getVal('code') || generateNewBarcodeSKUCode(group, name);
+        const pcsPerBox = Number(getVal('pcs_per_box') || getVal('pack_size') || 24);
+        const mrp = Number(getVal('mrp_price') || getVal('mrp') || 150);
+        const unitPrice = Number(getVal('unit_price') || getVal('price') || mrp);
+        const category = getVal('category') || 'General';
+        const segment = getVal('segment') || 'FMCG';
+        const stockQty = Number(getVal('stock_box_qty') || getVal('stock') || 100);
 
-      setCurrentExecutingItem(`${name} (${gstin !== 'N/A' ? gstin : code})`);
+        setCurrentExecutingItem(`${name} (${code})`);
 
-      const resolvedZone = resolveZoneForAreaAndCity(area, city);
+        const productRecord = {
+          id: `p_bulk_${Date.now()}_${i}`,
+          company_id: 'c01',
+          product_code: code,
+          product_name: name,
+          pcs_per_box: pcsPerBox,
+          mrp_price: mrp,
+          unit_price: unitPrice,
+          category: category,
+          account_group: group,
+          segment: segment,
+          stock_box_qty: stockQty,
+          stock_loose_pcs: 0,
+          total_stock_pcs: stockQty * pcsPerBox
+        };
 
-      const agencyRecord: Agency = {
-        id: `ag_bulk_${Date.now()}_${i}`,
-        agency_code: code,
-        agency_name: name,
-        company_id: 'c01',
-        city: city,
-        area_name: area,
-        gstin: gstin,
-        gst_number: gstin,
-        account_group: group,
-        contact_person: contact,
-        mobile: phone,
-        email: 'N/A',
-        credit_limit: limit,
-        bank_name: 'N/A',
-        account_number: 'N/A',
-        ifsc_code: 'N/A',
-        branch_name: 'N/A',
-        assigned_salesperson: 'Chirag Patel',
-        zone_name: resolvedZone.zone_name,
-        zone_region: resolvedZone.region,
-        active: true
-      };
+        importedItems.push(productRecord);
+        const res = await saveProductToSupabase(productRecord);
+        if (!res.success && res.error) {
+          console.error(`Product row ${i + 1} error:`, res.error);
+        }
 
-      formattedAgencies.push(agencyRecord);
+      } else if (masterType === 'companies') {
+        const name = getVal('company_name') || getVal('name') || `Brand Company ${i + 1}`;
+        const code = getVal('company_code') || getVal('code') || name.slice(0, 4).toUpperCase();
+        const segment = getVal('segment') || 'FMCG';
 
-      // Persist sequentially to Supabase Live Database
-      const res = await saveAgencyToSupabase(agencyRecord);
-      if (!res.success && res.error) {
-        console.error(`Row ${i + 1} (${name}) insert error:`, res.error);
-        setErrorMsg(`⚠️ Error on row ${i + 1} (${name}): ${res.error}`);
-      }
+        setCurrentExecutingItem(`${name} (${code})`);
 
-      if (agencyRecord.area_name && agencyRecord.area_name !== agencyRecord.city) {
-        await saveAreaToSupabase({
-          id: `ar_${Date.now()}_${i}`,
-          area_code: agencyRecord.agency_code || 'AR-001',
-          area_name: agencyRecord.area_name || agencyRecord.city || 'Surat',
-          city: agencyRecord.city || 'Surat',
-          zone_code: 'ZN-SUR-A',
-          region: agencyRecord.zone_region || 'Surat City Zone',
-          description: `Auto-mapped area for ${agencyRecord.agency_name}`
-        });
+        const companyRecord = {
+          id: `c_bulk_${Date.now()}_${i}`,
+          company_code: code,
+          company_name: name,
+          handle: code,
+          segment: segment
+        };
+
+        importedItems.push(companyRecord);
+        const res = await saveCompanyToSupabase(companyRecord);
+        if (!res.success && res.error) {
+          console.error(`Company row ${i + 1} error:`, res.error);
+        }
+
+      } else if (masterType === 'users') {
+        const name = getVal('full_name') || getVal('name') || `User ${i + 1}`;
+        const email = getVal('email') || `user${Date.now()}_${i}@proline.com`;
+        const role = getVal('role_name') || getVal('role') || 'SALES_PERSON';
+        const handle = getVal('company_handle') || getVal('handle') || 'All';
+        const password = getVal('password') || '1234';
+
+        setCurrentExecutingItem(`${name} (${email})`);
+
+        const userRecord = {
+          id: `u_bulk_${Date.now()}_${i}`,
+          full_name: name,
+          email: email,
+          role_name: role,
+          company_handle: handle,
+          password: password,
+          active: true
+        };
+
+        importedItems.push(userRecord);
+        const res = await saveUserToSupabase(userRecord);
+        if (!res.success && res.error) {
+          console.error(`User row ${i + 1} error:`, res.error);
+        }
+
+      } else {
+        // Agencies / B2B Parties (Default)
+        const name = getVal('agency_name') || getVal('name') || getVal('party_name') || `Agency ${i + 1}`;
+        const code = getVal('agency_code') || generateNewAgencyCode(getVal('city'));
+        const city = getVal('city') || 'Surat';
+        const area = getVal('area_name') || getVal('area') || city;
+        const gstin = getVal('gstin') || getVal('gst_number') || 'N/A';
+        const contact = getVal('contact_person') || getVal('contact') || 'N/A';
+        const phone = getVal('mobile') || getVal('phone') || 'N/A';
+        const group = getVal('account_group') || getVal('group') || 'FMCG';
+        const limit = Number(getVal('credit_limit')) || 250000;
+
+        setCurrentExecutingItem(`${name} (${gstin !== 'N/A' ? gstin : code})`);
+
+        const resolvedZone = resolveZoneForAreaAndCity(area, city);
+
+        const agencyRecord: Agency = {
+          id: `ag_bulk_${Date.now()}_${i}`,
+          agency_code: code,
+          agency_name: name,
+          company_id: 'c01',
+          city: city,
+          area_name: area,
+          gstin: gstin,
+          gst_number: gstin,
+          account_group: group,
+          contact_person: contact,
+          mobile: phone,
+          email: 'N/A',
+          credit_limit: limit,
+          bank_name: 'N/A',
+          account_number: 'N/A',
+          ifsc_code: 'N/A',
+          branch_name: 'N/A',
+          assigned_salesperson: 'Chirag Patel',
+          zone_name: resolvedZone.zone_name,
+          zone_region: resolvedZone.region,
+          active: true
+        };
+
+        importedItems.push(agencyRecord);
+
+        const res = await saveAgencyToSupabase(agencyRecord);
+        if (!res.success && res.error) {
+          console.error(`Row ${i + 1} (${name}) insert error:`, res.error);
+          setErrorMsg(`⚠️ Error on row ${i + 1} (${name}): ${res.error}`);
+        }
+
+        if (agencyRecord.area_name && agencyRecord.area_name !== agencyRecord.city) {
+          await saveAreaToSupabase({
+            id: `ar_${Date.now()}_${i}`,
+            area_code: agencyRecord.agency_code || 'AR-001',
+            area_name: agencyRecord.area_name || agencyRecord.city || 'Surat',
+            city: agencyRecord.city || 'Surat',
+            zone_code: 'ZN-SUR-A',
+            region: agencyRecord.zone_region || 'Surat City Zone',
+            description: `Auto-mapped area for ${agencyRecord.agency_name}`
+          });
+        }
       }
 
       // Small pause for visual feedback
-      await new Promise(r => setTimeout(r, 60));
+      await new Promise(r => setTimeout(r, 40));
     }
 
     setIsProcessing(false);
     setStep('completed');
-    setSuccessMsg(`🎉 Successfully inserted/updated ${rawRows.length} master record(s) sequentially in Supabase database!`);
+    setSuccessMsg(`🎉 Successfully inserted/updated ${rawRows.length} ${masterType} record(s) in Supabase database!`);
 
     if (onImportSuccess) {
-      onImportSuccess(formattedAgencies, masterType, rawRows.length);
+      onImportSuccess(importedItems, masterType, rawRows.length);
     }
   };
+
 
   const progressPercentage = totalCount > 0 ? Math.round((currentIndex / totalCount) * 100) : 0;
 

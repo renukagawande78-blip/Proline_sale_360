@@ -18,7 +18,8 @@ import {
   Compass,
   Check,
   Globe,
-  FileSpreadsheet
+  FileSpreadsheet,
+  RefreshCw
 } from 'lucide-react';
 import { ZoneMaster, Agency, ZoneRegion } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -28,6 +29,7 @@ import {
   fetchZonesFromSupabaseAreasTable,
   saveZoneToSupabase,
   deleteZoneFromSupabase,
+  clearZonesFromSupabase,
   addAreaTagToSupabaseZone,
   removeAreaTagFromSupabaseZone,
   deduplicateZones
@@ -51,6 +53,7 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     fetchZonesFromSupabaseAreasTable().then(data => {
@@ -60,6 +63,18 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
     });
   }, []);
 
+  const handleSyncLiveZones = async () => {
+    setIsSyncing(true);
+    const data = await fetchZonesFromSupabaseAreasTable();
+    if (data && data.length > 0) {
+      setZonesList(deduplicateZones(data));
+      setSuccessNotice("🔄 Synced latest territory zones directly from live Supabase database!");
+      setTimeout(() => setSuccessNotice(null), 3500);
+    }
+    setIsSyncing(false);
+  };
+
+
   const handleDeleteZone = (zoneId: string, zoneName: string) => {
     if (window.confirm(`Are you sure you want to delete Zone Master "${zoneName}"? This action is restricted to Super Admin authority.`)) {
       setZonesList(prev => prev.filter(z => z.id !== zoneId));
@@ -68,6 +83,16 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
       setTimeout(() => setSuccessNotice(null), 3000);
     }
   };
+
+  const handleClearZoneMaster = async () => {
+    if (window.confirm('⚠️ SUPER ADMIN GATEWAY:\n\nAre you sure you want to DELETE ALL Zone Master records?\n\nThis will clear all territory zones from local state & database.')) {
+      setZonesList([]);
+      await clearZonesFromSupabase();
+      setSuccessNotice('🔥 ALL Zone Master territory records cleared successfully!');
+      setTimeout(() => setSuccessNotice(null), 4000);
+    }
+  };
+
 
   // New Zone Creation Modal State
   const [isAddZoneModalOpen, setIsAddZoneModalOpen] = useState(false);
@@ -454,6 +479,27 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
+            onClick={handleSyncLiveZones}
+            disabled={isSyncing}
+            title="Fetch latest territory zones directly from live Supabase database"
+            style={{
+              padding: '0.45rem 0.85rem',
+              borderRadius: '8px',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              background: 'rgba(56, 189, 248, 0.15)',
+              color: '#38bdf8',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              cursor: isSyncing ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
+          >
+            <RefreshCw size={14} className={isSyncing ? 'spin-anim' : ''} /> {isSyncing ? 'Syncing...' : '🔄 Sync Live DB'}
+          </button>
+
+          <button
             onClick={() => setIsAddZoneModalOpen(true)}
             style={{
               padding: '0.45rem 0.85rem',
@@ -472,8 +518,6 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
           >
             <Plus size={14} /> Create Custom Zone
           </button>
-
-
 
           <button
             onClick={handleDownloadZoneCSV}
@@ -495,6 +539,9 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
           </button>
         </div>
       </div>
+
+
+
 
       {/* Cards Grid: Area Wise vs Zone Wise */}
       {viewMode === 'AREA_WISE' ? (

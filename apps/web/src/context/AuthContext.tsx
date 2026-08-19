@@ -176,8 +176,13 @@ export const INITIAL_PERMISSION_GROUPS: PermissionGroup[] = [
 
 const SEED_USERS: User[] = [
   { sno: 1, id: 'u01', full_name: 'Chirag', email: 'chirag@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '1234', active: true },
-  { sno: 2, id: 'u02', full_name: 'Harshad', email: 'harshad@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '1234', active: true }
+  { sno: 2, id: 'u02', full_name: 'Harshad', email: 'harshad@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '1234', active: true },
+  { sno: 3, id: 'u03', full_name: 'Sagar', email: 'sagar@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person Group', company_handle: 'Mogu Mogu', password: '1234', active: true },
+  { sno: 4, id: 'u04', full_name: 'Ankit', email: 'ankit@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person Group', company_handle: 'Priyagold, Orion', password: '1234', active: true },
+  { sno: 5, id: 'u05', full_name: 'Rakesh Patel', email: 'rakesh@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager Group', company_handle: 'RCPL, Priyagold', password: '1234', active: true },
+  { sno: 6, id: 'u06', full_name: 'Amit Sharma', email: 'amit@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person Group', company_handle: 'Whirlpool, Daikin', password: '1234', active: true }
 ];
+
 
 const INITIAL_USERS: User[] = SEED_USERS.map(u => ({
   ...u,

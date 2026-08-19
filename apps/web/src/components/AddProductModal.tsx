@@ -55,7 +55,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     setAutoSkuCode(generateNewBarcodeSKUCode(newGroup));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productName.trim()) {
       setErrorNotice('Product Name is required!');
@@ -85,7 +85,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       unit_price: Number(mrpPrice)
     });
 
-    saveProductToSupabase(newProd);
+    await saveProductToSupabase(newProd);
 
     setIsSubmitting(false);
     setSuccessNotice(`New Product "${productName}" registered with Auto ID ${autoSkuCode}!`);
@@ -101,13 +101,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       setMrpPrice(150);
       setPcsPerBox(24);
       setCategory('Biscuits');
-      setAccountGroup('FMCG');
+      setAccountGroup('AKAI');
       setSegment('FMCG');
-      setAutoSkuCode(generateNewBarcodeSKUCode('c01', `PRD-${Date.now().toString().slice(-4)}`));
+      setAutoSkuCode(generateNewBarcodeSKUCode('AKAI'));
       setSuccessNotice(null);
       setErrorNotice(null);
     }, 1200);
   };
+
 
   const mrpBox = Number(mrpPrice || 0) * Number(pcsPerBox || 0);
 

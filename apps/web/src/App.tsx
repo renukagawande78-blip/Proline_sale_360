@@ -103,6 +103,14 @@ const MainLayout: React.FC = () => {
   const [userToEditInMgmt, setUserToEditInMgmt] = useState<User | null>(null);
   const [isZoneMasterOpen, setIsZoneMasterOpen] = useState(false);
   const [isRegisterAgencyOpen, setIsRegisterAgencyOpen] = useState(false);
+  const [createOrderInitialAgencyId, setCreateOrderInitialAgencyId] = useState<string | undefined>(undefined);
+
+  const handleOpenCreateOrderForAgency = (agencyId: string) => {
+    setOrderToEdit(null);
+    setCreateOrderInitialAgencyId(agencyId);
+    setIsCreateOpen(true);
+  };
+
 
   // Global App-Wide Filter Initial State
   const DEFAULT_GLOBAL_FILTER: GlobalFilterState = {
@@ -564,12 +572,21 @@ const MainLayout: React.FC = () => {
         )}
 
         {currentTab === 'masters' && (
-          <MastersPage initialTab="agencies" onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} />
+          <MastersPage 
+            initialTab="agencies" 
+            onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} 
+            onOpenCreateOrderForAgency={handleOpenCreateOrderForAgency}
+          />
         )}
 
         {currentTab === 'zones' && (
-          <MastersPage initialTab="areas" onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} />
+          <MastersPage 
+            initialTab="areas" 
+            onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} 
+            onOpenCreateOrderForAgency={handleOpenCreateOrderForAgency}
+          />
         )}
+
 
         {currentTab === 'dispatch' && (
           <DispatchPage 
@@ -615,9 +632,11 @@ const MainLayout: React.FC = () => {
       <CreateOrderModal 
         isOpen={isCreateOpen}
         orderToEdit={orderToEdit}
-        onClose={() => { setIsCreateOpen(false); setOrderToEdit(null); }}
+        initialAgencyId={createOrderInitialAgencyId}
+        onClose={() => { setIsCreateOpen(false); setOrderToEdit(null); setCreateOrderInitialAgencyId(undefined); }}
         onSubmitOrder={handleCreateOrder}
       />
+
 
       <OrderApprovalModal 
         order={selectedOrderForApproval}
