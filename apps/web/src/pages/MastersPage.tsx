@@ -236,8 +236,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         mobile: r.mobile || '9898000000',
         email: r.email || 'party@proline.com',
         gstin: r.gstin || '24AAACI1234F1Z9',
-        credit_limit: Number(r.credit_limit) || 250000,
-        assigned_salesperson: r.assigned_salesperson || 'Chirag Patel'
+        credit_limit: Number(r.credit_limit) || 250000
       }));
       setAgenciesList(prev => [...formatted, ...prev]);
       setSuccessNotice(`Successfully imported ${formatted.length} Agencies / B2B Parties into Master!`);

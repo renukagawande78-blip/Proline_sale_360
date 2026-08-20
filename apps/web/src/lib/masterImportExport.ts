@@ -28,26 +28,7 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
       { key: 'credit_days', header: 'Credit Days / Terms', example: '30' },
       { key: 'last_payment_date', header: 'Last Payment Date', example: '2026-08-10' }
     ],
-    sampleData: [
-      {
-        agency_code: 'a_pty_001',
-        agency_name: 'A One Electronics',
-        credit_limit: '250000',
-        outstanding_balance: '125000',
-        overdue_amount: '35000',
-        credit_days: '30',
-        last_payment_date: '2026-08-10'
-      },
-      {
-        agency_code: 'a_pty_002',
-        agency_name: 'A One Mall',
-        credit_limit: '500000',
-        outstanding_balance: '89000',
-        overdue_amount: '0',
-        credit_days: '45',
-        last_payment_date: '2026-08-11'
-      }
-    ]
+    sampleData: []
   },
   agencies: {
     title: 'Agencies & B2B Parties Master',
@@ -62,50 +43,9 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
       { key: 'mobile', header: 'Mobile', example: '9898012345' },
       { key: 'email', header: 'Email', example: 'ramesh@shreeram.com' },
       { key: 'gstin', header: 'GSTIN Number', example: '24AGRPR2900H2ZB' },
-      { key: 'credit_limit', header: 'Credit Limit (INR)', example: '300000' },
-      { key: 'assigned_salesperson', header: 'Assigned Salesperson', example: 'Chirag Patel' }
+      { key: 'credit_limit', header: 'Credit Limit (INR)', example: '300000' }
     ],
-    sampleData: [
-      {
-        agency_code: 'AG-9901',
-        agency_name: 'Shree Ram Agency',
-        company_name: 'Priyagold (Pringod)',
-        area_name: 'Parle Point',
-        city: 'Surat',
-        contact_person: 'Ramesh Patel',
-        mobile: '9898012345',
-        email: 'ramesh@shreeram.com',
-        gstin: '24AGRPR2900H2ZB',
-        credit_limit: '300000',
-        assigned_salesperson: 'Chirag Patel'
-      },
-      {
-        agency_code: 'AG-9902',
-        agency_name: 'Jay Ambe Electronics & Superstore',
-        company_name: 'Whirlpool',
-        area_name: 'Piplod Hub',
-        city: 'Surat',
-        contact_person: 'Jayeshbhai Shah',
-        mobile: '9879054321',
-        email: 'info@jayambe.com',
-        gstin: '24AAACJ1234F1Z9',
-        credit_limit: '500000',
-        assigned_salesperson: 'Rahul Sharma'
-      },
-      {
-        agency_code: 'AG-9903',
-        agency_name: 'Ambica Traders & Distributors',
-        company_name: 'Orion',
-        area_name: 'Vapi GIDC',
-        city: 'Vapi',
-        contact_person: 'Hareshbhai Mehta',
-        mobile: '9825011223',
-        email: 'ambica.vapi@gmail.com',
-        gstin: '24ABIPA9988C1Z2',
-        credit_limit: '250000',
-        assigned_salesperson: 'Nikhil'
-      }
-    ]
+    sampleData: []
   },
 
   products: {
@@ -120,35 +60,7 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
       { key: 'account_group', header: 'Group Name (FMCG/FMCD)', example: 'FMCG' },
       { key: 'segment', header: 'Segment (FMCG/FMCD)', example: 'FMCG' }
     ],
-    sampleData: [
-      {
-        product_code: 'P-AK-001',
-        product_name: 'Priyagold Butter Delite 100g',
-        mrp_price: '150',
-        pcs_per_box: '24',
-        category: 'Biscuits',
-        account_group: 'FMCG',
-        segment: 'FMCG'
-      },
-      {
-        product_code: 'P-AK-002',
-        product_name: 'Orion Choco Pie 12P Tray Pack',
-        mrp_price: '210',
-        pcs_per_box: '16',
-        category: 'Confectionery',
-        account_group: 'FMCG',
-        segment: 'FMCG'
-      },
-      {
-        product_code: 'P-AK-003',
-        product_name: 'Whirlpool Direct Cool Refrigerator 190L',
-        mrp_price: '18500',
-        pcs_per_box: '1',
-        category: 'Appliances',
-        account_group: 'FMCD',
-        segment: 'FMCD'
-      }
-    ]
+    sampleData: []
   },
 
   zones: {
@@ -161,22 +73,7 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
       { key: 'major_areas', header: 'Major Localities (Comma Separated)', example: 'Piplod, Vesu, Adajan, Parle Point' },
       { key: 'description', header: 'Zone Description', example: 'Special Surat West Premium Retail Hub' }
     ],
-    sampleData: [
-      {
-        zone_code: 'Z-SUR-99',
-        zone_name: 'City-Z Hub',
-        region: 'Surat City Zone',
-        major_areas: 'Piplod, Vesu, Adajan, Parle Point',
-        description: 'Special Surat West Premium Retail Hub'
-      },
-      {
-        zone_code: 'Z-VAP-01',
-        zone_name: 'Vapi Industrial Belt',
-        region: 'South Gujarat Rural Zone',
-        major_areas: 'Vapi GIDC, Chanod, Salvav',
-        description: 'Vapi GIDC Wholesale & Distribution Territory'
-      }
-    ]
+    sampleData: []
   },
 
   companies: {
@@ -187,18 +84,7 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
       { key: 'company_name', header: 'Brand / Company Name', example: 'Priyagold Foods India' },
       { key: 'segment', header: 'Industry Segment', example: 'FMCG' }
     ],
-    sampleData: [
-      {
-        company_code: 'COMP-99',
-        company_name: 'Priyagold Foods India',
-        segment: 'FMCG'
-      },
-      {
-        company_code: 'COMP-100',
-        company_name: 'Samsung Electronics Commercial',
-        segment: 'FMCD'
-      }
-    ]
+    sampleData: []
   },
 
   users: {
@@ -211,22 +97,7 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
       { key: 'company_handle', header: 'Company Brand Access Scope', example: 'Pringod, Orion' },
       { key: 'password', header: 'Initial Password', example: '1234' }
     ],
-    sampleData: [
-      {
-        full_name: 'Vikram Singh',
-        email: 'vikram@proline.com',
-        role_name: 'AREA_SALES_MANAGER',
-        company_handle: 'Pringod, Orion',
-        password: '1234'
-      },
-      {
-        full_name: 'Anjali Shah',
-        email: 'anjali.billing@proline.com',
-        role_name: 'BILLING',
-        company_handle: 'Whirlpool, Daikin',
-        password: '1234'
-      }
-    ]
+    sampleData: []
   }
 };
 
