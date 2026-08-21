@@ -290,7 +290,8 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
             ) : (
               filteredProducts.map(p => {
                 const isSelected = p.id === selectedProductId;
-                const parentCompany = MOCK_COMPANIES.find(c => c.id === p.company_id);
+                const parentCompany = activeCompanies.find(c => c.id === p.company_id);
+                const prodSegment = p.segment || parentCompany?.segment || 'FMCG';
 
                 return (
                   <div
@@ -320,10 +321,10 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                   >
                     <div>
                       <div style={{ fontSize: '0.825rem', fontWeight: 700, color: isSelected ? '#38bdf8' : '#f8fafc' }}>
-                        {p?.product_name || 'Product Item'}
+                        [{prodSegment}] {p?.product_name || 'Product Item'}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: '#34d399', marginTop: 2, fontWeight: 600 }}>
-                        Brand: {parentCompany?.company_name || 'General'} | Pack: {p.pcs_per_box} pcs/box | MRP: ₹{p.unit_price}
+                        Company: {parentCompany?.company_name || 'General'} | Code: {p.product_code} | Pack: {p.pcs_per_box} pcs/box | ₹{p.unit_price || p.mrp_price || 0}
                       </div>
                     </div>
                     {isSelected && <Check size={16} color="#38bdf8" />}
@@ -397,8 +398,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     return () => { isMounted = false; };
   }, [isOpen]);
 
-  const activeCompaniesPool = (liveCompanies && liveCompanies.length > 0) ? liveCompanies : MOCK_COMPANIES;
-  const activeAgenciesPool = (liveAgencies && liveAgencies.length > 0) ? liveAgencies : MOCK_AGENCIES;
+  const activeCompaniesPool = (liveCompanies && liveCompanies.length > 0) ? liveCompanies : [];
+  const activeAgenciesPool = (liveAgencies && liveAgencies.length > 0) ? liveAgencies : [];
+  const activeProductsPool = (liveProducts && liveProducts.length > 0) ? liveProducts : [];
 
   // Brands allowed for active salesperson & segment filter
   const allowedBrandsForActiveSalesperson = activeCompaniesPool.filter(c => {
@@ -590,7 +592,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   // Auto Calculations
   const processedItems = items.map((item, idx) => {
     const rawItem = item as any;
-    const prod = MOCK_PRODUCTS.find(p => p.id === item.product_id || (p.product_name && p.product_name === rawItem.product_name)) || MOCK_PRODUCTS[0] || {
+    const prod = activeProductsPool.find(p => p.id === item.product_id || (p.product_name && p.product_name === rawItem.product_name)) || activeProductsPool[0] || {
       id: item.product_id || `prd_${idx + 1}`,
       product_name: rawItem.product_name || 'Selected Product SKU',
       product_code: rawItem.product_code || 'SKU-001',

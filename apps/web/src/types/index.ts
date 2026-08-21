@@ -121,7 +121,10 @@ export interface Company {
   company_name: string;
   segment?: SegmentType;
   handle?: string;
+  brand_color?: string;
+  active?: boolean;
 }
+
 
 export interface Area {
   id: string;
@@ -233,6 +236,8 @@ export interface OrderItem {
   order_id: string;
   product_id: string;
   product_name?: string;
+  product_code?: string;
+  mrp_price?: number;
   pcs_per_box: number;
   box_qty: number;
   loose_pcs: number;
@@ -253,6 +258,7 @@ export interface Order {
   company_name?: string;
   agency_id: string;
   agency_name?: string;
+  agency_code?: string;
   area_id: string;
   area_name?: string;
   salesperson_id: string;

@@ -24,7 +24,6 @@ import {
 import { ZoneMaster, Agency, ZoneRegion } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { 
-  MOCK_ZONES, 
   checkIsSuperAdmin, 
   fetchZonesFromSupabaseAreasTable,
   saveZoneToSupabase,
@@ -47,7 +46,7 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [activeRegionFilter, setActiveRegionFilter] = useState<'ALL' | ZoneRegion>('ALL');
-  const [zonesList, setZonesList] = useState<ZoneMaster[]>(() => deduplicateZones(MOCK_ZONES));
+  const [zonesList, setZonesList] = useState<ZoneMaster[]>([]);
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [newAreaInputs, setNewAreaInputs] = useState<Record<string, string>>({});
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);

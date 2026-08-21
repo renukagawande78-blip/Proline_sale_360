@@ -23,7 +23,17 @@ import { RegisterAgencyModal } from './components/RegisterAgencyModal';
 import { LoginPage } from './components/LoginPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
-import { INITIAL_ORDERS, MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS, MOCK_HOLD_REASONS } from './lib/supabase';
+import { 
+  INITIAL_ORDERS, 
+  MOCK_COMPANIES, 
+  MOCK_AGENCIES, 
+  MOCK_PRODUCTS, 
+  MOCK_HOLD_REASONS,
+  fetchOrdersFromSupabase,
+  saveOrderToSupabase,
+  deleteOrderFromSupabase,
+  updateOrderStatusInSupabase
+} from './lib/supabase';
 import { Order, GlobalFilterState, Agency, Product, User } from './types';
 
 // Error Boundary Component
@@ -75,6 +85,14 @@ const MainLayout: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  React.useEffect(() => {
+    fetchOrdersFromSupabase().then(({ orders: liveOrders, error }) => {
+      if (liveOrders && liveOrders.length > 0 && !error) {
+        setOrders(liveOrders);
+      }
+    });
+  }, []);
 
   React.useEffect(() => {
     if (!currentUser) return;
@@ -232,6 +250,10 @@ const MainLayout: React.FC = () => {
     setIsCreateOpen(false);
     const isEditing = !!orderToEdit;
     setOrderToEdit(null);
+
+    // Persist to Supabase
+    saveOrderToSupabase(orderData);
+
     addNotification({
       title: isEditing ? `Order Modified: ${orderData.order_number}` : `New Order Created: ${orderData.order_number}`,
       message: isEditing 
@@ -269,6 +291,7 @@ const MainLayout: React.FC = () => {
     const target = orders.find(o => o.id === orderId);
     if (target) {
       const isWait = approvalDetails?.inventory_status === 'WAIT_FOR_STOCK';
+      updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'APPROVED', remarks);
       addNotification({
         title: isWait ? `⚠️ Wait for Stock Alert: ${target.order_number}` : `Order Approved: ${target.order_number}`,
         message: isWait 
@@ -293,6 +316,8 @@ const MainLayout: React.FC = () => {
       hold_reason: holdReasonText,
       hold_remarks: remarks || 'Executive directive hold applied.'
     } : o));
+
+    updateOrderStatusInSupabase(orderId, 'HELD', remarks);
 
     const target = orders.find(o => o.id === orderId);
     if (target) {
@@ -319,6 +344,8 @@ const MainLayout: React.FC = () => {
       hold_remarks: undefined
     } : o));
 
+    updateOrderStatusInSupabase(orderId, restoredStatus);
+
     addNotification({
       title: `▶️ Hold Released: ${target.order_number}`,
       message: `Hold released by ${releaserName}. Order resumed from exact pending stage (${restoredStatus}).`,
@@ -335,6 +362,7 @@ const MainLayout: React.FC = () => {
       pod_issue_type: issueType,
       pod_issue_details: details
     } : o));
+    updateOrderStatusInSupabase(orderId, podStatus === 'CLEAN' ? 'DELIVERED' : 'POD_ISSUE_RAISED');
   };
 
   const handleResolveException = (orderId: string, action: 'CREATE_GRN' | 'REATTEMPT_DELIVERY', grnNumber?: string, grnValue?: number) => {
@@ -349,6 +377,8 @@ const MainLayout: React.FC = () => {
         grn_number: autoGrn,
         grn_value: grnValue || o.total_amount
       } : o));
+
+      updateOrderStatusInSupabase(orderId, 'COMPLETED', `GRN ${autoGrn}`);
 
       addNotification({
         title: `✅ Admin Exception Resolved (GRN Created): ${target.order_number}`,
@@ -366,6 +396,8 @@ const MainLayout: React.FC = () => {
         pod_issue_details: undefined
       } : o));
 
+      updateOrderStatusInSupabase(orderId, 'APPROVED', 'Reattempt delivery');
+
       addNotification({
         title: `🚨 Reattempt Delivery Dispatched: ${target.order_number}`,
         message: `Delivery exception resolved by Sales Admin. Order re-routed back to Stage 5 Dispatch Team with HIGH PRIORITY flag.`,
@@ -377,6 +409,7 @@ const MainLayout: React.FC = () => {
 
   const handleRejectOrder = (orderId: string, remarks: string) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'REJECTED' } : o));
+    updateOrderStatusInSupabase(orderId, 'REJECTED', remarks);
     setSelectedOrderForApproval(null);
   };
 
@@ -397,6 +430,8 @@ const MainLayout: React.FC = () => {
         const totalOrdered = o.total_qty_pcs;
         const totalDispatched = updatedItems?.reduce((acc, i) => acc + i.dispatched_qty_pcs, 0) || 0;
         const newStatus = totalDispatched >= totalOrdered ? 'DISPATCHED' : 'PARTIALLY_DISPATCHED';
+
+        updateOrderStatusInSupabase(orderId, newStatus);
 
         return {
           ...o,
@@ -426,14 +461,17 @@ const MainLayout: React.FC = () => {
       invoice_date: new Date().toISOString().substring(0, 10),
       invoice_amount: invoiceAmount
     } : o));
+    updateOrderStatusInSupabase(orderId, 'BILLED');
   };
 
   const handleUpdateOrderStatus = (orderId: string, newStatus: any) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    updateOrderStatusInSupabase(orderId, newStatus);
   };
 
   const handleCancelOrder = (orderId: string) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
+    updateOrderStatusInSupabase(orderId, 'CANCELLED');
     addNotification({
       title: `Order Cancelled`,
       message: `Sales order ${orderId} has been cancelled.`,
@@ -444,6 +482,7 @@ const MainLayout: React.FC = () => {
 
   const handleDeleteOrder = (orderId: string) => {
     setOrders(prev => prev.filter(o => o.id !== orderId));
+    deleteOrderFromSupabase(orderId);
     addNotification({
       title: `Order Deleted (Admin Action)`,
       message: `Sales order removed permanently by System Admin.`,

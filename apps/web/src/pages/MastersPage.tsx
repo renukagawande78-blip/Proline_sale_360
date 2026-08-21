@@ -12,12 +12,11 @@ import {
   Upload,
   FileSpreadsheet,
   MapPin,
-  Trash2
+  Trash2,
+  Layers,
+  ShieldCheck
 } from 'lucide-react';
 import { 
-  MOCK_COMPANIES, 
-  MOCK_AGENCIES, 
-  MOCK_PRODUCTS, 
   isCompanyAllowedForUser, 
   fetchAgenciesFromSupabaseTable, 
   deduplicateAgencies,
@@ -38,13 +37,15 @@ import { BrandsMasterView } from '../views/masters/BrandsMasterView';
 import { UsersMasterView } from '../views/masters/UsersMasterView';
 import { AreasMasterView } from '../views/masters/AreasMasterView';
 import { ZonesMasterView } from '../views/masters/ZonesMasterView';
+import { SegmentsMasterView } from '../views/masters/SegmentsMasterView';
+import { RolePermissionsMasterView } from '../views/masters/RolePermissionsMasterView';
 import { RegisterAgencyModal } from '../components/RegisterAgencyModal';
 import { AddProductModal } from '../components/AddProductModal';
 import { BulkImportModal } from '../components/BulkImportModal';
 import { MasterType, downloadSampleCSV, exportMasterCSV } from '../lib/masterImportExport';
 
 interface MastersPageProps {
-  initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones';
+  initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'segments' | 'permissions';
   onOpenUserMgmtModal?: (user?: any) => void;
   onOpenCreateOrderForAgency?: (agencyId: string) => void;
 }
@@ -56,7 +57,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
   const isSalesPerson = role === 'SALES_PERSON';
   const canAddMaster = hasPermission('new_party') || hasPermission('product_mgmt') || role === 'SUPER_ADMIN';
 
-  const [activeTab, setActiveTab] = useState<'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'segments' | 'permissions'>(initialTab);
 
   useEffect(() => {
     if (initialTab) {
@@ -66,10 +67,10 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Master States
-  const [companiesList, setCompaniesList] = useState<Company[]>(MOCK_COMPANIES);
-  const [agenciesList, setAgenciesList] = useState<Agency[]>(MOCK_AGENCIES);
-  const [productsList, setProductsList] = useState<Product[]>(MOCK_PRODUCTS);
+  // Master States — Live from Supabase ONLY (no dummy/mock data)
+  const [companiesList, setCompaniesList] = useState<Company[]>([]);
+  const [agenciesList, setAgenciesList] = useState<Agency[]>([]);
+  const [productsList, setProductsList] = useState<Product[]>([]);
   const [isRegisterAgencyOpen, setIsRegisterAgencyOpen] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
 
@@ -93,8 +94,8 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
     let isMounted = true;
     const loadLiveProducts = async () => {
       const liveList = await fetchProductsFromSupabase();
-      if (isMounted && liveList && liveList.length > 0) {
-        setProductsList(deduplicateProducts([...liveList, ...MOCK_PRODUCTS]));
+      if (isMounted && liveList) {
+        setProductsList(deduplicateProducts(liveList));
       }
     };
     loadLiveProducts();
@@ -103,13 +104,13 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
     };
   }, []);
 
-  // Load live companies / brands from Supabase table on page mount
+  // Load live companies / brands from Supabase ONLY — no mock fallback
   useEffect(() => {
     let isMounted = true;
     const loadLiveCompanies = async () => {
       const liveList = await fetchCompaniesFromSupabase();
       if (isMounted && liveList && liveList.length > 0) {
-        setCompaniesList(deduplicateCompanies([...liveList, ...MOCK_COMPANIES]));
+        setCompaniesList(deduplicateCompanies(liveList));
       }
     };
     loadLiveCompanies();
@@ -446,6 +447,52 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
             <Users size={15} /> Users & Roles ({users.length})
           </button>
         )}
+
+        <button
+          onClick={() => setActiveTab('segments')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            borderRadius: 10,
+            border: 'none',
+            background: activeTab === 'segments' ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'transparent',
+            color: activeTab === 'segments' ? '#ffffff' : '#94a3b8',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            boxShadow: activeTab === 'segments' ? '0 4px 12px rgba(124, 58, 237, 0.4)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Layers size={15} /> Segments (2)
+        </button>
+
+        {!isSalesPerson && (
+          <button
+            onClick={() => setActiveTab('permissions')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.55rem 1rem',
+              borderRadius: 10,
+              border: 'none',
+              background: activeTab === 'permissions' ? 'linear-gradient(135deg, #dc2626, #b91c1c)' : 'transparent',
+              color: activeTab === 'permissions' ? '#ffffff' : '#94a3b8',
+              fontWeight: 800,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              boxShadow: activeTab === 'permissions' ? '0 4px 12px rgba(220, 38, 38, 0.4)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <ShieldCheck size={15} /> Role & Permissions
+          </button>
+        )}
       </div>
 
 
@@ -483,6 +530,14 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
 
       {activeTab === 'users' && !isSalesPerson && (
         <UsersMasterView users={users} searchQuery={searchQuery} onOpenUserMgmtModal={onOpenUserMgmtModal} />
+      )}
+
+      {activeTab === 'segments' && (
+        <SegmentsMasterView searchQuery={searchQuery} />
+      )}
+
+      {activeTab === 'permissions' && (
+        <RolePermissionsMasterView searchQuery={searchQuery} />
       )}
 
       {/* Add Item Modal */}

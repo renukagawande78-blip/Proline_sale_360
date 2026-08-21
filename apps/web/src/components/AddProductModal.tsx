@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Package, 
   X, 
@@ -10,8 +10,15 @@ import {
   Zap,
   Building2
 } from 'lucide-react';
-import { Product, PRODUCT_GROUP_NAMES, getGroupCode } from '../types';
-import { registerNewProduct, generateNewBarcodeSKUCode, MOCK_COMPANIES, saveProductToSupabase } from '../lib/supabase';
+import { Product, Company } from '../types';
+import { 
+  registerNewProduct, 
+  generateNewBarcodeSKUCode, 
+  fetchCompaniesFromSupabase,
+  saveProductToSupabase,
+  supabase,
+  generateUuid
+} from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
 interface AddProductModalProps {
@@ -20,39 +27,96 @@ interface AddProductModalProps {
   onSuccess?: (newProduct: Product) => void;
 }
 
+interface SegmentOption {
+  id: string;
+  segment_code: string;
+  segment_name: string;
+}
+
 export const AddProductModal: React.FC<AddProductModalProps> = ({
   isOpen,
   onClose,
   onSuccess
 }) => {
   const { currentUser } = useAuth();
-  
-  const [accountGroup, setAccountGroup] = useState<string>('AKAI');
 
-  // Auto-generate Product ID / SKU Code on modal open (e.g. AK_SKU_001)
-  const [autoSkuCode, setAutoSkuCode] = useState(() => 
-    generateNewBarcodeSKUCode('AKAI')
-  );
+  const [segments, setSegments] = useState<SegmentOption[]>([
+    { id: 'seg_fmcg', segment_code: 'FMCG', segment_name: 'Fast Moving Consumer Goods' },
+    { id: 'seg_fmcd', segment_code: 'FMCD', segment_name: 'Fast Moving Consumer Durables' }
+  ]);
+  const [selectedSegment, setSelectedSegment] = useState<string>('FMCG');
 
+  const [allCompanies, setAllCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
+
+  const [autoSkuCode, setAutoSkuCode] = useState('');
   const [productName, setProductName] = useState('');
   const [mrpPrice, setMrpPrice] = useState<number | ''>(150);
+  const [unitPrice, setUnitPrice] = useState<number | ''>(120);
   const [pcsPerBox, setPcsPerBox] = useState<number | ''>(24);
   const [category, setCategory] = useState('Biscuits');
-  const [segment, setSegment] = useState('FMCG');
+  const [stockBoxQty, setStockBoxQty] = useState<number | ''>(100);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  // Load Segments and Companies on open
+  useEffect(() => {
+    if (!isOpen) return;
+    let mounted = true;
 
-  const handleRegenerateCode = () => {
-    setAutoSkuCode(generateNewBarcodeSKUCode(accountGroup));
+    Promise.all([
+      supabase.from('segments').select('*').order('segment_code'),
+      fetchCompaniesFromSupabase()
+    ]).then(([{ data: segData }, compData]) => {
+      if (mounted) {
+        if (segData && segData.length > 0) {
+          setSegments(segData);
+        }
+        if (compData && compData.length > 0) {
+          setAllCompanies(compData);
+          // Initial company filtered by default segment
+          const fmcgComps = compData.filter(c => (c.segment || 'FMCG').toUpperCase() === 'FMCG');
+          const initialComp = fmcgComps[0] || compData[0];
+          if (initialComp) {
+            setSelectedCompanyId(initialComp.id);
+            setAutoSkuCode(generateNewBarcodeSKUCode(initialComp.company_code || initialComp.company_name));
+          }
+        }
+      }
+    });
+
+    return () => { mounted = false; };
+  }, [isOpen]);
+
+  // Companies filtered by the selected Segment: Segment > Companies
+  const filteredCompanies = allCompanies.filter(c => 
+    (c.segment || 'FMCG').toUpperCase() === selectedSegment.toUpperCase()
+  );
+
+  // When segment changes, auto-select first matching company
+  const handleSegmentChange = (newSeg: string) => {
+    setSelectedSegment(newSeg);
+    const matching = allCompanies.filter(c => (c.segment || 'FMCG').toUpperCase() === newSeg.toUpperCase());
+    const firstComp = matching[0] || allCompanies[0];
+    if (firstComp) {
+      setSelectedCompanyId(firstComp.id);
+      setAutoSkuCode(generateNewBarcodeSKUCode(firstComp.company_code || firstComp.company_name));
+    }
   };
 
-  const handleGroupChange = (newGroup: string) => {
-    setAccountGroup(newGroup);
-    setAutoSkuCode(generateNewBarcodeSKUCode(newGroup));
+  const handleCompanyChange = (compId: string) => {
+    setSelectedCompanyId(compId);
+    const comp = allCompanies.find(c => c.id === compId);
+    if (comp) {
+      setAutoSkuCode(generateNewBarcodeSKUCode(comp.company_code || comp.company_name));
+    }
+  };
+
+  const handleRegenerateCode = () => {
+    const comp = allCompanies.find(c => c.id === selectedCompanyId);
+    setAutoSkuCode(generateNewBarcodeSKUCode(comp?.company_code || comp?.company_name || 'SKU'));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,25 +134,36 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       return;
     }
 
+    const selectedComp = allCompanies.find(c => c.id === selectedCompanyId);
+
     setErrorNotice(null);
     setIsSubmitting(true);
 
-    const newProd = registerNewProduct({
-      company_id: MOCK_COMPANIES[0]?.id || 'c01',
+    const newProd: Product = {
+      id: generateUuid(),
+      company_id: selectedCompanyId,
       product_code: autoSkuCode,
       product_name: productName.trim(),
       pcs_per_box: Number(pcsPerBox),
       mrp_price: Number(mrpPrice),
+      unit_price: Number(unitPrice || mrpPrice),
       category: category.trim() || 'General',
-      account_group: accountGroup,
-      segment: segment,
-      unit_price: Number(mrpPrice)
-    });
+      account_group: selectedComp?.company_name || 'FMCG',
+      segment: selectedSegment as any,
+      stock_box_qty: Number(stockBoxQty) || 0,
+      stock_loose_pcs: 0,
+      total_stock_pcs: (Number(stockBoxQty) || 0) * Number(pcsPerBox)
+    };
 
-    await saveProductToSupabase(newProd);
+    registerNewProduct(newProd);
+    const res = await saveProductToSupabase(newProd);
 
     setIsSubmitting(false);
-    setSuccessNotice(`New Product "${productName}" registered with Auto ID ${autoSkuCode}!`);
+    if (!res.success && res.error) {
+      setErrorNotice(`Product added locally. Supabase error: ${res.error}`);
+    } else {
+      setSuccessNotice(`✅ Product "${productName}" added under ${selectedComp?.company_name} (${selectedSegment})!`);
+    }
 
     if (onSuccess) {
       onSuccess(newProd);
@@ -96,21 +171,21 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
     setTimeout(() => {
       onClose();
-      // Reset form
       setProductName('');
       setMrpPrice(150);
+      setUnitPrice(120);
       setPcsPerBox(24);
       setCategory('Biscuits');
-      setAccountGroup('AKAI');
-      setSegment('FMCG');
-      setAutoSkuCode(generateNewBarcodeSKUCode('AKAI'));
+      setStockBoxQty(100);
       setSuccessNotice(null);
       setErrorNotice(null);
     }, 1200);
   };
 
+  if (!isOpen) return null;
 
   const mrpBox = Number(mrpPrice || 0) * Number(pcsPerBox || 0);
+  const selectedComp = allCompanies.find(c => c.id === selectedCompanyId);
 
   return (
     <div 
@@ -171,8 +246,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>
-                  Add Product Master SKU
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff' }}>
+                  Add Product SKU
                 </h2>
                 <span style={{ 
                   fontSize: '0.675rem', 
@@ -182,14 +257,13 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                   padding: '0.2rem 0.6rem', 
                   borderRadius: 6, 
                   border: '1px solid rgba(52, 211, 153, 0.3)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
+                  textTransform: 'uppercase'
                 }}>
-                  New Master Item
+                  Hierarchy: Segment ➔ Company ➔ SKU
                 </span>
               </div>
               <p style={{ fontSize: '0.775rem', color: '#94a3b8', marginTop: 2 }}>
-                Enter product details. Product SKU ID & Barcode is automatically generated.
+                Select Segment, map to Company, and register new product SKU.
               </p>
             </div>
           </div>
@@ -218,7 +292,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',
-          gap: '1.25rem'
+          gap: '1.15rem'
         }}>
           
           {errorNotice && (
@@ -257,76 +331,114 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
           )}
 
-          {/* Autogenerated Product ID / SKU Code Badge */}
+          {/* 1. HIERARCHY ROW: Segment ➔ Company */}
           <div style={{
-            padding: '0.85rem 1.15rem',
-            background: 'linear-gradient(135deg, rgba(7, 14, 32, 0.9), rgba(15, 23, 42, 0.9))',
-            border: '1px solid rgba(56, 189, 248, 0.35)',
-            borderRadius: 12,
+            padding: '1rem',
+            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.6))',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            borderRadius: 14,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: '0 4px 14px rgba(0, 0, 0, 0.3)'
+            flexDirection: 'column',
+            gap: '0.85rem'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                background: 'rgba(56, 189, 248, 0.15)',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#38bdf8'
-              }}>
-                <Sparkles size={18} />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span>Autogenerated Product SKU ID & Barcode</span>
-                  <Zap size={13} color="#f59e0b" />
-                </div>
-                <div style={{ fontSize: '0.675rem', color: '#94a3b8', marginTop: 2 }}>
-                  Automatically generated system SKU code
-                </div>
-              </div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Layers size={14} /> Step 1: Select Segment ➔ Step 2: Select Company
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <code style={{
-                padding: '0.4rem 0.8rem',
-                borderRadius: 8,
-                fontSize: '0.85rem',
-                fontWeight: 900,
-                background: '#070e20',
-                color: '#38bdf8',
-                border: '1px solid #334155',
-                fontFamily: 'monospace'
-              }}>
-                {autoSkuCode}
-              </code>
-              <button
-                type="button"
-                onClick={handleRegenerateCode}
-                title="Regenerate new barcode SKU code"
-                style={{
-                  padding: '0.35rem 0.6rem',
-                  borderRadius: 8,
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  color: '#fbbf24',
-                  border: '1px solid rgba(245, 158, 11, 0.35)',
-                  cursor: 'pointer'
-                }}
-              >
-                ⚡ Refresh
-              </button>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '0.85rem' }}>
+              {/* 1A. Segment Selector */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  INDUSTRY SEGMENT <span style={{ color: '#f43f5e' }}>*</span>
+                </label>
+                <select
+                  value={selectedSegment}
+                  onChange={(e) => handleSegmentChange(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.6rem 0.8rem',
+                    background: '#070e20',
+                    border: '1px solid #38bdf8',
+                    borderRadius: 10,
+                    color: selectedSegment === 'FMCG' ? '#34d399' : '#fbbf24',
+                    fontSize: '0.85rem',
+                    fontWeight: 800,
+                    outline: 'none'
+                  }}
+                >
+                  {segments.map(s => (
+                    <option key={s.id} value={s.segment_code} style={{ background: '#0f172a', color: '#fff' }}>
+                      {s.segment_code} — {s.segment_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 1B. Company Selector (Filtered by Segment) */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  COMPANY / BRAND (IN {selectedSegment}) <span style={{ color: '#f43f5e' }}>*</span>
+                </label>
+                <select
+                  value={selectedCompanyId}
+                  onChange={(e) => handleCompanyChange(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.6rem 0.8rem',
+                    background: '#070e20',
+                    border: '1px solid #38bdf8',
+                    borderRadius: 10,
+                    color: '#f8fafc',
+                    fontSize: '0.85rem',
+                    fontWeight: 800,
+                    outline: 'none'
+                  }}
+                >
+                  {filteredCompanies.map(c => (
+                    <option key={c.id} value={c.id} style={{ background: '#0f172a', color: '#fff' }}>
+                      [{c.company_code}] {c.company_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
-          {/* 1. Product Name & SKU Code */}
+          {/* Autogenerated SKU Barcode Display */}
+          <div style={{
+            padding: '0.75rem 1rem',
+            background: '#070e20',
+            border: '1px solid #334155',
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <Sparkles size={16} color="#38bdf8" />
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8' }}>
+                Auto SKU ID: <strong style={{ color: '#38bdf8' }}>{autoSkuCode}</strong>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRegenerateCode}
+              style={{
+                background: 'rgba(56, 189, 248, 0.15)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                color: '#38bdf8',
+                padding: '0.25rem 0.6rem',
+                borderRadius: 6,
+                fontSize: '0.7rem',
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              ⚡ Regenerate
+            </button>
+          </div>
+
+          {/* 2. Product Name & SKU Code */}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.85rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
@@ -344,7 +456,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 <Package size={16} color="#64748b" />
                 <input
                   type="text"
-                  placeholder="e.g. Priyagold Butter Delite 100g"
+                  placeholder="e.g. Butter Delite 100g"
                   value={productName}
                   onChange={(e) => setProductName(e.target.value)}
                   style={{
@@ -362,125 +474,105 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
 
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1' }}>
-                  SKU Code / Barcode <span style={{ color: '#f43f5e' }}>*</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleRegenerateCode}
-                  style={{
-                    background: 'rgba(56, 189, 248, 0.15)',
-                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                    color: '#38bdf8',
-                    padding: '0.15rem 0.45rem',
-                    borderRadius: 6,
-                    fontSize: '0.675rem',
-                    fontWeight: 800,
-                    cursor: 'pointer'
-                  }}
-                  title="Regenerate barcode SKU code"
-                >
-                  ⚡ Barcode
-                </button>
-              </div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: '#070e20',
-                border: '1px solid #334155',
-                borderRadius: 10,
-                padding: '0.6rem 0.8rem'
-              }}>
-                <input
-                  type="text"
-                  value={autoSkuCode}
-                  onChange={(e) => setAutoSkuCode(e.target.value)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    color: '#38bdf8',
-                    fontFamily: 'monospace',
-                    fontSize: '0.85rem',
-                    fontWeight: 800,
-                    width: '100%'
-                  }}
-                  required
-                />
-              </div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                Category
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Biscuits, Drinks"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.6rem 0.8rem',
+                  background: '#070e20',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  color: '#f8fafc',
+                  fontSize: '0.825rem',
+                  fontWeight: 700,
+                  outline: 'none'
+                }}
+              />
             </div>
           </div>
 
-          {/* 2. MRP & Pack Size Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+          {/* 3. Pricing & Pack Size Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
                 MRP per PCS (₹) <span style={{ color: '#f43f5e' }}>*</span>
               </label>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: '#070e20',
-                border: '1px solid rgba(52, 211, 153, 0.4)',
-                borderRadius: 10,
-                padding: '0.6rem 0.8rem',
-                gap: '0.6rem'
-              }}>
-                <Tag size={16} color="#34d399" />
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  placeholder="150"
-                  value={mrpPrice}
-                  onChange={(e) => setMrpPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    color: '#34d399',
-                    fontSize: '0.9rem',
-                    fontWeight: 800,
-                    width: '100%'
-                  }}
-                  required
-                />
-              </div>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="150"
+                value={mrpPrice}
+                onChange={(e) => setMrpPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  padding: '0.6rem 0.8rem',
+                  background: '#070e20',
+                  border: '1px solid rgba(52, 211, 153, 0.4)',
+                  borderRadius: 10,
+                  color: '#34d399',
+                  fontSize: '0.875rem',
+                  fontWeight: 800,
+                  outline: 'none'
+                }}
+                required
+              />
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
-                Pack Size (PCS Per Box) <span style={{ color: '#f43f5e' }}>*</span>
+                Unit Price (₹)
               </label>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: '#070e20',
-                border: '1px solid rgba(56, 189, 248, 0.4)',
-                borderRadius: 10,
-                padding: '0.6rem 0.8rem',
-                gap: '0.6rem'
-              }}>
-                <Layers size={16} color="#38bdf8" />
-                <input
-                  type="number"
-                  min="1"
-                  placeholder="24"
-                  value={pcsPerBox}
-                  onChange={(e) => setPcsPerBox(e.target.value === '' ? '' : Number(e.target.value))}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    color: '#38bdf8',
-                    fontSize: '0.9rem',
-                    fontWeight: 800,
-                    width: '100%'
-                  }}
-                  required
-                />
-              </div>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="120"
+                value={unitPrice}
+                onChange={(e) => setUnitPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  padding: '0.6rem 0.8rem',
+                  background: '#070e20',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  color: '#38bdf8',
+                  fontSize: '0.875rem',
+                  fontWeight: 800,
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                Pack Size (PCS/Box) <span style={{ color: '#f43f5e' }}>*</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                placeholder="24"
+                value={pcsPerBox}
+                onChange={(e) => setPcsPerBox(e.target.value === '' ? '' : Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  padding: '0.6rem 0.8rem',
+                  background: '#070e20',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  color: '#f8fafc',
+                  fontSize: '0.875rem',
+                  fontWeight: 800,
+                  outline: 'none'
+                }}
+                required
+              />
             </div>
           </div>
 
@@ -500,86 +592,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <span style={{ fontSize: '0.875rem', fontWeight: 900, color: '#34d399' }}>
               📦 ₹{mrpBox.toLocaleString()} <span style={{ fontSize: '0.7rem', color: '#64748b' }}>({pcsPerBox || 0} Pcs @ ₹{mrpPrice || 0}/Pcs)</span>
             </span>
-          </div>
-
-          {/* 3. Product Category, Group Name & Segment */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
-                Product Category
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Biscuits, Beverages"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem 0.8rem',
-                  background: '#070e20',
-                  border: '1px solid #334155',
-                  borderRadius: 10,
-                  color: '#f8fafc',
-                  fontSize: '0.825rem',
-                  fontWeight: 700,
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1' }}>
-                  Group Name
-                </label>
-                <span style={{ fontSize: '0.675rem', fontWeight: 900, color: '#fbbf24', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.1rem 0.4rem', borderRadius: 5 }}>
-                  Code: {getGroupCode(accountGroup)}
-                </span>
-              </div>
-              <select
-                value={accountGroup}
-                onChange={(e) => handleGroupChange(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem 0.8rem',
-                  background: '#070e20',
-                  border: '1px solid #334155',
-                  borderRadius: 10,
-                  color: '#fbbf24',
-                  fontSize: '0.825rem',
-                  fontWeight: 800,
-                  outline: 'none'
-                }}
-              >
-                {PRODUCT_GROUP_NAMES.map(b => (
-                  <option key={b} value={b} style={{ background: '#0f172a', color: '#fff' }}>{b} ({getGroupCode(b)})</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
-                Segment
-              </label>
-              <select
-                value={segment}
-                onChange={(e) => setSegment(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem 0.8rem',
-                  background: '#070e20',
-                  border: '1px solid #334155',
-                  borderRadius: 10,
-                  color: '#34d399',
-                  fontSize: '0.825rem',
-                  fontWeight: 800,
-                  outline: 'none'
-                }}
-              >
-                <option value="FMCG" style={{ background: '#0f172a', color: '#fff' }}>FMCG</option>
-                <option value="FMCD" style={{ background: '#0f172a', color: '#fff' }}>FMCD</option>
-              </select>
-            </div>
           </div>
 
           {/* Action Footer Buttons */}
@@ -625,8 +637,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                opacity: isSubmitting ? 0.6 : 1,
-                transition: 'all 0.2s ease'
+                opacity: isSubmitting ? 0.6 : 1
               }}
             >
               <Plus size={16} />

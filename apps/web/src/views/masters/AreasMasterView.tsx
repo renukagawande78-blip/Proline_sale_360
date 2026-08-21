@@ -18,12 +18,10 @@ import {
 } from 'lucide-react';
 import { AreaMaster, Agency } from '../../types';
 import { 
-  DEFAULT_AREAS, 
   fetchAreasFromSupabaseTable, 
   saveAreaToSupabase, 
   deleteAreaFromSupabase, 
   deduplicateAreas,
-  MOCK_AGENCIES,
   supabase
 } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -42,7 +40,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   const { currentUser } = useAuth();
   const isSuperAdmin = currentUser?.role_name === 'SUPER_ADMIN';
 
-  const [areasList, setAreasList] = useState<AreaMaster[]>(DEFAULT_AREAS);
+  const [areasList, setAreasList] = useState<AreaMaster[]>([]);
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);
   const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
   const [activeRegionFilter, setActiveRegionFilter] = useState<'ALL' | 'Surat City Zone' | 'South Gujarat Rural Zone'>('ALL');
@@ -68,10 +66,18 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   }, [externalSearchQuery]);
 
   useEffect(() => {
-    if (agencies && agencies.length > 0) {
+    let mounted = true;
+    fetchAreasFromSupabaseTable().then(liveAreas => {
+      if (mounted && liveAreas) {
+        setAreasList(deduplicateAreas(liveAreas));
+      }
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    if (agencies) {
       setLocalAgencies(agencies);
-    } else {
-      setLocalAgencies(MOCK_AGENCIES);
     }
   }, [agencies]);
 
