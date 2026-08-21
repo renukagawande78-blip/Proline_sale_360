@@ -18,7 +18,6 @@ import {
 import { MasterType, MASTER_SCHEMAS, downloadSampleCSV } from '../lib/masterImportExport';
 import { 
   saveAgencyToSupabase, 
-  importBulkAgenciesRPC,
   saveProductToSupabase,
   saveCompanyToSupabase,
   saveUserToSupabase,
@@ -312,6 +311,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           account_number: 'N/A',
           ifsc_code: 'N/A',
           branch_name: 'N/A',
+          assigned_salesperson: 'Chirag Patel',
           zone_name: resolvedZone.zone_name,
           zone_region: resolvedZone.region,
           active: true
@@ -340,13 +340,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
       // Small pause for visual feedback
       await new Promise(r => setTimeout(r, 40));
-    }
-
-    if (masterType === 'agencies' && importedItems.length > 0) {
-      const rpcRes = await importBulkAgenciesRPC(importedItems as Agency[]);
-      if (rpcRes.success) {
-        console.log(`✅ Bulk RPC Function inserted ${rpcRes.count} agencies into Supabase!`);
-      }
     }
 
     setIsProcessing(false);

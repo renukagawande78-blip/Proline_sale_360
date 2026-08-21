@@ -702,7 +702,7 @@ const MainLayout: React.FC = () => {
         onSuccess={(newAgency) => {
           addNotification({
             title: `🏪 New Sales Agency Registered: ${newAgency.agency_name}`,
-            message: `Party registered & mapped to ${newAgency.zone_name} (${newAgency.zone_region}).`,
+            message: `Party registered & mapped to ${newAgency.zone_name} (${newAgency.zone_region}). Assigned Salesperson: ${newAgency.assigned_salesperson || 'Field Exec'}.`,
             event_type: 'AGENCY_REGISTERED'
           });
         }}

@@ -3,7 +3,7 @@
 -- Enable RLS on all operational tables safely
 ALTER TABLE IF EXISTS public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.companies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.agencies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.agencies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.agency_financials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.orders ENABLE ROW LEVEL SECURITY;
@@ -82,14 +82,6 @@ CREATE POLICY policy_agencies_select ON public.agencies
             )
         )
     );
-
-DROP POLICY IF EXISTS policy_agencies_insert_public ON public.agencies;
-CREATE POLICY policy_agencies_insert_public ON public.agencies
-    FOR INSERT TO public WITH CHECK (true);
-
-DROP POLICY IF EXISTS policy_agencies_update_public ON public.agencies;
-CREATE POLICY policy_agencies_update_public ON public.agencies
-    FOR UPDATE TO public USING (true) WITH CHECK (true);
 
 -- =========================================================
 -- RLS POLICIES FOR ORDERS

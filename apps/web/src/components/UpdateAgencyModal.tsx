@@ -122,6 +122,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
 
   const [city, setCity] = useState('Surat');
   const [areaName, setAreaName] = useState('Katargam');
+  const [assignedSalesperson, setAssignedSalesperson] = useState('');
 
   const [bankName, setBankName] = useState('HDFC Bank');
   const [accountNumber, setAccountNumber] = useState('');
@@ -202,6 +203,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
       setEmail(agency.email || '');
       setCity(agency.city || 'Surat');
       setAreaName(agency.area_name || '');
+      setAssignedSalesperson(agency.assigned_salesperson || '');
       setBankName(agency.bank_name || 'HDFC Bank');
       setAccountNumber(agency.account_number || '');
       setIfscCode(agency.ifsc_code || '');
@@ -260,6 +262,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
       email: email.trim(),
       city: city.trim(),
       area_name: areaName.trim() || city.trim(),
+      assigned_salesperson: assignedSalesperson.trim(),
       bank_name: bankName.trim(),
       account_number: accountNumber.trim(),
       ifsc_code: ifscCode.trim(),
@@ -526,6 +529,38 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
                 <FieldSelect value={areaName} onChange={setAreaName}>
                   {(areasMap[city] || [areaName || city]).map((a, idx) => (
                     <option key={idx} value={a}>{a}</option>
+                  ))}
+                </FieldSelect>
+              </div>
+
+              <div>
+                <FieldLabel>Assigned Field Salesperson</FieldLabel>
+                <FieldSelect value={assignedSalesperson} onChange={setAssignedSalesperson}>
+                  {[
+                    'Chirag Desai',
+                    'Chirag Patel',
+                    'Amit Shah',
+                    'Vikram Desai',
+                    'Jay',
+                    'Dixit',
+                    'Sumit',
+                    'Keyur (Field Sales)',
+                    'Shailendra',
+                    'Jayendra',
+                    'Nikhil',
+                    'Jay (Field Sales)',
+                    'Sahil',
+                    'Milan',
+                    'Brijesh',
+                    'Kamal',
+                    'Ashish',
+                    'Ankit',
+                    'Tushar',
+                    'Shakti',
+                    'Sanjay',
+                    'Jagrut'
+                  ].map(rep => (
+                    <option key={rep} value={rep}>{rep}</option>
                   ))}
                 </FieldSelect>
               </div>

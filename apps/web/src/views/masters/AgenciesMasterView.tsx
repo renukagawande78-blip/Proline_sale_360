@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Store, Plus, Landmark, Edit3, Trash2, FileSpreadsheet, DollarSign, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { Store, Plus, Landmark, UserCheck, Edit3, Trash2, FileSpreadsheet, DollarSign, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { Agency } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { RegisterAgencyModal } from '../../components/RegisterAgencyModal';
@@ -108,6 +108,7 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
     (a.city || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (a.agency_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (a.zone_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (a.assigned_salesperson || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (a.contact_person || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -252,6 +253,7 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
               <th>Zone & Territory</th>
               <th>GSTIN & Account Group</th>
               <th>Contact Person & Mobile</th>
+              <th>Assigned Salesperson</th>
               <th>Credit Limit</th>
               <th>Status</th>
               <th style={{ textAlign: 'center' }}>Action</th>
@@ -288,6 +290,11 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
                   <td>
                     <div style={{ fontWeight: 600, color: '#f8fafc' }}>{a.contact_person || 'N/A'}</div>
                     <div style={{ fontSize: '0.725rem', color: '#94a3b8' }}>{a.mobile || 'N/A'}</div>
+                  </td>
+                  <td>
+                    <span style={{ fontSize: '0.725rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.12)', border: '1px solid rgba(52, 211, 153, 0.25)', padding: '0.15rem 0.5rem', borderRadius: 6, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <UserCheck size={12} /> {a.assigned_salesperson || 'N/A'}
+                    </span>
                   </td>
                   <td><span style={{ fontWeight: 800, color: '#38bdf8' }}>₹{(a.credit_limit || 250000).toLocaleString()}</span></td>
                   <td><span className="status-badge status-APPROVED">MAPPED</span></td>
