@@ -116,8 +116,10 @@ export const getOrderAccessPermission = (
   }
 
   const role = (user.role_name || '').toUpperCase();
+  const userHandle = user.company_handle || '';
   const isSuperAdmin = role === 'SUPER_ADMIN' || 
-                       user.company_handle === 'All' || 
+                       userHandle === 'All' || 
+                       !userHandle ||
                        (user.full_name || '').toLowerCase().includes('chirag') || 
                        (user.full_name || '').toLowerCase().includes('harshad');
 
@@ -133,7 +135,7 @@ export const getOrderAccessPermission = (
   }
 
   // 2. Sales Admin with All Brands scope sees ALL Sales Orders
-  if (role === 'SALES_ADMIN' && (user.company_handle === 'All' || !user.company_handle)) {
+  if (role === 'SALES_ADMIN' && (userHandle === 'All' || !userHandle)) {
     return {
       canView: true,
       canExecuteActions: true,
@@ -160,8 +162,10 @@ export const getOrderAccessPermission = (
     };
   }
 
-  // 4. Related Sales Admin / Brand Manager: check direct brand ownership
-  const isDirectOwner = isCompanyAllowedForUser(order.company_name, user.company_handle);
+  // 4. Direct Brand Ownership check on order.company_name or order.order_number prefix
+  const isDirectOwner = isCompanyAllowedForUser(order.company_name, userHandle) ||
+                        isCompanyAllowedForUser(order.order_number, userHandle);
+
   if (isDirectOwner) {
     return {
       canView: true,
@@ -177,17 +181,21 @@ export const getOrderAccessPermission = (
   const pPool = (productsPool && productsPool.length > 0) ? productsPool : MOCK_PRODUCTS;
 
   const hasMatchingItemBrand = (order.items || []).some(item => {
+    const itemName = item.product_name || '';
+    if (itemName && isCompanyAllowedForUser(itemName, userHandle)) {
+      return true;
+    }
     const prod = pPool.find((p: any) => p.id === item.product_id || p.product_name === item.product_name);
     const itemCompany = cPool.find((c: any) => c.id === prod?.company_id);
     const brandName = itemCompany?.company_name || prod?.product_name || '';
-    return isCompanyAllowedForUser(brandName, user.company_handle, itemCompany?.company_code);
+    return isCompanyAllowedForUser(brandName, userHandle, itemCompany?.company_code);
   });
 
   if (hasMatchingItemBrand) {
     return {
       canView: true,
       canExecuteActions: role === 'SALES_ADMIN' || role === 'AREA_SALES_MANAGER',
-      isDirectBrandOwner: false,
+      isDirectBrandOwner: true,
       isItemBrandOwner: true,
       accessReason: 'Order contains items from assigned brand'
     };
@@ -1534,7 +1542,7 @@ export const INITIAL_ORDERS: Order[] = [];
 
 export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; error: string | null }> => {
   try {
-    const { data, error } = await supabase
+    const { data: rawOrders, error } = await supabase
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false });
@@ -1544,66 +1552,84 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
       return { orders: [], error: error.message };
     }
 
-    if (!data || data.length === 0) {
+    if (!rawOrders || rawOrders.length === 0) {
       return { orders: [], error: null };
     }
 
-    // Fetch associated items for orders
-    const { data: itemsData, error: itemsError } = await supabase
-      .from('order_items')
-      .select('*');
+    // Fetch related master records in parallel for enrichment
+    const [
+      { data: companiesData },
+      { data: agenciesData },
+      { data: usersData },
+      { data: productsData },
+      { data: itemsData }
+    ] = await Promise.all([
+      supabase.from('companies').select('*'),
+      supabase.from('agencies').select('*'),
+      supabase.from('users').select('*'),
+      supabase.from('products').select('*'),
+      supabase.from('order_items').select('*')
+    ]);
 
-    if (itemsError) {
-      console.warn('Supabase fetch order_items notice:', itemsError.message);
-    }
+    const compMap = new Map<string, any>((companiesData || []).map((c: any) => [c.id, c]));
+    const agencyMap = new Map<string, any>((agenciesData || []).map((a: any) => [a.id, a]));
+    const userMap = new Map<string, any>((usersData || []).map((u: any) => [u.id, u]));
+    const prodMap = new Map<string, any>((productsData || []).map((p: any) => [p.id, p]));
 
     const itemsMap: Record<string, OrderItem[]> = {};
     (itemsData || []).forEach((row: any) => {
       const ordId = row.order_id;
       if (!itemsMap[ordId]) itemsMap[ordId] = [];
+      const prod = prodMap.get(row.product_id);
       itemsMap[ordId].push({
         id: row.id,
         order_id: row.order_id,
         product_id: row.product_id,
-        product_name: row.product_name || 'Product Item',
-        product_code: row.product_code || 'SKU',
-        pcs_per_box: Number(row.pcs_per_box || 1),
+        product_name: prod?.product_name || 'Product Item',
+        product_code: prod?.product_code || 'SKU',
+        pcs_per_box: Number(row.pcs_per_box || prod?.pcs_per_box || 1),
         box_qty: Number(row.box_qty || 0),
         loose_pcs: Number(row.loose_pcs || 0),
-        free_pcs: Number(row.free_pcs || 0),
+        free_pcs: 0,
         total_qty_pcs: Number(row.total_qty_pcs || 0),
-        unit_price: Number(row.unit_price || 0),
-        mrp_price: Number(row.mrp_price || 0),
+        unit_price: Number(row.unit_price || prod?.unit_price || 0),
+        mrp_price: Number(prod?.mrp_price || prod?.unit_price || row.unit_price || 0),
         total_price: Number(row.total_price || 0),
         dispatched_qty_pcs: Number(row.dispatched_qty_pcs || 0),
         pending_qty_pcs: Number(row.pending_qty_pcs || 0),
-        remark: row.remark || ''
+        remark: ''
       });
     });
 
-    const formattedOrders: Order[] = data.map((o: any) => ({
-      id: o.id,
-      order_number: o.order_number,
-      order_date: o.order_date || o.created_at,
-      company_id: o.company_id || 'c01',
-      company_name: o.company_name || 'Priyagold Foods',
-      agency_id: o.agency_id || 'ag_001',
-      agency_name: o.agency_name || 'Agency Party',
-      agency_code: o.agency_code || 'AG-001',
-      area_id: o.area_id || 'ar_01',
-      area_name: o.area_name || 'Central Area',
-      salesperson_id: o.salesperson_id || 'u12',
-      salesperson_name: o.salesperson_name || 'Amit Kumar',
-      asm_id: o.asm_id || undefined,
-      status: o.status || 'DRAFT',
-      total_box_qty: Number(o.total_box_qty || 0),
-      total_loose_pcs: Number(o.total_loose_pcs || 0),
-      total_qty_pcs: Number(o.total_qty_pcs || 0),
-      total_amount: Number(o.total_amount || 0),
-      remarks: o.remarks || '',
-      delivery_type: o.delivery_type || 'F.O.R',
-      items: itemsMap[o.id] || itemsMap[o.order_number] || []
-    }));
+    const formattedOrders: Order[] = rawOrders.map((o: any) => {
+      const comp = compMap.get(o.company_id);
+      const ag = agencyMap.get(o.agency_id);
+      const usr = userMap.get(o.salesperson_id);
+
+      return {
+        id: o.id,
+        order_number: o.order_number,
+        order_date: o.order_date || o.created_at,
+        company_id: o.company_id || 'c01',
+        company_name: comp?.company_name || 'Proline Foods',
+        agency_id: o.agency_id || 'ag_001',
+        agency_name: ag?.agency_name || 'Agency Party',
+        agency_code: ag?.agency_code || 'AG-001',
+        area_id: o.area_id || ag?.area_id || 'ar_01',
+        area_name: ag?.area_name || ag?.city || 'Surat Area',
+        salesperson_id: o.salesperson_id || 'u12',
+        salesperson_name: usr?.full_name || 'Sales Representative',
+        asm_id: o.asm_id || undefined,
+        status: o.status || 'DRAFT',
+        total_box_qty: Number(o.total_box_qty || 0),
+        total_loose_pcs: Number(o.total_loose_pcs || 0),
+        total_qty_pcs: Number(o.total_qty_pcs || 0),
+        total_amount: Number(o.total_amount || 0),
+        remarks: o.remarks || '',
+        delivery_type: 'F.O.R',
+        items: itemsMap[o.id] || itemsMap[o.order_number] || []
+      };
+    });
 
     return { orders: formattedOrders, error: null };
   } catch (err: any) {
@@ -1621,18 +1647,12 @@ export const saveOrderToSupabase = async (order: Order): Promise<{ success: bool
       id: orderId,
       order_number: order.order_number,
       order_date: order.order_date || nowIso,
-      company_name: order.company_name || null,
-      agency_name: order.agency_name || null,
-      agency_code: order.agency_code || null,
-      area_name: order.area_name || null,
-      salesperson_name: order.salesperson_name || null,
       status: order.status || 'DRAFT',
       total_box_qty: Number(order.total_box_qty || 0),
       total_loose_pcs: Number(order.total_loose_pcs || 0),
       total_qty_pcs: Number(order.total_qty_pcs || 0),
       total_amount: Number(order.total_amount || 0),
       remarks: order.remarks || null,
-      delivery_type: order.delivery_type || 'F.O.R',
       updated_at: nowIso
     };
 
@@ -1645,18 +1665,7 @@ export const saveOrderToSupabase = async (order: Order): Promise<{ success: bool
     const { data: savedOrder, error: orderError } = await supabase.from('orders').upsert([orderPayload]).select();
     if (orderError) {
       console.error('Supabase saveOrder error:', orderError.message);
-      // Retry insert without UUIDs
-      delete orderPayload.id;
-      delete orderPayload.company_id;
-      delete orderPayload.agency_id;
-      delete orderPayload.area_id;
-      delete orderPayload.salesperson_id;
-      delete orderPayload.asm_id;
-      const retryRes = await supabase.from('orders').insert([orderPayload]).select();
-      if (retryRes.error) {
-        console.error('Supabase saveOrder retry error:', retryRes.error.message);
-        return { success: false, error: retryRes.error.message };
-      }
+      return { success: false, error: orderError.message };
     }
 
     // Save Order Items
@@ -1666,20 +1675,13 @@ export const saveOrderToSupabase = async (order: Order): Promise<{ success: bool
         const payloadItem: Record<string, any> = {
           id: itemId,
           order_id: orderId,
-          product_name: item.product_name || null,
-          product_code: item.product_code || null,
           pcs_per_box: Number(item.pcs_per_box || 1),
           box_qty: Number(item.box_qty || 0),
           loose_pcs: Number(item.loose_pcs || 0),
-          free_pcs: Number(item.free_pcs || 0),
-          total_qty_pcs: Number(item.total_qty_pcs || 0),
           unit_price: Number(item.unit_price || 0),
-          mrp_price: Number(item.mrp_price || 0),
           total_price: Number(item.total_price || 0),
           dispatched_qty_pcs: Number(item.dispatched_qty_pcs || 0),
-          pending_qty_pcs: Number(item.pending_qty_pcs || 0),
-          remark: item.remark || null,
-          updated_at: nowIso
+          pending_qty_pcs: Number(item.pending_qty_pcs || 0)
         };
         if (isValidUuid(item.product_id)) payloadItem.product_id = item.product_id;
         return payloadItem;

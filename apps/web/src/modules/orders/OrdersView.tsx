@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Search, Plus, ShieldCheck, Ban, Trash2, FileText, MoreVertical, X, RefreshCw, Edit, PauseCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { MOCK_COMPANIES, isCompanyAllowedForUser, getOrderAccessPermission } from '../../lib/supabase';
-import { Order, PermissionControl } from '../../types';
+import { fetchCompaniesFromSupabase, isCompanyAllowedForUser, getOrderAccessPermission, MOCK_COMPANIES } from '../../lib/supabase';
+import { Order, Company, PermissionControl } from '../../types';
 import { PermissionDeniedModal } from '../../components/PermissionDeniedModal';
 
 interface OrdersViewProps {
@@ -36,6 +36,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [liveCompanies, setLiveCompanies] = useState<Company[]>([]);
+
+  React.useEffect(() => {
+    fetchCompaniesFromSupabase().then(comps => {
+      if (comps && comps.length > 0) setLiveCompanies(comps);
+    });
+  }, []);
 
   // 3-Dot Action Menu Popup state
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
@@ -87,16 +94,19 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     }
   };
 
-  const allowedCompanies = MOCK_COMPANIES.filter(c => 
-    isCompanyAllowedForUser(c.company_name, currentUser?.company_handle)
+  const companiesPool = liveCompanies.length > 0 ? liveCompanies : MOCK_COMPANIES;
+  const allowedCompanies = companiesPool.filter(c => 
+    isCompanyAllowedForUser(c.company_name, currentUser?.company_handle, c.company_code)
   );
 
   const filteredOrders = orders.filter(o => {
-    const accessPerm = getOrderAccessPermission(o, currentUser);
+    const accessPerm = getOrderAccessPermission(o, currentUser, companiesPool);
     const matchesBrandScope = accessPerm.canView;
     const matchesSearch = o.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (o.agency_name && o.agency_name.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesCompany = selectedCompany === 'ALL' || o.company_id === selectedCompany;
+                          (o.agency_name && o.agency_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                          (o.salesperson_name && o.salesperson_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                          (o.company_name && o.company_name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesCompany = selectedCompany === 'ALL' || o.company_id === selectedCompany || isCompanyAllowedForUser(o.company_name, selectedCompany);
     const matchesStatus = selectedStatus === 'ALL' || o.status === selectedStatus;
 
     return matchesBrandScope && matchesSearch && matchesCompany && matchesStatus;
