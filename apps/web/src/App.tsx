@@ -254,6 +254,9 @@ const MainLayout: React.FC = () => {
     // Persist to Supabase
     saveOrderToSupabase(orderData);
 
+    // Automatically open Sales Order Invoice / Dispatch Slip for the newly created order
+    setSelectedOrderForInvoice(orderData);
+
     addNotification({
       title: isEditing ? `Order Modified: ${orderData.order_number}` : `New Order Created: ${orderData.order_number}`,
       message: isEditing 

@@ -50,9 +50,7 @@ export const RegisterProductModal: React.FC<RegisterProductModalProps> = ({
       product_name: productName.trim(),
       pcs_per_box: Number(pcsPerBox),
       unit_price: Number(unitPrice),
-      mrp_price: Number(mrpPrice),
-      stock_box_qty: Number(stockBoxQty),
-      stock_loose_pcs: Number(stockLoosePcs)
+      mrp_price: Number(mrpPrice)
     });
 
     setIsSubmitting(false);

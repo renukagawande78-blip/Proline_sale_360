@@ -36,16 +36,8 @@ CREATE TABLE IF NOT EXISTS public.users (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. SEGMENTS MASTER TABLE
-CREATE TABLE IF NOT EXISTS public.segments (
-    id TEXT PRIMARY KEY,
-    segment_code VARCHAR(50) UNIQUE NOT NULL,
-    segment_name TEXT NOT NULL,
-    description TEXT,
-    active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- 2. DROP REDUNDANT SEGMENTS TABLE (Replaced by System IndustrySegment Enum: 'FMCG' | 'FMCD')
+DROP TABLE IF EXISTS public.segments CASCADE;
 
 -- 3. COMPANY BRANDS MASTER TABLE
 CREATE TABLE IF NOT EXISTS public.companies (
@@ -113,6 +105,8 @@ CREATE TABLE IF NOT EXISTS public.agencies (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE IF EXISTS public.agencies DROP CONSTRAINT IF EXISTS agencies_agency_name_key;
+ALTER TABLE IF EXISTS public.agencies DROP CONSTRAINT IF EXISTS "agencies_agency_name_key";
 
 -- 7. PRODUCTS MASTER TABLE
 CREATE TABLE IF NOT EXISTS public.products (
@@ -120,20 +114,25 @@ CREATE TABLE IF NOT EXISTS public.products (
     product_code TEXT UNIQUE NOT NULL,
     product_name TEXT NOT NULL,
     company_id TEXT,
-    category TEXT,
-    account_group TEXT DEFAULT 'FMCG Goods',
     segment TEXT DEFAULT 'FMCG',
-    pcs_per_box INT NOT NULL DEFAULT 24,
-    unit_price NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+    category TEXT,
+    pcs_per_box INT NOT NULL DEFAULT 1,
     mrp_price NUMERIC(15,2) DEFAULT 0.00,
+    unit_price NUMERIC(15,2) NOT NULL DEFAULT 0.00,
     stock_box_qty INT DEFAULT 0,
-    stock_loose_pcs INT DEFAULT 0,
     total_stock_pcs INT DEFAULT 0,
-    hsn_code TEXT,
     active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE IF EXISTS public.products DROP COLUMN IF EXISTS account_group;
+ALTER TABLE IF EXISTS public.products DROP COLUMN IF EXISTS previous_mrp;
+ALTER TABLE IF EXISTS public.products DROP COLUMN IF EXISTS mrp_updated_at;
+ALTER TABLE IF EXISTS public.products DROP COLUMN IF EXISTS mrp_updated_by;
+ALTER TABLE IF EXISTS public.products DROP COLUMN IF EXISTS mrp_history;
+ALTER TABLE IF EXISTS public.products DROP COLUMN IF EXISTS stock_loose_pcs;
+ALTER TABLE IF EXISTS public.products DROP COLUMN IF EXISTS reserved_stock_pcs;
+ALTER TABLE IF EXISTS public.products DROP COLUMN IF EXISTS hsn_code;
 
 -- 8. ORDERS TRANSACTION TABLE
 CREATE TABLE IF NOT EXISTS public.orders (
@@ -215,7 +214,6 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENC
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.segments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agencies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
@@ -249,7 +247,6 @@ END $$;
 DROP POLICY IF EXISTS "companies_crud_policy" ON public.companies;
 DROP POLICY IF EXISTS "users_crud_policy" ON public.users;
 DROP POLICY IF EXISTS "system_users_crud_policy" ON public.system_users;
-DROP POLICY IF EXISTS "segments_crud_policy" ON public.segments;
 DROP POLICY IF EXISTS "agencies_crud_policy" ON public.agencies;
 DROP POLICY IF EXISTS "products_crud_policy" ON public.products;
 DROP POLICY IF EXISTS "orders_crud_policy" ON public.orders;
@@ -262,7 +259,6 @@ DROP POLICY IF EXISTS "agency_financials_crud_policy" ON public.agency_financial
 CREATE POLICY "companies_crud_policy" ON public.companies FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "users_crud_policy" ON public.users FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "system_users_crud_policy" ON public.system_users FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "segments_crud_policy" ON public.segments FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "agencies_crud_policy" ON public.agencies FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "products_crud_policy" ON public.products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "orders_crud_policy" ON public.orders FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);

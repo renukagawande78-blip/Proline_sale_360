@@ -1,3 +1,75 @@
+// ============================================================================
+// SYSTEM ENUMS & CONSTANTS
+// ============================================================================
+
+export enum IndustrySegment {
+  FMCG = 'FMCG',
+  FMCD = 'FMCD'
+}
+
+export enum UserRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
+  ACCOUNTS = 'ACCOUNTS',
+  SALES_ADMIN = 'SALES_ADMIN',
+  BILLING = 'BILLING',
+  DISPATCH_MANAGER = 'DISPATCH_MANAGER',
+  AREA_SALES_MANAGER = 'AREA_SALES_MANAGER',
+  SALES_PERSON = 'SALES_PERSON',
+  SALES_EXECUTIVE = 'SALES_EXECUTIVE'
+}
+
+export enum OrderStatusEnum {
+  DRAFT = 'DRAFT',
+  SUBMITTED = 'SUBMITTED',
+  ACCOUNTS_APPROVED = 'ACCOUNTS_APPROVED',
+  APPROVED = 'APPROVED',
+  HELD = 'HELD',
+  REJECTED = 'REJECTED',
+  WAIT_FOR_STOCK = 'WAIT_FOR_STOCK',
+  INVENTORY_AUDITED = 'INVENTORY_AUDITED',
+  BILLED = 'BILLED',
+  DISPATCH_PENDING = 'DISPATCH_PENDING',
+  READY_FOR_PICKUP = 'READY_FOR_PICKUP',
+  READY_FOR_SELF_PICKUP = 'READY_FOR_SELF_PICKUP',
+  PARTIALLY_DISPATCHED = 'PARTIALLY_DISPATCHED',
+  DISPATCHED = 'DISPATCHED',
+  OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
+  DELIVERED = 'DELIVERED',
+  POD_ISSUE_RAISED = 'POD_ISSUE_RAISED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED'
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  PARTIALLY_PAID = 'PARTIALLY_PAID',
+  PAID = 'PAID',
+  OVERDUE = 'OVERDUE',
+  CANCELLED = 'CANCELLED'
+}
+
+export enum DispatchMode {
+  STANDARD = 'STANDARD',
+  EXPRESS = 'EXPRESS',
+  SELF_PICKUP = 'SELF_PICKUP',
+  DIRECT_PARTY_DELIVERY = 'DIRECT_PARTY_DELIVERY'
+}
+
+export enum MasterType {
+  COMPANIES = 'companies',
+  USERS = 'users',
+  AGENCIES = 'agencies',
+  PRODUCTS = 'products',
+  ORDERS = 'orders'
+}
+
+export enum PriorityLevel {
+  LOW = 'LOW',
+  NORMAL = 'NORMAL',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT'
+}
+
 export type RoleName =
   | 'SUPER_ADMIN'
   | 'ACCOUNTS'
@@ -7,46 +79,75 @@ export type RoleName =
   | 'AREA_SALES_MANAGER'
   | 'SALES_PERSON';
 
-export const PRODUCT_GROUP_NAMES = [
-  'AKAI',
-  'GANDOUR',
-  'HELL',
-  'MOGU MOGU',
-  'ORION',
-  'PG-OTHER',
-  'PRAN',
-  'PRIYAGOLD',
-  'RCPL',
-  'Waiwai',
-  'WHIRLPOOL',
-  'Daikin',
-  'Cruise'
-] as const;
+// ============================================================================
+// BRAND MASTER ARRAY & REGISTRY
+// ============================================================================
 
-export type ProductGroupName = typeof PRODUCT_GROUP_NAMES[number];
+export interface BrandDefinition {
+  code: string;
+  name: string;
+  segment: IndustrySegment;
+  defaultPcsPerBox: number;
+  description?: string;
+  active?: boolean;
+}
 
-export const GROUP_CODE_MAP: Record<string, string> = {
-  'AKAI': 'AK',
-  'GANDOUR': 'GN',
-  'HELL': 'HL',
-  'MOGU MOGU': 'MM',
-  'ORION': 'OR',
-  'PG-OTHER': 'PO',
-  'PRAN': 'PR',
-  'PRIYAGOLD': 'PG',
-  'RCPL': 'RC',
-  'Waiwai': 'WW',
-  'WHIRLPOOL': 'WP',
-  'Daikin': 'DK',
-  'Cruise': 'CR'
+export const SYSTEM_BRANDS: BrandDefinition[] = [
+  { code: 'AK', name: 'AKAI', segment: IndustrySegment.FMCD, defaultPcsPerBox: 1, description: 'Smart LED TVs, Home Theatres & Appliances', active: true },
+  { code: 'WP', name: 'WHIRLPOOL', segment: IndustrySegment.FMCD, defaultPcsPerBox: 1, description: 'Refrigerators, Washing Machines & ACs', active: true },
+  { code: 'DK', name: 'Daikin', segment: IndustrySegment.FMCD, defaultPcsPerBox: 1, description: 'Inverter Air Conditioners & Climate Systems', active: true },
+  { code: 'CR', name: 'Cruise', segment: IndustrySegment.FMCD, defaultPcsPerBox: 1, description: 'Heavy-Duty Commercial & Home ACs', active: true },
+  { code: 'PG', name: 'PRIYAGOLD', segment: IndustrySegment.FMCG, defaultPcsPerBox: 24, description: 'Biscuits, Cookies & Confectionery', active: true },
+  { code: 'OR', name: 'ORION', segment: IndustrySegment.FMCG, defaultPcsPerBox: 16, description: 'Choco-Pie, Custard Cakes & Snacks', active: true },
+  { code: 'MM', name: 'MOGU MOGU', segment: IndustrySegment.FMCG, defaultPcsPerBox: 24, description: 'Nata De Coco Fruit Juice Drinks', active: true },
+  { code: 'HL', name: 'HELL', segment: IndustrySegment.FMCG, defaultPcsPerBox: 24, description: 'Energy Drinks & Functional Beverages', active: true },
+  { code: 'GN', name: 'GANDOUR', segment: IndustrySegment.FMCG, defaultPcsPerBox: 24, description: 'Safari, Tofiluk Wafers & Chocolates', active: true },
+  { code: 'PR', name: 'PRAN', segment: IndustrySegment.FMCG, defaultPcsPerBox: 30, description: 'Potata Crackers, Drinks & Snacks', active: true },
+  { code: 'WW', name: 'Waiwai', segment: IndustrySegment.FMCG, defaultPcsPerBox: 30, description: 'Instant Ready-to-Eat Noodles', active: true },
+  { code: 'RC', name: 'RCPL', segment: IndustrySegment.FMCG, defaultPcsPerBox: 24, description: 'Reliance Consumer Products / Campa Cola', active: true },
+  { code: 'PO', name: 'PG-OTHER', segment: IndustrySegment.FMCG, defaultPcsPerBox: 24, description: 'Priyagold Specialty & Allied Products', active: true }
+];
+
+export const PRODUCT_GROUP_NAMES = SYSTEM_BRANDS.map(b => b.name) as readonly string[];
+export type ProductGroupName = typeof SYSTEM_BRANDS[number]['name'];
+
+export const GROUP_CODE_MAP: Record<string, string> = SYSTEM_BRANDS.reduce((acc, b) => {
+  acc[b.name] = b.code;
+  return acc;
+}, {} as Record<string, string>);
+
+export const getBrandByCode = (code?: string): BrandDefinition | undefined => {
+  if (!code) return undefined;
+  const clean = code.trim().toUpperCase();
+  return SYSTEM_BRANDS.find(b => b.code.toUpperCase() === clean);
+};
+
+export const getBrandByName = (name?: string): BrandDefinition | undefined => {
+  if (!name) return undefined;
+  const clean = name.trim().toLowerCase();
+  return SYSTEM_BRANDS.find(b => 
+    b.name.toLowerCase() === clean || 
+    clean.includes(b.name.toLowerCase()) || 
+    b.code.toLowerCase() === clean
+  );
 };
 
 export const getGroupCode = (groupName?: string): string => {
   if (!groupName) return 'AK';
-  const g = groupName.trim();
-  if (GROUP_CODE_MAP[g]) return GROUP_CODE_MAP[g];
-  const clean = g.replace(/[^a-zA-Z]/g, '').toUpperCase();
+  const brand = getBrandByName(groupName);
+  if (brand) return brand.code;
+  const clean = groupName.replace(/[^a-zA-Z]/g, '').toUpperCase();
   return clean.length >= 2 ? clean.substring(0, 2) : 'AK';
+};
+
+export const getBrandSegment = (brandNameOrCode?: string): IndustrySegment => {
+  const brand = getBrandByName(brandNameOrCode) || getBrandByCode(brandNameOrCode);
+  return brand?.segment || IndustrySegment.FMCG;
+};
+
+export const getBrandDefaultPackSize = (brandNameOrCode?: string): number => {
+  const brand = getBrandByName(brandNameOrCode) || getBrandByCode(brandNameOrCode);
+  return brand?.defaultPcsPerBox || 1;
 };
 
 export type OrderStatus =
@@ -202,33 +303,21 @@ export interface AgencyFinancials {
   updated_by_name?: string;
 }
 
-export interface MRPHistoryEntry {
-  previous_mrp: number;
-  new_mrp: number;
-  updated_at: string;
-  updated_by: string;
-  reason?: string;
-}
-
 export interface Product {
   id: string;
   company_id: string;
+  company_name?: string;
+  Product_Company_Name?: string;
+  Product_Company_Segment?: string;
+  Product_Company_Code?: string;
   product_code: string;
   product_name: string;
-  mrp_price: number;
-  pcs_per_box: number;
-  unit_price: number;
-  category?: string;
-  account_group?: 'FMCG' | 'FMCD' | string;
   segment?: 'FMCG' | 'FMCD' | string;
-  previous_mrp?: number;
-  mrp_updated_at?: string;
-  mrp_updated_by?: string;
-  mrp_history?: MRPHistoryEntry[];
-  stock_box_qty?: number;
-  stock_loose_pcs?: number;
-  total_stock_pcs?: number;
-  reserved_stock_pcs?: number;
+  category?: string;
+  pcs_per_box: number;
+  mrp_price: number;
+  unit_price: number;
+  active?: boolean;
 }
 
 export interface OrderItem {

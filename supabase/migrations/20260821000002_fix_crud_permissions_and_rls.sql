@@ -105,6 +105,8 @@ CREATE TABLE IF NOT EXISTS public.agencies (
 ALTER TABLE IF EXISTS public.agencies DROP CONSTRAINT IF EXISTS "agencies_Area_fkey";
 ALTER TABLE IF EXISTS public.agencies DROP CONSTRAINT IF EXISTS agencies_area_id_fkey;
 ALTER TABLE IF EXISTS public.agencies DROP CONSTRAINT IF EXISTS agencies_company_id_fkey;
+ALTER TABLE IF EXISTS public.agencies DROP CONSTRAINT IF EXISTS agencies_agency_name_key;
+ALTER TABLE IF EXISTS public.agencies DROP CONSTRAINT IF EXISTS "agencies_agency_name_key";
 ALTER TABLE IF EXISTS public.agencies ADD COLUMN IF NOT EXISTS city TEXT;
 ALTER TABLE IF EXISTS public.agencies ADD COLUMN IF NOT EXISTS area_name TEXT;
 ALTER TABLE IF EXISTS public.agencies ADD COLUMN IF NOT EXISTS contact_person VARCHAR(100);

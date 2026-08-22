@@ -55,55 +55,55 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
     columns: [
       { key: 'agency_code', header: 'Agency Code', example: 'AG-9901' },
       { key: 'agency_name', header: 'Agency Name', example: 'Shree Ram Agency' },
-      { key: 'company_name', header: 'Company Brand', example: 'Priyagold (Pringod)' },
+      { key: 'account_group', header: 'Agency Type / Segment (FMCG / FMCD)', example: 'FMCG' },
       { key: 'area_name', header: 'Area / Territory', example: 'Parle Point' },
       { key: 'city', header: 'City', example: 'Surat' },
       { key: 'contact_person', header: 'Contact Person', example: 'Ramesh Patel' },
       { key: 'mobile', header: 'Mobile', example: '9898012345' },
       { key: 'email', header: 'Email', example: 'ramesh@shreeram.com' },
       { key: 'gstin', header: 'GSTIN Number', example: '24AGRPR2900H2ZB' },
-      { key: 'credit_limit', header: 'Credit Limit (INR)', example: '300000' },
-      { key: 'assigned_salesperson', header: 'Assigned Salesperson', example: 'Chirag Patel' }
+      { key: 'credit_limit', header: 'Credit Limit (INR)', example: '0' },
+      { key: 'assigned_salesperson', header: 'Assigned Salespersons', example: 'Chirag Patel, Nikhil' }
     ],
     sampleData: [
       {
         agency_code: 'AG-9901',
         agency_name: 'Shree Ram Agency',
-        company_name: 'Priyagold (Pringod)',
+        account_group: 'FMCG',
         area_name: 'Parle Point',
         city: 'Surat',
         contact_person: 'Ramesh Patel',
         mobile: '9898012345',
         email: 'ramesh@shreeram.com',
         gstin: '24AGRPR2900H2ZB',
-        credit_limit: '300000',
-        assigned_salesperson: 'Chirag Patel'
+        credit_limit: '0',
+        assigned_salesperson: 'Chirag Patel, Nikhil'
       },
       {
         agency_code: 'AG-9902',
         agency_name: 'Jay Ambe Electronics & Superstore',
-        company_name: 'Whirlpool',
+        account_group: 'FMCD',
         area_name: 'Piplod Hub',
         city: 'Surat',
         contact_person: 'Jayeshbhai Shah',
         mobile: '9879054321',
         email: 'info@jayambe.com',
         gstin: '24AAACJ1234F1Z9',
-        credit_limit: '500000',
-        assigned_salesperson: 'Rahul Sharma'
+        credit_limit: '0',
+        assigned_salesperson: 'Rahul Sharma, Jay'
       },
       {
         agency_code: 'AG-9903',
         agency_name: 'Ambica Traders & Distributors',
-        company_name: 'Orion',
+        account_group: 'FMCG, FMCD',
         area_name: 'Vapi GIDC',
         city: 'Vapi',
         contact_person: 'Hareshbhai Mehta',
         mobile: '9825011223',
         email: 'ambica.vapi@gmail.com',
         gstin: '24ABIPA9988C1Z2',
-        credit_limit: '250000',
-        assigned_salesperson: 'Nikhil'
+        credit_limit: '0',
+        assigned_salesperson: 'Nikhil, Chirag Desai'
       }
     ]
   },
@@ -113,40 +113,44 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
     filenamePrefix: 'Products_SKU_Master_Bulk_Upload_Sample',
     columns: [
       { key: 'product_code', header: 'Product SKU Code', example: 'P-AK-001' },
-      { key: 'product_name', header: 'Product Name', example: 'Priyagold Butter Delite 100g' },
-      { key: 'mrp_price', header: 'MRP Price (INR)', example: '150' },
-      { key: 'pcs_per_box', header: 'Pack Size (Pcs Per Box)', example: '24' },
-      { key: 'category', header: 'Product Category', example: 'Biscuits' },
-      { key: 'account_group', header: 'Group Name (FMCG/FMCD)', example: 'FMCG' },
-      { key: 'segment', header: 'Segment (FMCG/FMCD)', example: 'FMCG' }
+      { key: 'product_name', header: 'Product Name', example: 'AKAI 43 Inch 4K UHD Smart Google TV' },
+      { key: 'company_name', header: 'Brand / Company Name', example: 'AKAI' },
+      { key: 'segment', header: 'Segment (FMCG / FMCD)', example: 'FMCD' },
+      { key: 'category', header: 'Product Category', example: 'Smart TV' },
+      { key: 'pcs_per_box', header: 'Pack Size (Pcs Per Box)', example: '1' },
+      { key: 'mrp_price', header: 'MRP Price (INR)', example: '28990' },
+      { key: 'unit_price', header: 'Unit Price / Dealer Rate (INR)', example: '20500' }
     ],
     sampleData: [
       {
         product_code: 'P-AK-001',
-        product_name: 'Priyagold Butter Delite 100g',
-        mrp_price: '150',
-        pcs_per_box: '24',
-        category: 'Biscuits',
-        account_group: 'FMCG',
-        segment: 'FMCG'
+        product_name: 'AKAI 32 Inch HD Ready LED TV',
+        company_name: 'AKAI',
+        segment: 'FMCD',
+        category: 'Smart TV',
+        pcs_per_box: '1',
+        mrp_price: '14990',
+        unit_price: '10500'
       },
       {
         product_code: 'P-AK-002',
-        product_name: 'Orion Choco Pie 12P Tray Pack',
-        mrp_price: '210',
-        pcs_per_box: '16',
-        category: 'Confectionery',
-        account_group: 'FMCG',
-        segment: 'FMCG'
+        product_name: 'AKAI 43 Inch 4K UHD Smart Google TV',
+        company_name: 'AKAI',
+        segment: 'FMCD',
+        category: 'Smart TV',
+        pcs_per_box: '1',
+        mrp_price: '28990',
+        unit_price: '20500'
       },
       {
-        product_code: 'P-AK-003',
-        product_name: 'Whirlpool Direct Cool Refrigerator 190L',
-        mrp_price: '18500',
-        pcs_per_box: '1',
-        category: 'Appliances',
-        account_group: 'FMCD',
-        segment: 'FMCD'
+        product_code: 'P-PG-001',
+        product_name: 'Priyagold Butter Delite 100g',
+        company_name: 'Priyagold',
+        segment: 'FMCG',
+        category: 'Biscuits',
+        pcs_per_box: '24',
+        mrp_price: '150',
+        unit_price: '120'
       }
     ]
   },

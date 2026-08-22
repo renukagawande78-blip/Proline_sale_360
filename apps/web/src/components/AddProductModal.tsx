@@ -15,6 +15,7 @@ import {
   registerNewProduct, 
   generateNewBarcodeSKUCode, 
   fetchCompaniesFromSupabase,
+  fetchItemCategoriesFromSupabase,
   saveProductToSupabase,
   supabase,
   generateUuid
@@ -55,24 +56,29 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [unitPrice, setUnitPrice] = useState<number | ''>(120);
   const [pcsPerBox, setPcsPerBox] = useState<number | ''>(24);
   const [category, setCategory] = useState('Biscuits');
-  const [stockBoxQty, setStockBoxQty] = useState<number | ''>(100);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
-  // Load Segments and Companies on open
+  // Load Segments, Companies, and Categories on open
   useEffect(() => {
     if (!isOpen) return;
     let mounted = true;
 
+    setSegments([
+      { id: 'seg_fmcg_001', segment_code: 'FMCG', segment_name: 'Fast Moving Consumer Goods' },
+      { id: 'seg_fmcd_001', segment_code: 'FMCD', segment_name: 'Fast Moving Consumer Durables' }
+    ]);
+
     Promise.all([
-      supabase.from('segments').select('*').order('segment_code'),
-      fetchCompaniesFromSupabase()
-    ]).then(([{ data: segData }, compData]) => {
+      fetchCompaniesFromSupabase(),
+      fetchItemCategoriesFromSupabase()
+    ]).then(([compData, catData]) => {
       if (mounted) {
-        if (segData && segData.length > 0) {
-          setSegments(segData);
+        if (catData && catData.length > 0) {
+          setAvailableCategories(catData.map(c => c.category_name));
         }
         if (compData && compData.length > 0) {
           setAllCompanies(compData);
@@ -90,27 +96,20 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     return () => { mounted = false; };
   }, [isOpen]);
 
-  // Companies filtered by the selected Segment: Segment > Companies
-  const filteredCompanies = allCompanies.filter(c => 
-    (c.segment || 'FMCG').toUpperCase() === selectedSegment.toUpperCase()
-  );
-
-  // When segment changes, auto-select first matching company
-  const handleSegmentChange = (newSeg: string) => {
-    setSelectedSegment(newSeg);
-    const matching = allCompanies.filter(c => (c.segment || 'FMCG').toUpperCase() === newSeg.toUpperCase());
-    const firstComp = matching[0] || allCompanies[0];
-    if (firstComp) {
-      setSelectedCompanyId(firstComp.id);
-      setAutoSkuCode(generateNewBarcodeSKUCode(firstComp.company_code || firstComp.company_name));
-    }
-  };
-
+  // When company changes, auto-fill segment, company code, pack size, and SKU code
   const handleCompanyChange = (compId: string) => {
     setSelectedCompanyId(compId);
     const comp = allCompanies.find(c => c.id === compId);
     if (comp) {
+      const seg = (comp.segment || 'FMCG').toUpperCase();
+      setSelectedSegment(seg);
       setAutoSkuCode(generateNewBarcodeSKUCode(comp.company_code || comp.company_name));
+      // Auto-set pack size default based on segment
+      if (seg === 'FMCD') {
+        setPcsPerBox(1);
+      } else if (pcsPerBox === 1 || !pcsPerBox) {
+        setPcsPerBox(24);
+      }
     }
   };
 
@@ -144,15 +143,12 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       company_id: selectedCompanyId,
       product_code: autoSkuCode,
       product_name: productName.trim(),
+      segment: selectedSegment,
+      category: category.trim() || 'General',
       pcs_per_box: Number(pcsPerBox),
       mrp_price: Number(mrpPrice),
       unit_price: Number(unitPrice || mrpPrice),
-      category: category.trim() || 'General',
-      account_group: selectedComp?.company_name || 'FMCG',
-      segment: selectedSegment as any,
-      stock_box_qty: Number(stockBoxQty) || 0,
-      stock_loose_pcs: 0,
-      total_stock_pcs: (Number(stockBoxQty) || 0) * Number(pcsPerBox)
+      active: true
     };
 
     registerNewProduct(newProd);
@@ -176,7 +172,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       setUnitPrice(120);
       setPcsPerBox(24);
       setCategory('Biscuits');
-      setStockBoxQty(100);
       setSuccessNotice(null);
       setErrorNotice(null);
     }, 1200);
@@ -331,7 +326,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
           )}
 
-          {/* 1. HIERARCHY ROW: Segment ➔ Company */}
+          {/* 1. DIRECT COMPANY / BRAND SELECTION WITH AUTO-FILLED SEGMENT & CODE */}
           <div style={{
             padding: '1rem',
             background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.6))',
@@ -342,64 +337,79 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             gap: '0.85rem'
           }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Layers size={14} /> Step 1: Select Segment ➔ Step 2: Select Company
+              <Building2 size={15} /> Select Brand / Company (Auto-Fills Segment & Code)
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '0.85rem' }}>
-              {/* 1A. Segment Selector */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.85rem', alignItems: 'center' }}>
+              {/* Company Selector */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
-                  INDUSTRY SEGMENT <span style={{ color: '#f43f5e' }}>*</span>
-                </label>
-                <select
-                  value={selectedSegment}
-                  onChange={(e) => handleSegmentChange(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.6rem 0.8rem',
-                    background: '#070e20',
-                    border: '1px solid #38bdf8',
-                    borderRadius: 10,
-                    color: selectedSegment === 'FMCG' ? '#34d399' : '#fbbf24',
-                    fontSize: '0.85rem',
-                    fontWeight: 800,
-                    outline: 'none'
-                  }}
-                >
-                  {segments.map(s => (
-                    <option key={s.id} value={s.segment_code} style={{ background: '#0f172a', color: '#fff' }}>
-                      {s.segment_code} — {s.segment_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 1B. Company Selector (Filtered by Segment) */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
-                  COMPANY / BRAND (IN {selectedSegment}) <span style={{ color: '#f43f5e' }}>*</span>
+                  COMPANY / BRAND <span style={{ color: '#f43f5e' }}>*</span>
                 </label>
                 <select
                   value={selectedCompanyId}
                   onChange={(e) => handleCompanyChange(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '0.6rem 0.8rem',
+                    padding: '0.65rem 0.85rem',
                     background: '#070e20',
                     border: '1px solid #38bdf8',
                     borderRadius: 10,
-                    color: '#f8fafc',
-                    fontSize: '0.85rem',
+                    color: '#ffffff',
+                    fontSize: '0.9rem',
                     fontWeight: 800,
-                    outline: 'none'
+                    outline: 'none',
+                    cursor: 'pointer'
                   }}
                 >
-                  {filteredCompanies.map(c => (
+                  {allCompanies.map(c => (
                     <option key={c.id} value={c.id} style={{ background: '#0f172a', color: '#fff' }}>
-                      [{c.company_code}] {c.company_name}
+                      {c.company_name} ({c.company_code}) — {c.segment || 'FMCG'}
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Auto-filled Badges */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', marginBottom: '0.35rem' }}>
+                  AUTO-FILLED DETAILS
+                </label>
+                <div style={{
+                  display: 'flex',
+                  gap: '0.4rem',
+                  alignItems: 'center',
+                  padding: '0.55rem 0.75rem',
+                  background: '#070e20',
+                  border: '1px solid rgba(56, 189, 248, 0.2)',
+                  borderRadius: 10
+                }}>
+                  {/* Segment Badge */}
+                  <span style={{
+                    color: selectedSegment === 'FMCG' ? '#34d399' : '#fbbf24',
+                    fontWeight: 900,
+                    background: selectedSegment === 'FMCG' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                    border: `1px solid ${selectedSegment === 'FMCG' ? 'rgba(52, 211, 153, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`,
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: 6,
+                    fontSize: '0.75rem'
+                  }}>
+                    {selectedSegment}
+                  </span>
+
+                  {/* Company Code Badge */}
+                  <span style={{
+                    color: '#38bdf8',
+                    fontWeight: 800,
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: 6,
+                    fontSize: '0.75rem'
+                  }}>
+                    Code: {selectedComp?.company_code || 'N/A'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -475,11 +485,12 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
-                Category
+                Product Category (Pick Existing or Type New)
               </label>
               <input
                 type="text"
-                placeholder="e.g. Biscuits, Drinks"
+                list="category-suggestions"
+                placeholder="e.g. Smart TV, Air Conditioner, Biscuits"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 style={{
@@ -494,6 +505,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                   outline: 'none'
                 }}
               />
+              <datalist id="category-suggestions">
+                {availableCategories.map((cat, i) => (
+                  <option key={i} value={cat} />
+                ))}
+              </datalist>
             </div>
           </div>
 

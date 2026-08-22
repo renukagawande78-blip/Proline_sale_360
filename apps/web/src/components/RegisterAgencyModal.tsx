@@ -45,13 +45,14 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
   const [contactPerson, setContactPerson] = useState('');
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
+  const [assignedSalesperson, setAssignedSalesperson] = useState('Chirag Patel');
 
   // Location & Territory
   const [city, setCity] = useState('Surat');
   const [areaName, setAreaName] = useState('Katargam');
 
-  // Approved Credit Limit
-  const [creditLimit, setCreditLimit] = useState<number>(250000);
+  // Approved Credit Limit (Default 0)
+  const [creditLimit, setCreditLimit] = useState<number>(0);
 
   // Dynamic Lists for City, Area, Zone Dropdowns & Inline Master Addition
   const [citiesList, setCitiesList] = useState<string[]>([
@@ -241,6 +242,7 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
       mobile: mobile.trim(),
       email: email.trim(),
       credit_limit: Number(creditLimit),
+      assigned_salesperson: assignedSalesperson.trim() || 'Chirag Patel',
       bank_name: '',
       account_number: '',
       ifsc_code: '',
@@ -276,7 +278,7 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
     }, 1200);
   };
 
-  const creditPresets = [100000, 250000, 500000, 1000000, 2500000];
+  const creditPresets = [0, 100000, 250000, 500000, 1000000];
 
   return (
     <div 
@@ -571,8 +573,9 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
                       width: '100%'
                     }}
                   >
-                    <option value="FMCG" style={{ background: '#0f172a', color: '#fff' }}>FMCG</option>
-                    <option value="FMCD" style={{ background: '#0f172a', color: '#fff' }}>FMCD</option>
+                    <option value="FMCG" style={{ background: '#0f172a', color: '#fff' }}>FMCG (Fast Moving Consumer Goods)</option>
+                    <option value="FMCD" style={{ background: '#0f172a', color: '#fff' }}>FMCD (Fast Moving Consumer Durables)</option>
+                    <option value="FMCG, FMCD" style={{ background: '#0f172a', color: '#fff' }}>FMCG & FMCD (Dual Segment)</option>
                   </select>
                 </div>
               </div>
@@ -731,6 +734,38 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
                     }}
                   />
                 </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '0.5rem' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                Assigned Salespersons (Multiple Allowed, Comma-Separated)
+              </label>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                background: '#0f172a',
+                border: '1px solid #334155',
+                borderRadius: 10,
+                padding: '0.6rem 0.8rem',
+                gap: '0.6rem'
+              }}>
+                <ShieldCheck size={16} color="#34d399" />
+                <input
+                  type="text"
+                  placeholder="e.g. Chirag Patel, Nikhil, Rahul Sharma"
+                  value={assignedSalesperson}
+                  onChange={(e) => setAssignedSalesperson(e.target.value)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    color: '#34d399',
+                    fontSize: '0.825rem',
+                    fontWeight: 700,
+                    width: '100%'
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -1163,7 +1198,7 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
                         transition: 'all 0.15s ease'
                       }}
                     >
-                      ₹{(val / 100000).toLocaleString()} Lakh
+                      {val === 0 ? '₹0 (Zero Limit)' : `₹${(val / 100000).toLocaleString()} Lakh`}
                     </button>
                   ))}
                 </div>

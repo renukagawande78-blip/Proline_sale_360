@@ -270,33 +270,61 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
                     <div style={{ fontSize: '0.725rem', color: '#64748b' }}>{a.address || `${a.area_name || 'N/A'}, ${a.city || 'N/A'}`}</div>
                   </td>
                   <td>
-                    <span style={{ 
-                      padding: '0.2rem 0.55rem', 
-                      borderRadius: '6px', 
-                      fontSize: '0.75rem', 
-                      fontWeight: 700,
-                      background: isSurat ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                      color: isSurat ? '#fbbf24' : '#34d399',
-                      border: isSurat ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)'
-                    }}>
-                      {a.zone_name || 'N/A'}
-                    </span>
-                    <div style={{ fontSize: '0.725rem', color: '#38bdf8', marginTop: 3 }}>{a.area_name || 'N/A'}, {a.city || 'N/A'}</div>
+                    {a.zone_name ? (
+                      <span style={{ 
+                        padding: '0.2rem 0.55rem', 
+                        borderRadius: '6px', 
+                        fontSize: '0.75rem', 
+                        fontWeight: 700,
+                        background: isSurat ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                        color: isSurat ? '#fbbf24' : '#34d399',
+                        border: isSurat ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)'
+                      }}>
+                        {a.zone_name}
+                      </span>
+                    ) : null}
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8', marginTop: a.zone_name ? 3 : 0 }}>
+                      {a.area_name ? `${a.area_name}, ` : ''}{a.city || 'Gujarat'}
+                    </div>
                   </td>
                   <td>
                     <code style={{ background: '#0f172a', padding: '0.2rem 0.5rem', borderRadius: 4, color: '#34d399', fontSize: '0.75rem' }}>{a.gstin || a.gst_number || 'N/A'}</code>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>{a.account_group || 'N/A'}</div>
+                    <div style={{ marginTop: 4 }}>
+                      <span style={{
+                        fontSize: '0.675rem',
+                        fontWeight: 800,
+                        padding: '0.12rem 0.45rem',
+                        borderRadius: 4,
+                        background: (a.account_group || '').toUpperCase().includes('FMCD') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(52, 211, 153, 0.15)',
+                        color: (a.account_group || '').toUpperCase().includes('FMCD') ? '#fbbf24' : '#34d399',
+                        border: (a.account_group || '').toUpperCase().includes('FMCD') ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(52, 211, 153, 0.3)'
+                      }}>
+                        {a.account_group || 'FMCG'}
+                      </span>
+                    </div>
                   </td>
                   <td>
                     <div style={{ fontWeight: 600, color: '#f8fafc' }}>{a.contact_person || 'N/A'}</div>
                     <div style={{ fontSize: '0.725rem', color: '#94a3b8' }}>{a.mobile || 'N/A'}</div>
                   </td>
                   <td>
-                    <span style={{ fontSize: '0.725rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.12)', border: '1px solid rgba(52, 211, 153, 0.25)', padding: '0.15rem 0.5rem', borderRadius: 6, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <UserCheck size={12} /> {a.assigned_salesperson || 'N/A'}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      {(a.assigned_salesperson || 'Unassigned').split(',').map((sp, sIdx) => {
+                        const trimmed = sp.trim();
+                        if (!trimmed) return null;
+                        return (
+                          <span key={sIdx} style={{ fontSize: '0.72rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.12)', border: '1px solid rgba(52, 211, 153, 0.25)', padding: '0.15rem 0.45rem', borderRadius: 6, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <UserCheck size={11} /> {trimmed}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </td>
+                  <td>
+                    <span style={{ fontWeight: 800, color: '#38bdf8' }}>
+                      ₹{(Number(a.credit_limit) || 0).toLocaleString()}
                     </span>
                   </td>
-                  <td><span style={{ fontWeight: 800, color: '#38bdf8' }}>₹{(a.credit_limit || 250000).toLocaleString()}</span></td>
                   <td><span className="status-badge status-APPROVED">MAPPED</span></td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>

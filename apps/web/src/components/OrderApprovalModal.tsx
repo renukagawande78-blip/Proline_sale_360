@@ -187,75 +187,25 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           </div>
         </div>
 
-        {/* AGENCY FINANCIAL HEALTH & LIVE CREDIT LINE DETAILS */}
-        <div style={{ background: '#0b1329', border: '1px solid #1e293b', borderRadius: 10, padding: '1rem', marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {/* AGENCY DETAILS & ORDER VERIFICATION BANNER */}
+        <div style={{ background: '#0b1329', border: '1px solid #1e293b', borderRadius: 10, padding: '0.85rem 1rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <CreditCard size={16} /> Agency Financial Analysis & Ledger ({order.agency_name})
+                <Building2 size={16} /> Agency Information: {order.agency_name}
               </span>
-              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>
-                Type: {agencyFinancials.account_type || 'Sundry Debtors-Electronics'}
+              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.12)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>
+                Territory: {order.area_name || 'Active Territory'}
               </span>
             </div>
 
-            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.12)', padding: '0.2rem 0.55rem', borderRadius: 6 }}>
-              Credit Score: {creditScore}/100
-            </span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
-            <div style={{ background: '#1e293b', padding: '0.65rem', borderRadius: 8, border: '1px solid #334155' }}>
-              <div style={{ fontSize: '0.675rem', color: '#94a3b8', fontWeight: 700 }}>CREDIT LIMIT</div>
-              <div style={{ fontWeight: 800, color: '#f8fafc', marginTop: 2 }}>₹{creditLimit.toLocaleString()}</div>
-            </div>
-
-            <div style={{ background: '#1e293b', padding: '0.65rem', borderRadius: 8, border: '1px solid #334155' }}>
-              <div style={{ fontSize: '0.675rem', color: '#94a3b8', fontWeight: 700 }}>OUTSTANDING BAL</div>
-              <div style={{ fontWeight: 800, color: '#fbbf24', marginTop: 2 }}>₹{currentOutstanding.toLocaleString()}</div>
-            </div>
-
-            <div style={{ background: '#1e293b', padding: '0.65rem', borderRadius: 8, border: hasOverduePayment ? '1px solid #f43f5e' : '1px solid #334155' }}>
-              <div style={{ fontSize: '0.675rem', color: hasOverduePayment ? '#f43f5e' : '#94a3b8', fontWeight: 700 }}>OVERDUE (&gt; 30 DAYS)</div>
-              <div style={{ fontWeight: 800, color: hasOverduePayment ? '#f43f5e' : '#34d399', marginTop: 2 }}>
-                ₹{(agencyFinancials.overdue_amount || 0).toLocaleString()}
-              </div>
-            </div>
-
-            <div style={{ background: '#1e293b', padding: '0.65rem', borderRadius: 8, border: '1px solid #334155' }}>
-              <div style={{ fontSize: '0.675rem', color: '#34d399', fontWeight: 700 }}>ADVANCE DEPOSIT</div>
-              <div style={{ fontWeight: 800, color: '#34d399', marginTop: 2 }}>₹{(agencyFinancials.advance_amount || 0).toLocaleString()}</div>
-            </div>
-
-            <div style={{ background: '#1e293b', padding: '0.65rem', borderRadius: 8, border: isCreditBreached ? '1px solid #f59e0b' : '1px solid #334155' }}>
-              <div style={{ fontSize: '0.675rem', color: '#94a3b8', fontWeight: 700 }}>AVAILABLE CREDIT</div>
-              <div style={{ fontWeight: 800, color: isCreditBreached ? '#f59e0b' : '#34d399', marginTop: 2 }}>
-                ₹{availableCredit.toLocaleString()}
-              </div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+              Booked Salesperson: <strong style={{ color: '#38bdf8' }}>{order.salesperson_name || 'Sales Representative'}</strong>
             </div>
           </div>
-
-          {/* Accounts Audit Notes, Officer & Timestamp */}
-          <div style={{ background: '#1e293b', borderRadius: 8, padding: '0.65rem 0.85rem', border: '1px solid #334155', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.725rem', color: '#94a3b8' }}>
-              <span style={{ fontWeight: 700, color: '#38bdf8' }}>ACCOUNTS UPDATE REMARK:</span>
-              <span style={{ fontSize: '0.675rem', color: '#64748b' }}>
-                Updated by <strong>{agencyFinancials.updated_by_name || 'Accounts Officer'}</strong> at {agencyFinancials.updated_at ? new Date(agencyFinancials.updated_at).toLocaleString() : 'Recent Session'}
-              </span>
-            </div>
-            <p style={{ fontSize: '0.775rem', color: '#e2e8f0', margin: 0, fontStyle: 'italic' }}>
-              "{agencyFinancials.remarks || 'Account active & verified'}"
-            </p>
-          </div>
-
-          {(isCreditBreached || hasOverduePayment) && (
-            <div style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 8, padding: '0.65rem', marginTop: '0.75rem', fontSize: '0.775rem', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <AlertTriangle size={16} color="#fbbf24" style={{ flexShrink: 0 }} />
-              <span>
-                {isCreditBreached && `Order total (₹${order.total_amount.toLocaleString()}) exceeds Available Credit (₹${availableCredit.toLocaleString()}). `}
-                {hasOverduePayment && `Agency has ₹${(agencyFinancials.overdue_amount || 0).toLocaleString()} overdue beyond 30 days terms. `}
-                Send query to Accounts for clearance waiver before final approval.
-              </span>
+          {order.remarks && (
+            <div style={{ marginTop: '0.5rem', fontSize: '0.775rem', color: '#cbd5e1', background: '#1e293b', padding: '0.4rem 0.65rem', borderRadius: 6, border: '1px solid #334155' }}>
+              <strong style={{ color: '#94a3b8' }}>Order Notes / Instructions: </strong> {order.remarks}
             </div>
           )}
         </div>

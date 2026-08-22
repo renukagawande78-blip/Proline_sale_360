@@ -182,8 +182,8 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
         onSuccess={(updated) => {
           setProductsList(prev => prev.map(p => p.id === updated.id ? updated : p));
           addNotification({
-            title: `📦 Stock Updated: ${updated.product_name}`,
-            message: `MRP set to ₹${updated.mrp_price}, Pack: ${updated.pcs_per_box} pcs/box, Stock: ${updated.stock_box_qty} Boxes (${updated.total_stock_pcs} Total PCS).`,
+            title: `📦 Pricing/Pack Updated: ${updated.product_name}`,
+            message: `MRP set to ₹${updated.mrp_price}, Pack: ${updated.pcs_per_box} pcs/box.`,
             event_type: 'STOCK_UPDATED'
           });
         }}
@@ -196,7 +196,7 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
           setProductsList(prev => [newProd, ...prev]);
           addNotification({
             title: `✨ New SKU Registered: ${newProd.product_name}`,
-            message: `Registered code ${newProd.product_code} into warehouse catalog with initial stock of ${newProd.stock_box_qty} Boxes.`,
+            message: `Registered code ${newProd.product_code} into warehouse catalog.`,
             event_type: 'NEW_SKU_REGISTERED'
           });
         }}
@@ -400,24 +400,20 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                   <th>MRP Unit Price</th>
                   <th>Wholesale Price</th>
                   <th>Pack Size</th>
-                  <th>Stock In Boxes</th>
-                  <th>Total Available Stock (PCS)</th>
-                  <th>Stock Status</th>
+                  <th>Status</th>
                   <th style={{ textAlign: 'center' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                       No product SKUs found matching search query. Click "+ Register New Product SKU" to add new products into catalog.
                     </td>
                   </tr>
                 ) : (
                   filteredProducts.map(p => {
                     const comp = MOCK_COMPANIES.find(c => c.id === p.company_id);
-                    const totalPcs = p.total_stock_pcs || ((p.stock_box_qty || 0) * (p.pcs_per_box || 1));
-                    const isLowStock = totalPcs < 50;
 
                     return (
                       <tr key={p.id}>
@@ -427,18 +423,10 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                         <td><strong style={{ color: '#34d399' }}>₹{(p.mrp_price || (p.unit_price ? Math.round(p.unit_price * 1.15) : 100)).toLocaleString()}</strong></td>
                         <td><span>₹{(p.unit_price || p.mrp_price || 100).toLocaleString()}</span></td>
                         <td><span style={{ fontWeight: 700, color: '#38bdf8' }}>{p.pcs_per_box} pcs/box</span></td>
-                        <td><strong style={{ color: '#f8fafc' }}>{p.stock_box_qty || 0} Boxes</strong></td>
-                        <td><strong style={{ color: isLowStock ? '#f43f5e' : '#34d399', fontSize: '0.85rem' }}>{totalPcs.toLocaleString()} PCS</strong></td>
                         <td>
-                          {isLowStock ? (
-                            <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#f43f5e', background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>
-                              ⚠️ LOW STOCK
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>
-                              🟢 IN STOCK
-                            </span>
-                          )}
+                          <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>
+                            🟢 ACTIVE
+                          </span>
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <button

@@ -25,9 +25,11 @@ import {
   generateNewAgencyCode, 
   generateNewBarcodeSKUCode,
   resolveZoneForAreaAndCity,
-  deduplicateAgencies 
+  deduplicateAgencies,
+  supabase,
+  generateUuid
 } from '../lib/supabase';
-import { Agency } from '../types';
+import { Agency, Product } from '../types';
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -123,34 +125,77 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       return;
     }
 
-    // Auto-map detected CSV headers to target schema keys
+    // Robust 2-Pass Auto-mapping detected CSV headers to target schema keys
     const initialMap: Record<string, string> = {};
-    schema.columns.forEach(col => {
-      const colHeaderLower = col.header.toLowerCase();
-      const colKeyLower = col.key.toLowerCase();
+    const claimedHeaders = new Set<string>();
 
-      // Find matching index in CSV headers
-      const matchedIdx = headers.findIndex(h => {
-        const hLower = h.toLowerCase();
-        if (colKeyLower === 'agency_name' && (hLower.includes('party') || hLower.includes('agency') || hLower.includes('firm') || hLower.includes('name'))) return true;
-        if (colKeyLower === 'product_name' && (hLower.includes('product') || hLower.includes('sku') || hLower.includes('item') || hLower.includes('title') || hLower.includes('name'))) return true;
-        if (colKeyLower === 'company_name' && (hLower.includes('brand') || hLower.includes('company') || hLower.includes('manufacturer'))) return true;
-        if (colKeyLower === 'full_name' && (hLower.includes('user') || hLower.includes('full') || hLower.includes('name'))) return true;
-        if (colKeyLower === 'email' && (hLower.includes('email') || hLower.includes('mail'))) return true;
-        if (colKeyLower === 'gstin' && (hLower.includes('gst') || hLower.includes('tax'))) return true;
-        if (colKeyLower === 'city' && (hLower.includes('city') || hLower.includes('district') || hLower.includes('location'))) return true;
-        if (colKeyLower === 'area_name' && (hLower.includes('area') || hLower.includes('locality') || hLower.includes('territory'))) return true;
-        if (colKeyLower === 'contact_person' && (hLower.includes('contact') || hLower.includes('person') || hLower.includes('owner'))) return true;
-        if (colKeyLower === 'mobile' && (hLower.includes('mobile') || hLower.includes('phone') || hLower.includes('number'))) return true;
-        if (colKeyLower === 'account_group' && (hLower.includes('group') || hLower.includes('segment') || hLower.includes('type'))) return true;
-        if (colKeyLower === 'credit_limit' && (hLower.includes('credit') || hLower.includes('limit'))) return true;
-        if (colKeyLower === 'agency_code' && (hLower.includes('code') || hLower.includes('id'))) return true;
-        if (colKeyLower === 'product_code' && (hLower.includes('sku') || hLower.includes('barcode') || hLower.includes('code') || hLower.includes('id'))) return true;
-        return hLower === colHeaderLower || hLower === colKeyLower;
+    const cleanStr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Common aliases for each schema key
+    const ALIAS_MAP: Record<string, string[]> = {
+      product_code: ['productcode', 'product_code', 'skucode', 'sku_code', 'sku', 'barcode', 'itemcode', 'item_code', 'code', 'modelcode'],
+      product_name: ['productname', 'product_name', 'itemname', 'item_name', 'modelname', 'model', 'title', 'description', 'product', 'producttitle', 'item'],
+      company_name: ['productcompanyname', 'companyname', 'company_name', 'brandname', 'brand_name', 'brand', 'company', 'manufacturer'],
+      segment: ['productcompanysegment', 'companysegment', 'segment', 'division', 'industry'],
+      category: ['productcategory', 'product_category', 'categoryname', 'category_name', 'itemcategory', 'item_category', 'category', 'cat'],
+      pcs_per_box: ['pcsperbox', 'pcs_per_box', 'packsize', 'pack_size', 'boxpack', 'box_pack', 'pcsbox', 'pcs/box', 'unitsperbox'],
+      mrp_price: ['mrpprice', 'mrp_price', 'mrp', 'retailprice', 'retail_price', 'mrpinr', 'mrp(inr)', 'mrp(₹)'],
+      unit_price: ['unitprice', 'unit_price', 'dealerprice', 'dealer_price', 'dealerrate', 'dealer_rate', 'rate', 'wholesaleprice', 'price', 'cost'],
+      agency_name: ['agencyname', 'agency_name', 'partyname', 'party_name', 'party', 'agency', 'customername', 'customer_name', 'firmname', 'firm_name'],
+      agency_code: ['agencycode', 'agency_code', 'partycode', 'party_code', 'partyid', 'party_id', 'customercode', 'customer_code', 'code'],
+      account_group: ['accountgroup', 'account_group', 'agencytype', 'agency_type', 'segment', 'companybrand', 'company_brand', 'brand', 'group', 'type'],
+      assigned_salesperson: ['assignedsalespersons', 'assignedsalesperson', 'assigned_salespersons', 'assigned_salesperson', 'salesperson', 'salespersons', 'sales_person', 'salesrep', 'assigned_sales'],
+      gstin: ['gstin', 'gstnumber', 'gst_number', 'gst', 'gstno', 'gst_no', 'taxid', 'tax_id'],
+      mobile: ['mobile', 'mobilenumber', 'mobile_number', 'phone', 'phonenumber', 'contactnumber', 'cell'],
+      email: ['email', 'emailid', 'email_id', 'emailaddress', 'email_address', 'mail'],
+      city: ['city', 'district', 'town', 'location'],
+      area_name: ['areaname', 'area_name', 'area', 'locality', 'territory', 'zone'],
+      contact_person: ['contactperson', 'contact_person', 'personname', 'owner', 'contact'],
+      credit_limit: ['creditlimit', 'credit_limit', 'credit', 'limit'],
+      full_name: ['fullname', 'full_name', 'username', 'user_name', 'name', 'employee_name'],
+      role_name: ['rolename', 'role_name', 'role', 'designation', 'user_role']
+    };
+
+    // Pass 1: Exact matches
+    schema.columns.forEach(col => {
+      const colClean = cleanStr(col.key);
+      const headerClean = cleanStr(col.header);
+
+      const exactMatch = headers.find(h => {
+        if (claimedHeaders.has(h)) return false;
+        const hClean = cleanStr(h);
+        return hClean === colClean || hClean === headerClean;
       });
 
-      if (matchedIdx !== -1) {
-        initialMap[col.key] = headers[matchedIdx];
+      if (exactMatch) {
+        initialMap[col.key] = exactMatch;
+        claimedHeaders.add(exactMatch);
+      }
+    });
+
+    // Pass 2: Alias matches
+    schema.columns.forEach(col => {
+      if (initialMap[col.key]) return; // already mapped in pass 1
+
+      const aliases = ALIAS_MAP[col.key] || [];
+      const matchedHeader = headers.find(h => {
+        if (claimedHeaders.has(h)) return false;
+        const hClean = cleanStr(h);
+        
+        // Disambiguate product_name vs product_code
+        if (col.key === 'product_name' && (hClean.includes('code') || hClean.includes('sku') || hClean.includes('barcode'))) {
+          return false;
+        }
+        if (col.key === 'product_code' && (hClean.includes('name') || hClean.includes('title') || hClean.includes('desc'))) {
+          return false;
+        }
+
+        return aliases.some(alias => hClean === cleanStr(alias) || hClean.includes(cleanStr(alias)));
+      });
+
+      if (matchedHeader) {
+        initialMap[col.key] = matchedHeader;
+        claimedHeaders.add(matchedHeader);
       }
     });
 
@@ -182,6 +227,15 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     setErrorMsg(null);
     setTotalCount(rawRows.length);
 
+    // Fetch live companies for accurate ID linking
+    let liveCompanies: any[] = [];
+    try {
+      const { data: compData } = await supabase.from('companies').select('id, company_name, company_code, segment');
+      if (compData) liveCompanies = compData;
+    } catch (e) {
+      console.warn('Could not pre-fetch companies for import mapping', e);
+    }
+
     const importedItems: any[] = [];
 
     for (let i = 0; i < rawRows.length; i++) {
@@ -193,36 +247,41 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         const headerName = columnMap[targetKey];
         if (!headerName) return '';
         const idx = rawHeaders.indexOf(headerName);
-        return idx !== -1 ? (rowVals[idx] || '').trim() : '';
+        if (idx === -1 || idx >= rowVals.length) return '';
+        return (rowVals[idx] || '').trim();
       };
 
       if (masterType === 'products') {
-        const name = getVal('product_name') || getVal('name') || getVal('title') || `Imported Product ${i + 1}`;
-        const group = getVal('account_group') || getVal('group') || 'AKAI';
-        const code = getVal('product_code') || getVal('sku_code') || getVal('code') || generateNewBarcodeSKUCode(group, name);
-        const pcsPerBox = Number(getVal('pcs_per_box') || getVal('pack_size') || 24);
-        const mrp = Number(getVal('mrp_price') || getVal('mrp') || 150);
-        const unitPrice = Number(getVal('unit_price') || getVal('price') || mrp);
+        const name = getVal('product_name') || getVal('name') || getVal('title') || `Product SKU ${i + 1}`;
+        const brandInput = getVal('company_name') || getVal('brand') || getVal('company') || 'AKAI';
+        
+        // Find matching company in database by name or code
+        const matchedComp = liveCompanies.find(c => 
+          c.company_name?.toLowerCase() === brandInput.toLowerCase() ||
+          c.company_code?.toLowerCase() === brandInput.toLowerCase() ||
+          brandInput.toLowerCase().includes(c.company_name?.toLowerCase() || '___')
+        );
+
+        const segment = (getVal('segment') || matchedComp?.segment || 'FMCD').toUpperCase();
+        const code = getVal('product_code') || getVal('sku_code') || getVal('code') || generateNewBarcodeSKUCode(matchedComp?.company_code || brandInput, name, i + 1);
+        const pcsPerBox = Number(getVal('pcs_per_box') || getVal('pack_size') || (segment === 'FMCD' ? 1 : 24));
+        const mrp = Number(getVal('mrp_price') || getVal('mrp') || 1000);
+        const unitPrice = Number(getVal('unit_price') || getVal('price') || getVal('rate') || (mrp > 0 ? Math.round(mrp * 0.8) : 800));
         const category = getVal('category') || 'General';
-        const segment = getVal('segment') || 'FMCG';
-        const stockQty = Number(getVal('stock_box_qty') || getVal('stock') || 100);
 
         setCurrentExecutingItem(`${name} (${code})`);
 
-        const productRecord = {
-          id: `p_bulk_${Date.now()}_${i}`,
-          company_id: 'c01',
+        const productRecord: Product = {
+          id: generateUuid(),
+          company_id: matchedComp?.id || 'c_akai',
           product_code: code,
           product_name: name,
+          segment: segment,
+          category: category,
           pcs_per_box: pcsPerBox,
           mrp_price: mrp,
           unit_price: unitPrice,
-          category: category,
-          account_group: group,
-          segment: segment,
-          stock_box_qty: stockQty,
-          stock_loose_pcs: 0,
-          total_stock_pcs: stockQty * pcsPerBox
+          active: true
         };
 
         importedItems.push(productRecord);
@@ -255,7 +314,23 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       } else if (masterType === 'users') {
         const name = getVal('full_name') || getVal('name') || `User ${i + 1}`;
         const email = getVal('email') || `user${Date.now()}_${i}@proline.com`;
-        const role = getVal('role_name') || getVal('role') || 'SALES_PERSON';
+        let role = (getVal('role_name') || getVal('role') || 'SALES_PERSON').toUpperCase().trim().replace(/[\s\/-]+/g, '_');
+        if (role.includes('EXEC') || role === 'SALES_EXECUTIVE') {
+          role = 'SALES_EXECUTIVE';
+        } else if (role.includes('PERSON') || role === 'SALES') {
+          role = 'SALES_PERSON';
+        } else if (role.includes('ASM') || role.includes('AREA')) {
+          role = 'AREA_SALES_MANAGER';
+        } else if (role.includes('ADMIN')) {
+          role = role.includes('SUPER') ? 'SUPER_ADMIN' : 'SALES_ADMIN';
+        } else if (role.includes('BILL')) {
+          role = 'BILLING';
+        } else if (role.includes('DISPATCH')) {
+          role = 'DISPATCH_MANAGER';
+        } else if (role.includes('ACC')) {
+          role = 'ACCOUNTS';
+        }
+
         const handle = getVal('company_handle') || getVal('handle') || 'All';
         const password = getVal('password') || '1234';
 
@@ -265,7 +340,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           id: `u_bulk_${Date.now()}_${i}`,
           full_name: name,
           email: email,
-          role_name: role,
+          role_name: role as any,
           company_handle: handle,
           password: password,
           active: true
@@ -286,8 +361,11 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         const gstin = getVal('gstin') || getVal('gst_number') || 'N/A';
         const contact = getVal('contact_person') || getVal('contact') || 'N/A';
         const phone = getVal('mobile') || getVal('phone') || 'N/A';
-        const group = getVal('account_group') || getVal('group') || 'FMCG';
-        const limit = Number(getVal('credit_limit')) || 250000;
+        const group = getVal('account_group') || getVal('company_name') || getVal('group') || getVal('segment') || 'FMCG';
+        const rawLimit = getVal('credit_limit');
+        const limit = rawLimit !== '' ? (Number(rawLimit) || 0) : 0;
+        const email = getVal('email') || 'N/A';
+        const assignedSales = getVal('assigned_salesperson') || getVal('salesperson') || getVal('assigned_salespersons') || 'Chirag Patel';
 
         setCurrentExecutingItem(`${name} (${gstin !== 'N/A' ? gstin : code})`);
 
@@ -305,13 +383,13 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           account_group: group,
           contact_person: contact,
           mobile: phone,
-          email: 'N/A',
+          email: email,
           credit_limit: limit,
           bank_name: 'N/A',
           account_number: 'N/A',
           ifsc_code: 'N/A',
           branch_name: 'N/A',
-          assigned_salesperson: 'Chirag Patel',
+          assigned_salesperson: assignedSales,
           zone_name: resolvedZone.zone_name,
           zone_region: resolvedZone.region,
           active: true

@@ -35,9 +35,7 @@ import { AgenciesMasterView } from '../views/masters/AgenciesMasterView';
 import { ProductsMasterView } from '../views/masters/ProductsMasterView';
 import { BrandsMasterView } from '../views/masters/BrandsMasterView';
 import { UsersMasterView } from '../views/masters/UsersMasterView';
-import { AreasMasterView } from '../views/masters/AreasMasterView';
 import { ZonesMasterView } from '../views/masters/ZonesMasterView';
-import { SegmentsMasterView } from '../views/masters/SegmentsMasterView';
 import { RolePermissionsMasterView } from '../views/masters/RolePermissionsMasterView';
 import { RegisterAgencyModal } from '../components/RegisterAgencyModal';
 import { AddProductModal } from '../components/AddProductModal';
@@ -45,7 +43,7 @@ import { BulkImportModal } from '../components/BulkImportModal';
 import { MasterType, downloadSampleCSV, exportMasterCSV } from '../lib/masterImportExport';
 
 interface MastersPageProps {
-  initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'segments' | 'permissions';
+  initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'permissions';
   onOpenUserMgmtModal?: (user?: any) => void;
   onOpenCreateOrderForAgency?: (agencyId: string) => void;
 }
@@ -57,7 +55,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
   const isSalesPerson = role === 'SALES_PERSON';
   const canAddMaster = hasPermission('new_party') || hasPermission('product_mgmt') || role === 'SUPER_ADMIN';
 
-  const [activeTab, setActiveTab] = useState<'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'segments' | 'permissions'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'permissions'>(initialTab);
 
   useEffect(() => {
     if (initialTab) {
@@ -183,8 +181,8 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         unit_price: newItemPrice || 100,
         mrp_price: newItemPrice || 120,
         category: 'General',
-        account_group: 'FMCG',
-        segment: 'FMCG'
+        segment: 'FMCG',
+        active: true
       };
       setProductsList(prev => [...prev, newP]);
       setSuccessNotice(`New Product SKU "${newItemName}" added!`);
@@ -251,9 +249,8 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         pcs_per_box: Number(r.pcs_per_box) || 24,
         unit_price: Number(r.unit_price) || 120,
         mrp_price: Number(r.mrp_price) || 150,
-        stock_box_qty: Number(r.stock_box_qty) || 200,
-        stock_loose_pcs: 0,
-        segment: r.segment || 'FMCG'
+        segment: r.segment || 'FMCG',
+        active: true
       }));
       setProductsList(prev => [...formatted, ...prev]);
       setSuccessNotice(`Successfully imported ${formatted.length} Products / SKUs into Master!`);
@@ -448,28 +445,6 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
           </button>
         )}
 
-        <button
-          onClick={() => setActiveTab('segments')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.55rem 1rem',
-            borderRadius: 10,
-            border: 'none',
-            background: activeTab === 'segments' ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'transparent',
-            color: activeTab === 'segments' ? '#ffffff' : '#94a3b8',
-            fontWeight: 800,
-            fontSize: '0.8rem',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            boxShadow: activeTab === 'segments' ? '0 4px 12px rgba(124, 58, 237, 0.4)' : 'none',
-            transition: 'all 0.15s ease'
-          }}
-        >
-          <Layers size={15} /> Segments (2)
-        </button>
-
         {!isSalesPerson && (
           <button
             onClick={() => setActiveTab('permissions')}
@@ -530,10 +505,6 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
 
       {activeTab === 'users' && !isSalesPerson && (
         <UsersMasterView users={users} searchQuery={searchQuery} onOpenUserMgmtModal={onOpenUserMgmtModal} />
-      )}
-
-      {activeTab === 'segments' && (
-        <SegmentsMasterView searchQuery={searchQuery} />
       )}
 
       {activeTab === 'permissions' && (

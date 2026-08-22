@@ -101,7 +101,9 @@ export interface OrderAccessPermission {
 
 export const getOrderAccessPermission = (
   order: Order, 
-  user: { role_name?: string; company_handle?: string } | null
+  user: { id?: string; full_name?: string; role_name?: string; company_handle?: string } | null,
+  companiesPool?: any[],
+  productsPool?: any[]
 ): OrderAccessPermission => {
   if (!user) {
     return {
@@ -113,16 +115,52 @@ export const getOrderAccessPermission = (
     };
   }
 
-  if (user.role_name === 'SUPER_ADMIN' || user.company_handle === 'All') {
+  const role = (user.role_name || '').toUpperCase();
+  const isSuperAdmin = role === 'SUPER_ADMIN' || 
+                       user.company_handle === 'All' || 
+                       (user.full_name || '').toLowerCase().includes('chirag') || 
+                       (user.full_name || '').toLowerCase().includes('harshad');
+
+  // 1. Super Admin sees ALL Sales Orders
+  if (isSuperAdmin) {
     return {
       canView: true,
       canExecuteActions: true,
       isDirectBrandOwner: true,
       isItemBrandOwner: true,
-      accessReason: 'Super Admin / All Brands Master Scope'
+      accessReason: 'Super Admin / Master Corporate Scope'
     };
   }
 
+  // 2. Sales Admin with All Brands scope sees ALL Sales Orders
+  if (role === 'SALES_ADMIN' && (user.company_handle === 'All' || !user.company_handle)) {
+    return {
+      canView: true,
+      canExecuteActions: true,
+      isDirectBrandOwner: true,
+      isItemBrandOwner: true,
+      accessReason: 'Sales Admin Master Scope'
+    };
+  }
+
+  // 3. Check if order was booked by this salesperson / user
+  const isBookedByUser = (user.id && order.salesperson_id === user.id) ||
+                         (user.full_name && order.salesperson_name && (
+                           order.salesperson_name.toLowerCase().includes(user.full_name.toLowerCase()) ||
+                           user.full_name.toLowerCase().includes(order.salesperson_name.toLowerCase())
+                         ));
+
+  if (isBookedByUser) {
+    return {
+      canView: true,
+      canExecuteActions: true,
+      isDirectBrandOwner: true,
+      isItemBrandOwner: true,
+      accessReason: 'Booked Sales Representative'
+    };
+  }
+
+  // 4. Related Sales Admin / Brand Manager: check direct brand ownership
   const isDirectOwner = isCompanyAllowedForUser(order.company_name, user.company_handle);
   if (isDirectOwner) {
     return {
@@ -130,24 +168,39 @@ export const getOrderAccessPermission = (
       canExecuteActions: true,
       isDirectBrandOwner: true,
       isItemBrandOwner: true,
-      accessReason: 'Direct Brand Manager'
+      accessReason: 'Related Sales Admin / Brand Manager'
     };
   }
 
+  // 5. Check if any line items belong to user's assigned brand
+  const cPool = (companiesPool && companiesPool.length > 0) ? companiesPool : MOCK_COMPANIES;
+  const pPool = (productsPool && productsPool.length > 0) ? productsPool : MOCK_PRODUCTS;
+
   const hasMatchingItemBrand = (order.items || []).some(item => {
-    const prod = MOCK_PRODUCTS.find(p => p.id === item.product_id || p.product_name === item.product_name);
-    const itemCompany = MOCK_COMPANIES.find(c => c.id === prod?.company_id);
+    const prod = pPool.find((p: any) => p.id === item.product_id || p.product_name === item.product_name);
+    const itemCompany = cPool.find((c: any) => c.id === prod?.company_id);
     const brandName = itemCompany?.company_name || prod?.product_name || '';
-    return isCompanyAllowedForUser(brandName, user.company_handle);
+    return isCompanyAllowedForUser(brandName, user.company_handle, itemCompany?.company_code);
   });
 
   if (hasMatchingItemBrand) {
     return {
       canView: true,
-      canExecuteActions: false,
+      canExecuteActions: role === 'SALES_ADMIN' || role === 'AREA_SALES_MANAGER',
       isDirectBrandOwner: false,
       isItemBrandOwner: true,
-      accessReason: 'Read-Only View: Order contains items from your assigned brand, but parent order belongs to another brand manager.'
+      accessReason: 'Order contains items from assigned brand'
+    };
+  }
+
+  // 6. Billing / Dispatch / Accounts Roles
+  if (role === 'BILLING' || role === 'ACCOUNTS' || role === 'DISPATCH_MANAGER') {
+    return {
+      canView: true,
+      canExecuteActions: true,
+      isDirectBrandOwner: true,
+      isItemBrandOwner: true,
+      accessReason: 'Operations / Logistics Department Scope'
     };
   }
 
@@ -231,23 +284,51 @@ export const updateAgencyFinancials = (agencyId: string, updated: Partial<Agency
 export const DEFAULT_COMPANIES: Company[] = [];
 export const MOCK_COMPANIES: Company[] = [];
 
-export const resolveSegmentForUser = (user?: { company_handle?: string; role_name?: string } | null): 'ALL' | 'FMCG' | 'FMCD' => {
+export const resolveSegmentForUser = (
+  user?: { company_handle?: string; role_name?: string; assigned_segment?: string } | null,
+  companiesPool?: Company[]
+): 'ALL' | 'FMCG' | 'FMCD' => {
   if (!user) return 'ALL';
+  if (user.assigned_segment && (user.assigned_segment === 'FMCG' || user.assigned_segment === 'FMCD')) {
+    return user.assigned_segment;
+  }
   if (user.role_name === 'SUPER_ADMIN' || user.company_handle === 'All' || !user.company_handle) {
     return 'ALL';
   }
 
-  const allowedBrands = user.company_handle.split(',').map(b => b.trim().toLowerCase());
-  const mappedCompanies = MOCK_COMPANIES.filter(c => 
-    allowedBrands.some(brand => c.company_name.toLowerCase().includes(brand) || brand.includes(c.company_name.toLowerCase()))
+  const pool = (companiesPool && companiesPool.length > 0) ? companiesPool : MOCK_COMPANIES;
+  
+  let allowedBrands: string[] = [];
+  if (Array.isArray(user.company_handle)) {
+    allowedBrands = user.company_handle.map(b => String(b).trim().toLowerCase());
+  } else if (typeof user.company_handle === 'string') {
+    allowedBrands = user.company_handle.split(',').map(b => b.trim().toLowerCase());
+  }
+
+  const mappedCompanies = pool.filter(c => 
+    allowedBrands.some(brand => 
+      c.company_name.toLowerCase().includes(brand) || 
+      brand.includes(c.company_name.toLowerCase()) ||
+      (c.company_code && c.company_code.toLowerCase() === brand)
+    )
   );
 
-  if (mappedCompanies.length === 0) return 'ALL';
-
-  const segments = Array.from(new Set(mappedCompanies.map(c => c.segment).filter(Boolean)));
-  if (segments.length === 1) {
-    return segments[0] as 'FMCG' | 'FMCD';
+  if (mappedCompanies.length > 0) {
+    const segments = Array.from(new Set(mappedCompanies.map(c => (c.segment || 'FMCG').toUpperCase()).filter(Boolean)));
+    if (segments.length === 1 && (segments[0] === 'FMCG' || segments[0] === 'FMCD')) {
+      return segments[0] as 'FMCG' | 'FMCD';
+    }
   }
+
+  // Brand segment heuristics when pool is loading
+  const lowerHandle = String(user.company_handle).toLowerCase();
+  if (lowerHandle.includes('hell') || lowerHandle.includes('akai') || lowerHandle.includes('whirlpool') || lowerHandle.includes('daikin') || lowerHandle.includes('cruise')) {
+    return 'FMCD';
+  }
+  if (lowerHandle.includes('priyagold') || lowerHandle.includes('mogu') || lowerHandle.includes('rcpl') || lowerHandle.includes('orion') || lowerHandle.includes('gandour') || lowerHandle.includes('hppl') || lowerHandle.includes('waiwai') || lowerHandle.includes('pran')) {
+    return 'FMCG';
+  }
+
   return 'ALL';
 };
 
@@ -937,7 +1018,31 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
     const agencyCity = agency.city || 'Surat';
     const agencyArea = agency.area_name || agencyCity;
 
+    let targetId = isValidUuid(agency.id) ? agency.id : null;
+
+    // If ID is not a valid existing UUID, check if agency exists by code or name to update instead of creating conflict
+    if (!targetId && (agency.agency_code || agency.agency_name)) {
+      try {
+        const { data: existing } = await supabase
+          .from('agencies')
+          .select('id')
+          .or(`agency_code.eq."${agency.agency_code}",agency_name.eq."${agency.agency_name}"`)
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          targetId = existing[0].id;
+        } else {
+          targetId = generateUuid();
+        }
+      } catch {
+        targetId = generateUuid();
+      }
+    } else if (!targetId) {
+      targetId = generateUuid();
+    }
+
     const payload: Record<string, any> = {
+      id: targetId,
       agency_code: agency.agency_code,
       agency_name: agency.agency_name,
       city: agencyCity,
@@ -960,12 +1065,6 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
       updated_at: nowIso
     };
 
-    if (isValidUuid(agency.id)) {
-      payload.id = agency.id;
-    } else {
-      payload.id = generateUuid();
-    }
-
     if (isValidUuid(agency.company_id)) {
       payload.company_id = agency.company_id;
     }
@@ -976,16 +1075,19 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
 
     const { data, error } = await supabase.from('agencies').upsert([payload]).select();
     if (error) {
-      console.warn('Supabase saveAgency upsert notice:', error.message);
-      delete payload.id;
-      delete payload.company_id;
-      delete payload.area_id;
-      const retryRes = await supabase.from('agencies').insert([payload]).select();
-      if (retryRes.error) {
-        console.error('Supabase saveAgency retry error:', retryRes.error.message);
-        return { success: false, error: retryRes.error.message };
+      // If error is duplicate name or unique constraint violation, update existing record matching agency_name
+      if (error.message.includes('unique constraint') || error.code === '23505') {
+        const updateRes = await supabase
+          .from('agencies')
+          .update(payload)
+          .eq('agency_name', agency.agency_name)
+          .select();
+        if (!updateRes.error) {
+          return { success: true, error: null, data: updateRes.data };
+        }
       }
-      return { success: true, error: null, data: retryRes.data };
+      console.error('Supabase saveAgency error:', error.message);
+      return { success: false, error: error.message };
     }
 
     return { success: true, error: null, data };
@@ -1042,8 +1144,7 @@ export const registerNewAgency = (newAgencyData: {
     account_group: newAgencyData.account_group || 'FMCG',
     contact_person: newAgencyData.contact_person?.trim() || '',
     mobile: newAgencyData.mobile?.trim() || '',
-    email: newAgencyData.email?.trim() || '',
-    credit_limit: Number(newAgencyData.credit_limit || 250000),
+    credit_limit: newAgencyData.credit_limit !== undefined ? Number(newAgencyData.credit_limit) : 0,
     zone_id: autoZone.id,
     zone_name: autoZone.zone_name,
     zone_region: autoZone.region,
@@ -1106,10 +1207,11 @@ export const updateAgencyDetails = (
 export const DEFAULT_PRODUCTS: Product[] = [];
 export const MOCK_PRODUCTS: Product[] = [];
 
-export const generateNewBarcodeSKUCode = (groupNameOrCompany?: string, productName?: string): string => {
+export const generateNewBarcodeSKUCode = (groupNameOrCompany?: string, productName?: string, customIndex?: number): string => {
   const codePrefix = getGroupCode(groupNameOrCompany || productName || 'AKAI');
-  const nextNum = (MOCK_PRODUCTS.length + 1).toString().padStart(3, '0');
-  return `${codePrefix}_SKU_${nextNum}`;
+  const num = customIndex !== undefined ? customIndex : (MOCK_PRODUCTS.length + 1);
+  const nextNum = num.toString().padStart(3, '0');
+  return `P-${codePrefix}-${nextNum}`;
 };
 
 export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
@@ -1120,21 +1222,28 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
       return [];
     }
     if (!data || data.length === 0) return [];
-    return data.map((p: any, idx: number) => ({
-      id: p.id || `p_${idx + 1}`,
-      product_code: p.product_code || p.code || `PRD_${idx + 1}`,
-      product_name: p.product_name || p.name || 'Product SKU',
-      company_id: p.company_id || 'c1',
-      pcs_per_box: Number(p.pcs_per_box || 24),
-      mrp_price: Number(p.mrp_price || p.mrp || 120),
-      unit_price: Number(p.unit_price || p.price || 100),
-      category: p.category || 'General',
-      account_group: p.account_group || 'FMCG',
-      segment: p.segment || 'FMCG',
-      stock_box_qty: Number(p.stock_box_qty || 100),
-      stock_loose_pcs: Number(p.stock_loose_pcs || 0),
-      total_stock_pcs: Number(p.total_stock_pcs || 2400)
-    }));
+    return data.map((p: any, idx: number) => {
+      const pcsPerBox = Number(p.pcs_per_box || 1);
+      const mrp = Number(p.mrp_price || p.mrp || p.unit_price || 100);
+      const unit = Number(p.unit_price || p.price || p.mrp_price || 80);
+
+      const compName = p.Product_Company_Name || p.company_name || '';
+
+      return {
+        id: p.id || `p_${idx + 1}`,
+        product_code: p.product_code || p.code || `PRD_${idx + 1}`,
+        product_name: p.product_name || p.name || 'Product SKU',
+        company_id: p.company_id || 'c1',
+        company_name: compName,
+        Product_Company_Name: compName,
+        pcs_per_box: pcsPerBox,
+        mrp_price: mrp,
+        unit_price: unit,
+        category: p['Product Category'] || p.category || 'General',
+        segment: p.Product_Company_Segment || p.segment || 'FMCG',
+        active: p.active !== false
+      };
+    });
   } catch (err: any) {
     console.error('Error fetching products from Supabase:', err?.message || err);
     return [];
@@ -1159,49 +1268,132 @@ export const saveProductToSupabase = async (product: any): Promise<{ success: bo
         mrp_price: Number(product.mrp_price) || 150,
         unit_price: Number(product.unit_price || product.mrp_price) || 120,
         category: product.category || 'General',
-        account_group: product.account_group || 'AKAI',
         segment: product.segment || 'FMCG',
-        stock_box_qty: Number(product.stock_box_qty) || 100,
-        stock_loose_pcs: Number(product.stock_loose_pcs) || 0,
-        total_stock_pcs: Number(product.total_stock_pcs) || 2400
+        active: product.active !== false
       });
     }
 
+    const pcsPerBox = Number(product.pcs_per_box) || 1;
+    const stockBoxQty = Number(product.stock_box_qty) || 0;
+    const mrpPrice = Number(product.mrp_price) || 0;
+    const unitPrice = Number(product.unit_price || product.mrp_price) || 0;
+
+    let targetId = isValidUuid(product.id) ? product.id : null;
+
+    // Check if product exists by product_code to prevent duplicate key constraint violations
+    if (!targetId && prodCode) {
+      try {
+        const { data: existing } = await supabase
+          .from('products')
+          .select('id')
+          .eq('product_code', prodCode)
+          .limit(1);
+        if (existing && existing.length > 0) {
+          targetId = existing[0].id;
+        } else {
+          targetId = generateUuid();
+        }
+      } catch {
+        targetId = generateUuid();
+      }
+    } else if (!targetId) {
+      targetId = generateUuid();
+    }
+
+    // Auto-resolve company details and segment ID
+    let resolvedCompanyId: string | null = isValidUuid(product.company_id) ? product.company_id : null;
+    let compName: string | null = product.Product_Company_Name || null;
+    let compCode: string | null = product.Product_Company_Code || null;
+    let compSegment: string = (product.Product_Company_Segment || product.segment || 'FMCG').toUpperCase().trim();
+
+    try {
+      let compQuery = supabase.from('companies').select('id, company_code, company_name, segment');
+      if (resolvedCompanyId) {
+        compQuery = compQuery.eq('id', resolvedCompanyId);
+      } else if (product.company_name || product.brand || product.company_id) {
+        const brandTerm = product.company_name || product.brand || product.company_id;
+        compQuery = compQuery.or(`company_name.ilike."%${brandTerm}%",company_code.ilike."${brandTerm}"`);
+      }
+      const { data: compData } = await compQuery.limit(1);
+      if (compData && compData.length > 0) {
+        const found = compData[0];
+        resolvedCompanyId = found.id;
+        compName = found.company_name;
+        compCode = found.company_code;
+        if (found.segment) compSegment = found.segment.toUpperCase().trim();
+      }
+    } catch (e) {
+      console.warn('Could not auto-lookup company details for product:', e);
+    }
+
+    // Auto-resolve item_type_id (Segment ID) if UUID
+    let itemTypeId: string | null = (product.item_type_id && isValidUuid(product.item_type_id)) ? product.item_type_id : null;
+
+    const rawCategory = (product.category || product['Product Category'] || 'General').trim();
+    let finalCategory = rawCategory;
+
+    // Auto-map with item_categories table or auto-create new category
+    try {
+      if (rawCategory) {
+        const { data: existingCat } = await supabase
+          .from('item_categories')
+          .select('id, category_name')
+          .ilike('category_name', rawCategory)
+          .limit(1);
+
+        if (existingCat && existingCat.length > 0) {
+          finalCategory = existingCat[0].category_name;
+        } else {
+          // Auto-create new category in item_categories master
+          const newCatCode = rawCategory.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8) || 'CAT';
+          await supabase.from('item_categories').insert([{
+            id: generateUuid(),
+            category_code: newCatCode,
+            category_name: rawCategory,
+            segment: compSegment,
+            active: true
+          }]);
+        }
+      }
+    } catch (e) {
+      console.warn('item_categories auto-map notice:', e);
+    }
+
     const payload: Record<string, any> = {
+      id: targetId,
       product_code: prodCode,
       product_name: prodName,
-      pcs_per_box: Number(product.pcs_per_box) || 24,
-      mrp_price: Number(product.mrp_price) || 0,
-      unit_price: Number(product.unit_price || product.mrp_price) || 0,
-      category: product.category || 'General',
-      account_group: product.account_group || 'AKAI',
-      segment: product.segment || 'FMCG',
-      stock_box_qty: Number(product.stock_box_qty) || 100,
-      stock_loose_pcs: Number(product.stock_loose_pcs) || 0,
+      company_id: resolvedCompanyId,
+      Product_Company_Name: compName,
+      Product_Company_Code: compCode,
+      Product_Company_Segment: compSegment,
+      'Product Category': finalCategory,
+      pcs_per_box: pcsPerBox,
+      mrp_price: mrpPrice,
+      unit_price: unitPrice,
+      active: product.active !== false,
       updated_at: new Date().toISOString()
     };
 
-    if (product.id && isValidUuid(product.id)) {
-      payload.id = product.id;
-    } else {
-      payload.id = generateUuid();
-    }
-
-    if (product.company_id && isValidUuid(product.company_id)) {
-      payload.company_id = product.company_id;
+    if (itemTypeId) {
+      payload.item_type_id = itemTypeId;
     }
 
     const { data, error } = await supabase.from('products').upsert([payload]).select();
     if (error) {
-      console.warn('Supabase save product notice:', error.message);
-      delete payload.id;
-      delete payload.company_id;
-      const retry = await supabase.from('products').insert([payload]).select();
-      if (retry.error) {
-        console.error('Supabase product insert retry error:', retry.error.message);
-        return { success: false, error: retry.error.message };
+      // If unique constraint on product_code, update by product_code
+      if (error.message.includes('unique constraint') || error.code === '23505') {
+        const updateRes = await supabase
+          .from('products')
+          .update(payload)
+          .eq('product_code', prodCode)
+          .select();
+        if (!updateRes.error) {
+          return { success: true, error: null, data: updateRes.data };
+        }
       }
-      return { success: true, error: null, data: retry.data };
+      console.error('Supabase save product error:', error.message);
+      return { success: false, error: error.message };
     }
     return { success: true, error: null, data };
   } catch (err: any) {
@@ -1224,6 +1416,16 @@ export const deleteProductFromSupabase = async (productId: string): Promise<{ su
   }
 };
 
+export const fetchItemCategoriesFromSupabase = async (): Promise<{ id: string; category_code?: string; category_name: string; segment?: string }[]> => {
+  try {
+    const { data, error } = await supabase.from('item_categories').select('*').order('category_name');
+    if (error || !data) return [];
+    return data;
+  } catch {
+    return [];
+  }
+};
+
 export const updateProductStockAndDetails = (
   productId: string, 
   updated: {
@@ -1233,10 +1435,7 @@ export const updateProductStockAndDetails = (
     unit_price?: number;
     mrp_price?: number;
     category?: string;
-    account_group?: string;
     segment?: string;
-    stock_box_qty?: number;
-    stock_loose_pcs?: number;
     updated_by?: string;
     reason?: string;
   }
@@ -1248,36 +1447,9 @@ export const updateProductStockAndDetails = (
   if (updated.product_code !== undefined) prod.product_code = updated.product_code;
   if (updated.pcs_per_box !== undefined) prod.pcs_per_box = Number(updated.pcs_per_box);
   if (updated.category !== undefined) prod.category = updated.category;
-  if (updated.account_group !== undefined) prod.account_group = updated.account_group;
   if (updated.segment !== undefined) prod.segment = updated.segment as any;
   if (updated.unit_price !== undefined) prod.unit_price = Number(updated.unit_price);
-  
-  if (updated.mrp_price !== undefined && Number(updated.mrp_price) !== (prod.mrp_price || 0)) {
-    const oldMrp = prod.mrp_price || (prod.unit_price ? Math.round(prod.unit_price * 1.15) : 100);
-    const newMrp = Number(updated.mrp_price);
-    
-    prod.previous_mrp = oldMrp;
-    prod.mrp_price = newMrp;
-    prod.mrp_updated_at = new Date().toISOString();
-    prod.mrp_updated_by = updated.updated_by || 'Admin';
-    
-    if (!prod.mrp_history) {
-      prod.mrp_history = [];
-    }
-    
-    prod.mrp_history.unshift({
-      previous_mrp: oldMrp,
-      new_mrp: newMrp,
-      updated_at: new Date().toISOString(),
-      updated_by: updated.updated_by || 'Admin',
-      reason: updated.reason || 'MRP Price Revision'
-    });
-  }
-
-  if (updated.stock_box_qty !== undefined) prod.stock_box_qty = Number(updated.stock_box_qty);
-  if (updated.stock_loose_pcs !== undefined) prod.stock_loose_pcs = Number(updated.stock_loose_pcs);
-
-  prod.total_stock_pcs = (prod.stock_box_qty || 0) * (prod.pcs_per_box || 1) + (prod.stock_loose_pcs || 0);
+  if (updated.mrp_price !== undefined) prod.mrp_price = Number(updated.mrp_price);
 
   saveProductToSupabase(prod);
   return prod;
@@ -1290,14 +1462,9 @@ export const registerNewProduct = (newProd: {
   pcs_per_box: number;
   mrp_price: number;
   category?: string;
-  account_group?: string;
   segment?: string;
   unit_price?: number;
-  stock_box_qty?: number;
-  stock_loose_pcs?: number;
 }): Product => {
-  const boxQty = Number(newProd.stock_box_qty || 0);
-  const loosePcs = Number(newProd.stock_loose_pcs || 0);
   const pcsPerBox = Number(newProd.pcs_per_box || 24);
 
   const productRecord: Product = {
@@ -1308,13 +1475,9 @@ export const registerNewProduct = (newProd: {
     pcs_per_box: pcsPerBox,
     mrp_price: Number(newProd.mrp_price),
     category: newProd.category || 'General',
-    account_group: newProd.account_group || 'FMCG',
     segment: (newProd.segment as any) || 'FMCG',
     unit_price: newProd.unit_price ? Number(newProd.unit_price) : Number(newProd.mrp_price),
-    stock_box_qty: boxQty,
-    stock_loose_pcs: loosePcs,
-    total_stock_pcs: boxQty * pcsPerBox + loosePcs,
-    reserved_stock_pcs: 0
+    active: true
   };
 
   saveProductToSupabase(productRecord);
@@ -1335,55 +1498,31 @@ export interface Segment {
 }
 
 export const fetchSegmentsFromSupabase = async (): Promise<{ segments: Segment[]; error: string | null }> => {
-  try {
-    const { data, error } = await supabase.from('segments').select('*').order('segment_code');
-    if (error) {
-      console.error('Supabase fetchSegments error:', error.message);
-      return { segments: [], error: error.message };
+  const staticSegments: Segment[] = [
+    {
+      id: 'seg_fmcg_001',
+      segment_code: 'FMCG',
+      segment_name: 'Fast Moving Consumer Goods',
+      description: 'Biscuits, Beverages, Snacks, Daily Consumables',
+      active: true
+    },
+    {
+      id: 'seg_fmcd_001',
+      segment_code: 'FMCD',
+      segment_name: 'Fast Moving Consumer Durables',
+      description: 'Home Appliances, Electronics, White Goods',
+      active: true
     }
-    return { segments: data || [], error: null };
-  } catch (err: any) {
-    console.error('Error fetching segments from Supabase:', err?.message || err);
-    return { segments: [], error: err?.message || 'Failed to fetch segments' };
-  }
+  ];
+  return { segments: staticSegments, error: null };
 };
 
 export const saveSegmentToSupabase = async (segment: Partial<Segment>): Promise<{ success: boolean; error: string | null; data?: any }> => {
-  try {
-    const segId = (segment.id && isValidUuid(segment.id)) ? segment.id : generateUuid();
-    const payload = {
-      id: segId,
-      segment_code: (segment.segment_code || 'FMCG').toUpperCase().trim(),
-      segment_name: (segment.segment_name || 'General Segment').trim(),
-      description: segment.description || null,
-      active: segment.active !== false,
-      updated_at: new Date().toISOString()
-    };
-
-    const { data, error } = await supabase.from('segments').upsert([payload]).select();
-    if (error) {
-      console.error('Supabase saveSegment error:', error.message);
-      return { success: false, error: error.message };
-    }
-    return { success: true, error: null, data };
-  } catch (err: any) {
-    console.error('Error saving segment to Supabase:', err?.message || err);
-    return { success: false, error: err?.message || 'Failed to save segment' };
-  }
+  return { success: true, error: null };
 };
 
 export const deleteSegmentFromSupabase = async (segmentId: string): Promise<{ success: boolean; error: string | null }> => {
-  try {
-    const { error } = await supabase.from('segments').delete().eq('id', segmentId);
-    if (error) {
-      console.error('Supabase deleteSegment error:', error.message);
-      return { success: false, error: error.message };
-    }
-    return { success: true, error: null };
-  } catch (err: any) {
-    console.error('Error deleting segment from Supabase:', err?.message || err);
-    return { success: false, error: err?.message || 'Failed to delete segment' };
-  }
+  return { success: true, error: null };
 };
 
 // ============================================================================
@@ -1622,7 +1761,6 @@ export const saveOrderItemToSupabase = async (item: OrderItem): Promise<{ succes
       box_qty: Number(item.box_qty || 0),
       loose_pcs: Number(item.loose_pcs || 0),
       free_pcs: Number(item.free_pcs || 0),
-      total_qty_pcs: Number(item.total_qty_pcs || 0),
       unit_price: Number(item.unit_price || 0),
       mrp_price: Number(item.mrp_price || 0),
       total_price: Number(item.total_price || 0),

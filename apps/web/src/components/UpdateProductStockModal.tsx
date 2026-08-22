@@ -32,7 +32,6 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
   const [mrpPrice, setMrpPrice] = useState<number>(0);
   const [pcsPerBox, setPcsPerBox] = useState<number>(24);
   const [category, setCategory] = useState<string>('General');
-  const [accountGroup, setAccountGroup] = useState<string>('FMCG');
   const [segment, setSegment] = useState<string>('FMCG');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +44,6 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
       setMrpPrice(product.mrp_price || (product.unit_price ? Math.round(product.unit_price * 1.15) : 100));
       setPcsPerBox(product.pcs_per_box || 24);
       setCategory(product.category || 'General');
-      setAccountGroup(product.account_group || 'FMCG');
       setSegment(product.segment || 'FMCG');
       setSuccessNotice(null);
     }
@@ -67,7 +65,6 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
       pcs_per_box: Number(pcsPerBox),
       mrp_price: Number(mrpPrice),
       category: category.trim(),
-      account_group: accountGroup,
       segment: segment,
       updated_by: currentUser?.full_name || 'Admin'
     });
@@ -316,8 +313,8 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
             </div>
           </div>
 
-          {/* 3. Product Category, Group Name & Segment Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem' }}>
+          {/* 3. Product Category & Segment Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#cbd5e1', marginBottom: 4 }}>
                 Product Category
@@ -326,7 +323,7 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
                 type="text"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g. Biscuits, Beverages"
+                placeholder="e.g. Smart TV, Biscuits, Beverages"
                 style={{
                   width: '100%',
                   padding: '0.6rem 0.75rem',
@@ -339,31 +336,6 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
                   outline: 'none'
                 }}
               />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#cbd5e1', marginBottom: 4 }}>
-                Group Name
-              </label>
-              <select
-                value={accountGroup}
-                onChange={(e) => setAccountGroup(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem 0.75rem',
-                  background: '#1e293b',
-                  border: '1px solid #334155',
-                  borderRadius: 10,
-                  color: '#fbbf24',
-                  fontSize: '0.825rem',
-                  fontWeight: 800,
-                  outline: 'none'
-                }}
-              >
-                {PRODUCT_GROUP_NAMES.map(b => (
-                  <option key={b} value={b} style={{ background: '#0f172a', color: '#fff' }}>{b} ({getGroupCode(b)})</option>
-                ))}
-              </select>
             </div>
 
             <div>
@@ -385,8 +357,8 @@ export const UpdateProductStockModal: React.FC<UpdateProductStockModalProps> = (
                   outline: 'none'
                 }}
               >
-                <option value="FMCG">FMCG</option>
-                <option value="FMCD">FMCD</option>
+                <option value="FMCG">FMCG (Consumer Goods)</option>
+                <option value="FMCD">FMCD (Consumer Durables)</option>
               </select>
             </div>
           </div>

@@ -128,7 +128,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
   const [accountNumber, setAccountNumber] = useState('');
   const [ifscCode, setIfscCode] = useState('');
   const [branchName, setBranchName] = useState('');
-  const [creditLimit, setCreditLimit] = useState<number>(250000);
+  const [creditLimit, setCreditLimit] = useState<number>(0);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
@@ -192,23 +192,23 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen && agency) {
+    if (agency) {
       setAgencyName(agency.agency_name || '');
       setAgencyCode(agency.agency_code || '');
-      setCompanyId(agency.company_id || MOCK_COMPANIES[0]?.id || 'c01');
+      setCompanyId(agency.company_id || 'c01');
       setAccountGroup(agency.account_group || 'FMCG');
       setGstin(agency.gstin || agency.gst_number || '');
       setContactPerson(agency.contact_person || '');
       setMobile(agency.mobile || '');
       setEmail(agency.email || '');
       setCity(agency.city || 'Surat');
-      setAreaName(agency.area_name || '');
-      setAssignedSalesperson(agency.assigned_salesperson || '');
+      setAreaName(agency.area_name || 'Katargam');
+      setAssignedSalesperson(agency.assigned_salesperson || 'Chirag Patel');
       setBankName(agency.bank_name || 'HDFC Bank');
       setAccountNumber(agency.account_number || '');
       setIfscCode(agency.ifsc_code || '');
       setBranchName(agency.branch_name || '');
-      setCreditLimit(agency.credit_limit || 250000);
+      setCreditLimit(agency.credit_limit !== undefined ? Number(agency.credit_limit) : 0);
       setSuccessNotice(null);
 
       // Fetch live Areas from Supabase `public.areas`
@@ -386,10 +386,11 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
               <div>
-                <FieldLabel>Account Group</FieldLabel>
+                <FieldLabel>Account Group / Agency Type</FieldLabel>
                 <FieldSelect value={accountGroup} onChange={setAccountGroup}>
                   <option value="FMCG">FMCG</option>
                   <option value="FMCD">FMCD</option>
+                  <option value="FMCG, FMCD">FMCG & FMCD (Dual Segment)</option>
                 </FieldSelect>
               </div>
               <div>

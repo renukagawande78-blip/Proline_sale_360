@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Edit3, Trash2, Plus, Check, X, Layers, Users, Shield, Truck, Receipt, Briefcase, UserCheck } from 'lucide-react';
-import { Company, User } from '../../types';
+import { RefreshCw, Edit3, Trash2, Plus, Check, X, Layers, Users, Shield, Truck, Receipt, Briefcase, UserCheck, Package, Tag, Box } from 'lucide-react';
+import { Company, User, Product, SYSTEM_BRANDS, getBrandByName, getBrandByCode } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { BulkImportModal } from '../../components/BulkImportModal';
 import {
@@ -10,6 +10,7 @@ import {
   saveCompanyToSupabase,
   fetchCompaniesFromSupabase,
   fetchUsersFromSupabase,
+  fetchProductsFromSupabase,
   deduplicateCompanies,
   saveUserToSupabase,
   generateUuid,
@@ -53,6 +54,7 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
   const [localCompanies, setLocalCompanies] = useState<Company[]>([]);
   const [segmentsList, setSegmentsList] = useState<SegmentOption[]>([]);
   const [allUsersList, setAllUsersList] = useState<User[]>([]);
+  const [allProductsList, setAllProductsList] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
@@ -70,31 +72,29 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
   const [teamModalCompany, setTeamModalCompany] = useState<Company | null>(null);
   const [isSavingTeam, setIsSavingTeam] = useState(false);
 
-  // Load Companies, Segments, and Users from Supabase on mount
+  // Load Companies, Segments, Users, and Products from Supabase on mount
   useEffect(() => {
     let mounted = true;
     setIsLoading(true);
 
+    const STATIC_SEGMENTS = [
+      { id: 'seg_fmcg_001', segment_code: 'FMCG', segment_name: 'Fast Moving Consumer Goods' },
+      { id: 'seg_fmcd_001', segment_code: 'FMCD', segment_name: 'Fast Moving Consumer Durables' }
+    ];
+    setSegmentsList(STATIC_SEGMENTS);
+
     Promise.all([
       fetchCompaniesFromSupabase(),
-      supabase.from('segments').select('*').order('segment_code'),
-      fetchUsersFromSupabase()
-    ]).then(([liveCompanies, { data: liveSegments }, liveUsers]) => {
+      fetchUsersFromSupabase(),
+      fetchProductsFromSupabase()
+    ]).then(([liveCompanies, liveUsers, liveProducts]) => {
       if (mounted) {
         setLocalCompanies(liveCompanies?.length ? deduplicateCompanies(liveCompanies) : []);
-        if (liveSegments && liveSegments.length > 0) {
-          setSegmentsList(liveSegments);
-          if (!liveSegments.some(s => s.segment_code === addSegment)) {
-            setAddSegment(liveSegments[0].segment_code);
-          }
-        } else {
-          setSegmentsList([
-            { id: 'seg_fmcg_001', segment_code: 'FMCG', segment_name: 'Fast Moving Consumer Goods' },
-            { id: 'seg_fmcd_001', segment_code: 'FMCD', segment_name: 'Fast Moving Consumer Durables' }
-          ]);
-        }
         if (liveUsers && liveUsers.length > 0) {
           setAllUsersList(liveUsers);
+        }
+        if (liveProducts && liveProducts.length > 0) {
+          setAllProductsList(liveProducts);
         }
         setIsLoading(false);
       }
@@ -110,18 +110,18 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
 
   const handleSyncLiveDb = async () => {
     setIsSyncing(true);
-    setFeedbackMsg('🔄 Syncing live Brand Companies, Teams, and Segments from Supabase...');
-    const [liveCompanies, { data: liveSegments }, liveUsers] = await Promise.all([
+    setFeedbackMsg('🔄 Syncing live Brand Companies, Users, and Products from Supabase...');
+    const [liveCompanies, liveUsers, liveProducts] = await Promise.all([
       fetchCompaniesFromSupabase(),
-      supabase.from('segments').select('*').order('segment_code'),
-      fetchUsersFromSupabase()
+      fetchUsersFromSupabase(),
+      fetchProductsFromSupabase()
     ]);
 
     if (liveCompanies?.length) setLocalCompanies(deduplicateCompanies(liveCompanies));
-    if (liveSegments?.length) setSegmentsList(liveSegments);
     if (liveUsers?.length) setAllUsersList(liveUsers);
+    if (liveProducts?.length) setAllProductsList(liveProducts);
 
-    showFeedback(`✅ Sync Complete! Loaded ${liveCompanies?.length || 0} Companies & ${liveUsers?.length || 0} Users from Supabase.`);
+    showFeedback(`✅ Sync Complete! Loaded ${liveCompanies?.length || 0} Companies, ${liveProducts?.length || 0} Products & ${liveUsers?.length || 0} Users from Supabase.`);
     setIsSyncing(false);
   };
 
@@ -530,6 +530,7 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
               <th>Code</th>
               <th>Company / Brand</th>
               <th>Segment</th>
+              <th>Products (SKUs)</th>
               <th>Assigned Company Team (Hierarchy)</th>
               <th style={{ textAlign: 'center' }}>Team Assignment</th>
               <th style={{ textAlign: 'center' }}>Actions</th>
@@ -540,6 +541,15 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
               const currentSegmentCode = (c.segment as string) || 'FMCG';
               const segStyle = SEGMENT_THEME_COLORS[currentSegmentCode.toUpperCase()] || DEFAULT_SEGMENT_THEME;
               const brandColor = (c as any).brand_color || '#38bdf8';
+
+              // Get matched products for this company
+              const matchedProducts = allProductsList.filter(p => 
+                p.company_id === c.id ||
+                (p.company_name || p.Product_Company_Name || '').toLowerCase() === c.company_name?.toLowerCase() ||
+                (p.product_code || '').toUpperCase().startsWith(`P-${c.company_code.toUpperCase()}-`)
+              );
+              const prodCount = matchedProducts.length;
+              const sysBrand = getBrandByName(c.company_name) || getBrandByCode(c.company_code);
 
               // Get assigned users by role for this company
               const companyAdmins = allUsersList.filter(u => u.role_name === 'SALES_ADMIN' && isUserAssignedToCompany(u, c));
@@ -575,6 +585,35 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
                         </option>
                       ))}
                     </select>
+                  </td>
+
+                  {/* Products (SKUs) Count & Standard Pack Size */}
+                  <td>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: 6,
+                          background: prodCount > 0 ? 'rgba(56, 189, 248, 0.15)' : 'rgba(100, 116, 139, 0.12)',
+                          color: prodCount > 0 ? '#38bdf8' : '#94a3b8',
+                          border: prodCount > 0 ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid rgba(100, 116, 139, 0.25)'
+                        }}>
+                          <Package size={13} color={prodCount > 0 ? '#38bdf8' : '#94a3b8'} />
+                          {prodCount} SKU{prodCount === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                      {sysBrand && (
+                        <div style={{ fontSize: '0.675rem', color: '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <Box size={11} color="#64748b" />
+                          <span>Std: {sysBrand.defaultPcsPerBox} pcs/box</span>
+                        </div>
+                      )}
+                    </div>
                   </td>
 
                   {/* Designated Team Summary Badges */}

@@ -1,13 +1,12 @@
 // ============================================================================
 // Proline OMS 360 - Verification Test Suite for Supabase CRUD Operations
-// Verifies: Create, Read, Update, Delete across all 7 main tables:
+// Verifies: Create, Read, Update, Delete across all 6 main tables:
 // 1. companies
 // 2. users
 // 3. agencies
 // 4. products
-// 5. segments
-// 6. orders
-// 7. order_items
+// 5. orders
+// 6. order_items
 // ============================================================================
 
 import { createClient } from '@supabase/supabase-js';
@@ -147,8 +146,8 @@ async function runAllTests() {
     pcs_per_box: 24,
     unit_price: 100,
     mrp_price: 120,
-    category: 'Biscuits',
-    segment: 'FMCG'
+    'Product Category': 'Biscuits',
+    Product_Company_Segment: 'FMCG'
   }]).select();
   recordResult('products', 'CREATE', !prodInsErr, prodInsErr ? prodInsErr.message : `Inserted product ${prodCode}`, prodInsErr);
 
@@ -163,42 +162,8 @@ async function runAllTests() {
   }).eq('id', prodId).select();
   recordResult('products', 'UPDATE', !prodUpdErr, prodUpdErr ? prodUpdErr.message : `Updated product ${prodCode}`, prodUpdErr);
 
-  // 4.4 Delete Product
-  const { error: prodDelErr } = await supabase.from('products').delete().eq('id', prodId);
-  recordResult('products', 'DELETE', !prodDelErr, prodDelErr ? prodDelErr.message : `Deleted product ${prodCode}`, prodDelErr);
-
   // --------------------------------------------------------------------------
-  // 5. SEGMENTS CRUD
-  // --------------------------------------------------------------------------
-  console.log('\n--- 5. Testing Segments ---');
-  const segId = crypto.randomUUID();
-  const segCode = `SEG_${testSuffix}`;
-
-  // 5.1 Create Segment
-  const { data: segIns, error: segInsErr } = await supabase.from('segments').insert([{
-    id: segId,
-    segment_code: segCode,
-    segment_name: `Test Segment ${testSuffix}`,
-    description: 'Test segment description'
-  }]).select();
-  recordResult('segments', 'CREATE', !segInsErr, segInsErr ? segInsErr.message : `Inserted segment ${segCode}`, segInsErr);
-
-  // 5.2 Read Segment
-  const { data: segRead, error: segReadErr } = await supabase.from('segments').select('*').eq('id', segId);
-  recordResult('segments', 'READ', !segReadErr && segRead && segRead.length > 0, segReadErr ? segReadErr.message : `Read segment ${segCode}`, segReadErr);
-
-  // 5.3 Update Segment
-  const { data: segUpd, error: segUpdErr } = await supabase.from('segments').update({
-    segment_name: `Updated Segment ${testSuffix}`
-  }).eq('id', segId).select();
-  recordResult('segments', 'UPDATE', !segUpdErr, segUpdErr ? segUpdErr.message : `Updated segment ${segCode}`, segUpdErr);
-
-  // 5.4 Delete Segment
-  const { error: segDelErr } = await supabase.from('segments').delete().eq('id', segId);
-  recordResult('segments', 'DELETE', !segDelErr, segDelErr ? segDelErr.message : `Deleted segment ${segCode}`, segDelErr);
-
-  // --------------------------------------------------------------------------
-  // 6. ORDERS CRUD
+  // 5. ORDERS CRUD
   // --------------------------------------------------------------------------
   console.log('\n--- 6. Testing Orders ---');
   const orderId = crypto.randomUUID();
@@ -240,7 +205,6 @@ async function runAllTests() {
     pcs_per_box: 24,
     box_qty: 10,
     loose_pcs: 0,
-    total_qty_pcs: 240,
     unit_price: 100,
     total_price: 24000,
     dispatched_qty_pcs: 0,
@@ -266,6 +230,10 @@ async function runAllTests() {
   // 6.4 Delete Order (after deleting child item)
   const { error: ordDelErr } = await supabase.from('orders').delete().eq('id', orderId);
   recordResult('orders', 'DELETE', !ordDelErr, ordDelErr ? ordDelErr.message : `Deleted order ${orderNumber}`, ordDelErr);
+
+  // 4.4 Delete Product (after deleting child order_items)
+  const { error: prodDelErr } = await supabase.from('products').delete().eq('id', prodId);
+  recordResult('products', 'DELETE', !prodDelErr, prodDelErr ? prodDelErr.message : `Deleted product ${prodCode}`, prodDelErr);
 
   // --------------------------------------------------------------------------
   // Summary

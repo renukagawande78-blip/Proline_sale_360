@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Edit3, Trash2, QrCode, RefreshCw, Plus, CheckCircle2, Layers, Building2, Filter } from 'lucide-react';
-import { Product, Company } from '../../types';
+import { Product, Company, getGroupCode } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { UpdateProductStockModal } from '../../components/UpdateProductStockModal';
 import { AddProductModal } from '../../components/AddProductModal';
@@ -42,20 +42,23 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
   const [isLoading, setIsLoading] = useState(true);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
-  // Load Products, Companies, and Segments on mount from Supabase
+  // Load Products and Companies on mount from Supabase
   useEffect(() => {
     let mounted = true;
     setIsLoading(true);
 
+    setSegmentsList([
+      { id: 'seg_fmcg_001', segment_code: 'FMCG', segment_name: 'Fast Moving Consumer Goods' },
+      { id: 'seg_fmcd_001', segment_code: 'FMCD', segment_name: 'Fast Moving Consumer Durables' }
+    ]);
+
     Promise.all([
       fetchProductsFromSupabase(),
-      fetchCompaniesFromSupabase(),
-      supabase.from('segments').select('*').order('segment_code')
-    ]).then(([liveProds, liveComps, { data: liveSegments }]) => {
+      fetchCompaniesFromSupabase()
+    ]).then(([liveProds, liveComps]) => {
       if (mounted) {
         if (liveProds) setLocalProducts(deduplicateProducts(liveProds));
         if (liveComps?.length) setLocalCompanies(liveComps);
-        if (liveSegments?.length) setSegmentsList(liveSegments);
         setIsLoading(false);
       }
     });
@@ -97,18 +100,24 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
   // Filter products: Segment > Companies > Search
   const filteredProducts = localProducts.filter(p => {
     if (!p) return false;
+    const parentComp = localCompanies.find(c => 
+      c.id === p.company_id || 
+      c.company_name?.toLowerCase() === (p.company_name || p.Product_Company_Name || '').toLowerCase()
+    );
+
+    const prodSegment = (p.segment || p.Product_Company_Segment || parentComp?.segment || 'FMCG').toUpperCase();
+    const prodBrand = p.Product_Company_Name || p.company_name || parentComp?.company_name || '';
 
     // 1. Segment Match
     if (selectedSegmentFilter !== 'ALL') {
-      const parentComp = localCompanies.find(c => c.id === p.company_id);
-      const prodSegment = (p.segment || parentComp?.segment || 'FMCG').toUpperCase();
       if (prodSegment !== selectedSegmentFilter.toUpperCase()) return false;
     }
 
     // 2. Company Match
     if (selectedCompanyFilter !== 'ALL') {
-      const parentComp = localCompanies.find(c => c.id === p.company_id);
-      if (p.company_id !== selectedCompanyFilter && parentComp?.id !== selectedCompanyFilter) return false;
+      const matchId = p.company_id === selectedCompanyFilter || parentComp?.id === selectedCompanyFilter;
+      const matchName = prodBrand.toLowerCase() === selectedCompanyFilter.toLowerCase();
+      if (!matchId && !matchName) return false;
     }
 
     // 3. Text Search Query
@@ -117,8 +126,8 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
       const nameMatch = (p.product_name || '').toLowerCase().includes(q);
       const codeMatch = (p.product_code || '').toLowerCase().includes(q);
       const catMatch = (p.category || '').toLowerCase().includes(q);
-      const grpMatch = (p.account_group || '').toLowerCase().includes(q);
-      if (!nameMatch && !codeMatch && !catMatch && !grpMatch) return false;
+      const brandMatch = prodBrand.toLowerCase().includes(q);
+      if (!nameMatch && !codeMatch && !catMatch && !brandMatch) return false;
     }
 
     return true;
@@ -149,8 +158,17 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         masterType="products"
-        onImportSuccess={(newRows) => {
-          setLocalProducts(prev => deduplicateProducts([...(newRows as Product[]), ...prev]));
+        onImportSuccess={async (newRows) => {
+          setIsSyncing(true);
+          const liveProds = await fetchProductsFromSupabase();
+          if (liveProds && liveProds.length > 0) {
+            setLocalProducts(deduplicateProducts(liveProds));
+          } else {
+            setLocalProducts(prev => deduplicateProducts([...(newRows as Product[]), ...prev]));
+          }
+          setIsSyncing(false);
+          setSuccessNotice(`🎉 Successfully imported and synced ${newRows.length} Product SKUs directly into Supabase!`);
+          setTimeout(() => setSuccessNotice(null), 5000);
         }}
       />
 
@@ -215,31 +233,50 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
               onChange={(e) => setSelectedCompanyFilter(e.target.value)}
               style={{
                 padding: '0.4rem 0.75rem',
-                background: '#0b1329',
-                border: '1px solid #334155',
-                borderRadius: 8,
-                color: '#f8fafc',
-                fontSize: '0.775rem',
-                fontWeight: 700,
+                background: 'transparent',
+                border: 'none',
+                color: '#38bdf8',
+                fontWeight: 800,
+                fontSize: '0.75rem',
+                outline: 'none',
                 cursor: 'pointer'
               }}
             >
-              <option value="ALL">All Companies ({companiesInActiveSegment.length})</option>
+              <option value="ALL" style={{ background: '#0f172a', color: '#fff' }}>All Brands ({companiesInActiveSegment.length})</option>
               {companiesInActiveSegment.map(c => (
-                <option key={c.id} value={c.id}>
-                  [{c.company_code}] {c.company_name} ({c.segment || 'FMCG'})
+                <option key={c.id} value={c.id} style={{ background: '#0f172a', color: '#fff' }}>
+                  {c.company_name} ({c.company_code})
                 </option>
               ))}
             </select>
           </div>
 
-          <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, marginLeft: '0.5rem' }}>
-            Showing <strong style={{ color: '#38bdf8' }}>{filteredProducts.length}</strong> Products
-          </div>
+          <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, marginLeft: 4 }}>
+            ({filteredProducts.length} SKUs)
+          </span>
         </div>
 
         {/* Right: Actions */}
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.45rem 0.85rem',
+              background: '#1e293b',
+              color: '#cbd5e1',
+              border: '1px solid #334155',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            Bulk Import SKUs
+          </button>
+
           <button
             onClick={handleSyncLiveProducts}
             disabled={isSyncing}
@@ -289,20 +326,19 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
             <tr>
               <th>S.No</th>
               <th>Segment</th>
-              <th>Company / Brand</th>
+              <th>Brand Company</th>
               <th>SKU Code</th>
               <th>Product SKU Name</th>
               <th>Category</th>
               <th>Pack Size</th>
               <th>MRP (₹)</th>
-              <th>Stock (Boxes)</th>
               <th style={{ textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
                   <Package size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
                   <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#94a3b8' }}>
                     No Product SKUs found in this filter
@@ -314,8 +350,13 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
               </tr>
             ) : (
               filteredProducts.map((p, idx) => {
-                const parentComp = localCompanies.find(c => c.id === p.company_id || c.company_name === p.account_group);
-                const currentSegment = (p.segment || parentComp?.segment || 'FMCG').toUpperCase();
+                const parentComp = localCompanies.find(c => 
+                  c.id === p.company_id || 
+                  c.company_name?.toLowerCase() === (p.company_name || p.Product_Company_Name || '').toLowerCase()
+                );
+                const currentSegment = (p.segment || p.Product_Company_Segment || parentComp?.segment || 'FMCG').toUpperCase();
+                const displayBrand = p.Product_Company_Name || p.company_name || parentComp?.company_name || 'AKAI';
+                const brandCode = p.Product_Company_Code || parentComp?.company_code || getGroupCode(displayBrand);
                 const currentMrp = p.mrp_price || (p.unit_price ? Math.round(p.unit_price * 1.15) : 100);
                 const mrpBox = currentMrp * (p.pcs_per_box || 1);
 
@@ -336,10 +377,20 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Building2 size={13} color="#94a3b8" />
-                        <strong style={{ color: '#f8fafc', fontSize: '0.85rem' }}>
-                          {parentComp?.company_name || p.account_group || 'General Brand'}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <span style={{
+                          fontSize: '0.675rem',
+                          fontWeight: 800,
+                          padding: '0.15rem 0.4rem',
+                          borderRadius: 4,
+                          background: currentSegment === 'FMCG' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                          color: currentSegment === 'FMCG' ? '#34d399' : '#38bdf8',
+                          border: `1px solid ${currentSegment === 'FMCG' ? 'rgba(52, 211, 153, 0.3)' : 'rgba(56, 189, 248, 0.3)'}`
+                        }}>
+                          {brandCode}
+                        </span>
+                        <strong style={{ color: '#f8fafc', fontSize: '0.85rem', fontWeight: 800 }}>
+                          {displayBrand}
                         </strong>
                       </div>
                     </td>
@@ -360,11 +411,6 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
                           Box: ₹{mrpBox.toLocaleString()}
                         </div>
                       </div>
-                    </td>
-                    <td>
-                      <span style={{ color: (p.stock_box_qty || 0) > 0 ? '#34d399' : '#fb7185', fontWeight: 800 }}>
-                        {p.stock_box_qty || 0} Boxes
-                      </span>
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>

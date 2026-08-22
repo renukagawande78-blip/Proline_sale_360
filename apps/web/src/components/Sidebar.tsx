@@ -145,28 +145,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
             marginBottom: '1.25rem'
           }}
         >
-          <div 
-            className="logo-badge" 
+          <img 
+            src="/proline-logo.png" 
+            alt="Proline Logo" 
             style={{ 
-              minWidth: 36, 
-              height: 36, 
-              borderRadius: 8, 
-              background: 'linear-gradient(135deg, #38bdf8, #6366f1)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              color: 'white', 
-              fontWeight: 800, 
-              fontSize: '0.85rem' 
-            }}
-          >
-            360
-          </div>
+              width: 38, 
+              height: 38, 
+              borderRadius: '50%', 
+              objectFit: 'contain',
+              flexShrink: 0
+            }} 
+          />
 
           {!isCollapsed && (
             <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-              <div className="logo-text" style={{ fontSize: '1rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap' }}>PROLINE OMS</div>
-              <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.04em', display: 'block', whiteSpace: 'nowrap' }}>ENTERPRISE B2B</span>
+              <div className="logo-text" style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap' }}>PROLINE OMS</div>
+              <span style={{ fontSize: '0.625rem', color: '#38bdf8', fontWeight: 700, letterSpacing: '0.04em', display: 'block', whiteSpace: 'nowrap' }}>SALES AGENCY 360</span>
             </div>
           )}
 

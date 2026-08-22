@@ -9,21 +9,23 @@ import {
   fetchCompaniesFromSupabase, 
   fetchAgenciesFromSupabaseTable, 
   fetchProductsFromSupabase,
+  fetchUsersFromSupabase,
   deduplicateCompanies,
   deduplicateAgencies,
   deduplicateProducts 
 } from '../lib/supabase';
 
-import { Order, OrderItem, Agency, Product } from '../types';
+import { Order, OrderItem, Agency, Product, User } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface SearchableAgencySelectProps {
   selectedAgencyId: string;
   onSelectAgency: (agencyId: string) => void;
   agencies?: Agency[];
+  selectedSegments?: string[];
 }
 
-export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ selectedAgencyId, onSelectAgency, agencies }) => {
+export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ selectedAgencyId, onSelectAgency, agencies, selectedSegments }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,9 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
 
   return (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
-      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>AGENCY / B2B PARTY</label>
+      <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>
+        AGENCY / B2B PARTY (SINGLE SELECT)
+      </label>
 
       {/* Selected Box Trigger */}
       <div 
@@ -115,7 +119,7 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
 
           <div style={{ maxHeight: 220, overflowY: 'auto' }}>
             {filteredAgencies.length === 0 ? (
-              <div style={{ padding: '0.75rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>No matching agency found</div>
+              <div style={{ padding: '0.75rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>No matching agency found for selected segment</div>
             ) : (
               filteredAgencies.map(a => {
                 const isSelected = a.id === selectedAgencyId;
@@ -146,11 +150,26 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: isSelected ? '#38bdf8' : '#f8fafc' }}>
-                        {formatAgencyLabel(a)}
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: isSelected ? '#38bdf8' : '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>{formatAgencyLabel(a)}</span>
+                        {a.account_group && (
+                          <span style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 800,
+                            padding: '0.1rem 0.4rem',
+                            borderRadius: 4,
+                            background: a.account_group.includes('FMCD') && a.account_group.includes('FMCG') ? 'rgba(168, 85, 247, 0.2)' : a.account_group.includes('FMCD') ? 'rgba(56, 189, 248, 0.2)' : 'rgba(52, 211, 153, 0.2)',
+                            color: a.account_group.includes('FMCD') && a.account_group.includes('FMCG') ? '#c084fc' : a.account_group.includes('FMCD') ? '#38bdf8' : '#34d399',
+                            border: '1px solid rgba(255,255,255,0.1)'
+                          }}>
+                            {a.account_group}
+                          </span>
+                        )}
                       </div>
-                      <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: 2 }}>
-                        Code: {a.agency_code} | Contact: {a.contact_person} ({a.mobile})
+                      <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: 2, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span>Code: <strong style={{ color: '#cbd5e1' }}>{a.agency_code}</strong></span>
+                        {a.contact_person && <span>| Contact: <strong style={{ color: '#cbd5e1' }}>{a.contact_person}</strong></span>}
+                        {a.assigned_salesperson && <span>| Rep: <strong style={{ color: '#34d399' }}>{a.assigned_salesperson}</strong></span>}
                       </div>
                     </div>
                     {isSelected && <Check size={16} color="#38bdf8" />}
@@ -165,24 +184,215 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
   );
 };
 
+interface SearchableMultiBrandSelectProps {
+  selectedCompanyIds: string[];
+  onChangeCompanyIds: (ids: string[]) => void;
+  availableCompanies: any[];
+  userCompanyHandle?: string;
+}
+
+export const SearchableMultiBrandSelect: React.FC<SearchableMultiBrandSelectProps> = ({
+  selectedCompanyIds,
+  onChangeCompanyIds,
+  availableCompanies,
+  userCompanyHandle
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredCompanies = availableCompanies.filter(c => {
+    const q = searchQuery.toLowerCase();
+    const nameMatch = (c.company_name || '').toLowerCase().includes(q);
+    const codeMatch = (c.company_code || '').toLowerCase().includes(q);
+    const segMatch = (c.segment || '').toLowerCase().includes(q);
+    return nameMatch || codeMatch || segMatch;
+  });
+
+  const isAllSelected = selectedCompanyIds.length === 0 || selectedCompanyIds.length === availableCompanies.length;
+
+  const handleToggle = (id: string) => {
+    if (selectedCompanyIds.length === 0) {
+      const allIds = availableCompanies.map(c => c.id);
+      onChangeCompanyIds(allIds.filter(x => x !== id));
+    } else if (selectedCompanyIds.includes(id)) {
+      const remaining = selectedCompanyIds.filter(x => x !== id);
+      onChangeCompanyIds(remaining.length === 0 ? [] : remaining);
+    } else {
+      const updated = [...selectedCompanyIds, id];
+      onChangeCompanyIds(updated.length === availableCompanies.length ? [] : updated);
+    }
+  };
+
+  const handleSelectAll = () => {
+    onChangeCompanyIds([]);
+  };
+
+  const selectedCount = isAllSelected ? availableCompanies.length : selectedCompanyIds.length;
+
+  const displayText = isAllSelected 
+    ? `All Assigned Brands (${availableCompanies.length})` 
+    : selectedCompanyIds.length === 1 
+      ? availableCompanies.find(c => c.id === selectedCompanyIds[0])?.company_name || '1 Brand Selected'
+      : `${selectedCompanyIds.length} Brands Selected`;
+
+  return (
+    <div style={{ position: 'relative' }} ref={dropdownRef}>
+      <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>
+        BRANDS / COMPANIES (MULTI-SELECT)
+      </label>
+
+      {/* Selected Box Trigger */}
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          padding: '0.55rem 0.75rem',
+          background: '#0f172a',
+          border: '1px solid #38bdf8',
+          borderRadius: 6,
+          color: 'white',
+          fontWeight: 700,
+          fontSize: '0.825rem',
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isAllSelected ? '#34d399' : '#38bdf8' }}>
+          {displayText}
+        </span>
+        <ChevronDown size={16} color="#94a3b8" />
+      </div>
+
+      {/* Dropdown Popup */}
+      {isOpen && (
+        <div 
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 9999,
+            marginTop: 4,
+            background: '#1e293b',
+            border: '1px solid #38bdf8',
+            borderRadius: 8,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+            padding: '0.5rem',
+            minWidth: 260
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+            <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>Filter Brands ({selectedCount}/{availableCompanies.length})</span>
+            <button 
+              type="button" 
+              onClick={handleSelectAll} 
+              style={{ background: 'none', border: 'none', color: '#38bdf8', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
+            >
+              {isAllSelected ? 'Select All' : 'Select All'}
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.35rem 0.55rem', marginBottom: '0.4rem', gap: '0.4rem' }}>
+            <Search size={13} color="#38bdf8" />
+            <input 
+              type="text" 
+              placeholder="Search brand..." 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              autoFocus
+              style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%', fontSize: '0.75rem' }}
+            />
+          </div>
+
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            {filteredCompanies.map(c => {
+              const isChecked = isAllSelected || selectedCompanyIds.includes(c.id);
+              const isFmcd = (c.segment || '').toUpperCase() === 'FMCD';
+              return (
+                <div 
+                  key={c.id}
+                  onClick={() => handleToggle(c.id)}
+                  style={{
+                    padding: '0.4rem 0.6rem',
+                    borderRadius: 6,
+                    background: isChecked ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '0.2rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 4,
+                      border: isChecked ? '1px solid #38bdf8' : '1px solid #64748b',
+                      background: isChecked ? '#38bdf8' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#0f172a'
+                    }}>
+                      {isChecked && <Check size={12} strokeWidth={3} />}
+                    </div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isChecked ? '#f8fafc' : '#94a3b8' }}>
+                      {c.company_name}
+                    </span>
+                  </div>
+                  <span style={{
+                    fontSize: '0.625rem',
+                    fontWeight: 800,
+                    padding: '0.1rem 0.35rem',
+                    borderRadius: 4,
+                    background: isFmcd ? 'rgba(56, 189, 248, 0.2)' : 'rgba(52, 211, 153, 0.2)',
+                    color: isFmcd ? '#38bdf8' : '#34d399'
+                  }}>
+                    {c.segment || 'FMCG'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface SearchableProductSelectProps {
   selectedProductId: string;
-  selectedCompanyId: string;
-  selectedSegment: string;
+  selectedCompanyIds?: string[];
+  selectedSegments?: string[];
   userCompanyHandle?: string;
   onSelectProduct: (productId: string) => void;
   products?: Product[];
   companies?: any[];
+  alreadySelectedProductIds?: string[];
 }
 
 export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({ 
   selectedProductId, 
-  selectedCompanyId,
-  selectedSegment,
+  selectedCompanyIds = [], 
+  selectedSegments = ['FMCG', 'FMCD'],
   userCompanyHandle,
   onSelectProduct,
   products,
-  companies
+  companies,
+  alreadySelectedProductIds = []
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -204,20 +414,21 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
   }, []);
 
   const filteredProducts = activeProducts.filter(p => {
-    // 1. Company Brand Filter: if specific company selected, match company_id. If 'ALL', match userCompanyHandle scope!
+    // 1. Multi-Brand Filter: if specific companies selected, match any in selectedCompanyIds. If empty or 'ALL', match userCompanyHandle scope!
     let matchesCompany = true;
-    if (selectedCompanyId && selectedCompanyId !== 'ALL') {
-      matchesCompany = p.company_id === selectedCompanyId;
+    if (selectedCompanyIds.length > 0 && !selectedCompanyIds.includes('ALL')) {
+      matchesCompany = selectedCompanyIds.includes(p.company_id);
     } else {
       const parentCompany = activeCompanies.find(c => c.id === p.company_id);
       matchesCompany = isCompanyAllowedForUser(parentCompany?.company_name, userCompanyHandle, parentCompany?.company_code);
     }
 
-    // 2. Segment Filter: if FMCG or FMCD selected, match segment
+    // 2. Multi-Segment Filter: match any in selectedSegments
     let matchesSegment = true;
-    if (selectedSegment && selectedSegment !== 'ALL') {
+    if (selectedSegments.length > 0) {
       const parentCompany = activeCompanies.find(c => c.id === p.company_id);
-      matchesSegment = (parentCompany?.segment === selectedSegment) || (p.segment === selectedSegment);
+      const prodSegment = (p.segment || parentCompany?.segment || 'FMCG').toUpperCase();
+      matchesSegment = selectedSegments.some(s => prodSegment.includes(s.toUpperCase()));
     }
 
     // 3. Search Query Match
@@ -276,7 +487,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
             <Search size={14} color="#38bdf8" />
             <input 
               type="text" 
-              placeholder="Search product name or code..."
+              placeholder="Search product name or code..." 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               autoFocus
@@ -290,6 +501,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
             ) : (
               filteredProducts.map(p => {
                 const isSelected = p.id === selectedProductId;
+                const isAlreadyChosen = !isSelected && alreadySelectedProductIds.includes(p.id);
                 const parentCompany = activeCompanies.find(c => c.id === p.company_id);
                 const prodSegment = p.segment || parentCompany?.segment || 'FMCG';
 
@@ -297,6 +509,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                   <div
                     key={p.id}
                     onClick={() => {
+                      if (isAlreadyChosen) return;
                       onSelectProduct(p.id);
                       setIsOpen(false);
                       setSearchQuery('');
@@ -305,7 +518,8 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                       padding: '0.55rem 0.75rem',
                       borderRadius: 6,
                       background: isSelected ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                      cursor: 'pointer',
+                      cursor: isAlreadyChosen ? 'not-allowed' : 'pointer',
+                      opacity: isAlreadyChosen ? 0.45 : 1,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -313,17 +527,22 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                       transition: 'background 0.15s ease'
                     }}
                     onMouseEnter={e => {
-                      if (!isSelected) e.currentTarget.style.background = '#0f172a';
+                      if (!isSelected && !isAlreadyChosen) e.currentTarget.style.background = '#0f172a';
                     }}
                     onMouseLeave={e => {
-                      if (!isSelected) e.currentTarget.style.background = 'transparent';
+                      if (!isSelected && !isAlreadyChosen) e.currentTarget.style.background = 'transparent';
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: '0.825rem', fontWeight: 700, color: isSelected ? '#38bdf8' : '#f8fafc' }}>
-                        [{prodSegment}] {p?.product_name || 'Product Item'}
+                      <div style={{ fontSize: '0.825rem', fontWeight: 700, color: isSelected ? '#38bdf8' : isAlreadyChosen ? '#94a3b8' : '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>[{prodSegment}] {p?.product_name || 'Product Item'}</span>
+                        {isAlreadyChosen && (
+                          <span style={{ fontSize: '0.625rem', color: '#fbbf24', background: 'rgba(251, 191, 36, 0.15)', padding: '0.1rem 0.35rem', borderRadius: 4, fontWeight: 800 }}>
+                            Already in Order
+                          </span>
+                        )}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: '#34d399', marginTop: 2, fontWeight: 600 }}>
+                      <div style={{ fontSize: '0.7rem', color: isAlreadyChosen ? '#64748b' : '#34d399', marginTop: 2, fontWeight: 600 }}>
                         Company: {parentCompany?.company_name || 'General'} | Code: {p.product_code} | Pack: {p.pcs_per_box} pcs/box | ₹{p.unit_price || p.mrp_price || 0}
                       </div>
                     </div>
@@ -351,8 +570,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
   const { currentUser, users } = useAuth();
 
-  const salesTeamMembers = users.filter(u => 
+  const [liveCompanies, setLiveCompanies] = useState<any[]>(MOCK_COMPANIES);
+  const [liveAgencies, setLiveAgencies] = useState<Agency[]>(MOCK_AGENCIES);
+  const [liveProducts, setLiveProducts] = useState<Product[]>(MOCK_PRODUCTS);
+  const [liveUsers, setLiveUsers] = useState<User[]>([]);
+
+  const mergedUsers = liveUsers.length > 0 ? liveUsers : users;
+
+  const salesTeamMembers = mergedUsers.filter(u => 
     u.role_name === 'SALES_PERSON' || 
+    (u.role_name as string) === 'SALES_EXECUTIVE' ||
     u.role_name === 'AREA_SALES_MANAGER' || 
     u.role_name === 'SALES_ADMIN' ||
     u.role_name === 'SUPER_ADMIN'
@@ -363,32 +590,50 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                        currentUser?.role_name === 'AREA_SALES_MANAGER';
 
   const activeUserSegment = resolveSegmentForUser(currentUser);
-  const [selectedSegment, setSelectedSegment] = useState<'ALL' | 'FMCG' | 'FMCD'>(activeUserSegment);
+  const initialSegments = activeUserSegment === 'ALL' ? ['FMCG', 'FMCD'] : [activeUserSegment];
+  const [selectedSegments, setSelectedSegments] = useState<string[]>(initialSegments);
   const [salespersonId, setSalespersonId] = useState(currentUser?.id || salesTeamMembers[0]?.id || 'u12');
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   
-  // Active Salesperson & assigned brand handle scope
-  const activeSalesperson = users.find(u => u.id === salespersonId) || currentUser;
-  const activeSalespersonHandle = activeSalesperson?.company_handle || currentUser?.company_handle || 'All';
+  // Active Salesperson & assigned brand handle scope strictly derived from user's mapped company
+  const activeSalesperson = isAdminOrASM 
+    ? (mergedUsers.find(u => u.id === salespersonId) || (currentUser?.id === salespersonId ? currentUser : salesTeamMembers[0]))
+    : currentUser;
 
-  // Live state fetched directly from Supabase
-  const [liveCompanies, setLiveCompanies] = useState<any[]>(MOCK_COMPANIES);
-  const [liveAgencies, setLiveAgencies] = useState<Agency[]>(MOCK_AGENCIES);
-  const [liveProducts, setLiveProducts] = useState<Product[]>(MOCK_PRODUCTS);
+  const activeSalespersonHandle = activeSalesperson?.company_handle || 
+    (activeSalesperson as any)?.brand_handle || 
+    (activeSalesperson as any)?.brand_scope || 
+    currentUser?.company_handle || 
+    'All';
+
+  // Toggle Segment function (Multi-Select)
+  const toggleSegment = (seg: 'FMCG' | 'FMCD') => {
+    setSelectedSegments(prev => {
+      if (prev.includes(seg)) {
+        if (prev.length === 1) return prev; // Keep at least one selected
+        return prev.filter(s => s !== seg);
+      } else {
+        return [...prev, seg];
+      }
+    });
+  };
 
   useEffect(() => {
     if (!isOpen) return;
     let isMounted = true;
     async function loadLiveDataFromSupabase() {
       try {
-        const [compData, agRes, prodData] = await Promise.all([
+        const [compData, agRes, prodData, usrData] = await Promise.all([
           fetchCompaniesFromSupabase(),
           fetchAgenciesFromSupabaseTable(),
-          fetchProductsFromSupabase()
+          fetchProductsFromSupabase(),
+          fetchUsersFromSupabase()
         ]);
         if (isMounted) {
           if (compData && compData.length > 0) setLiveCompanies(deduplicateCompanies([...compData, ...MOCK_COMPANIES]));
           if (agRes && agRes.agencies && agRes.agencies.length > 0) setLiveAgencies(deduplicateAgencies([...agRes.agencies, ...MOCK_AGENCIES]));
           if (prodData && prodData.length > 0) setLiveProducts(deduplicateProducts([...prodData, ...MOCK_PRODUCTS]));
+          if (usrData && usrData.length > 0) setLiveUsers(usrData);
         }
       } catch (err) {
         console.warn('Supabase live fetch notice in CreateOrderModal:', err);
@@ -402,15 +647,91 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   const activeAgenciesPool = (liveAgencies && liveAgencies.length > 0) ? liveAgencies : [];
   const activeProductsPool = (liveProducts && liveProducts.length > 0) ? liveProducts : [];
 
+  // Segment-wise Agencies Pool (Multi-Segment Filter)
+  const allowedAgenciesForSegment = activeAgenciesPool.filter(a => {
+    const group = (a.account_group || 'FMCG').toUpperCase();
+    return selectedSegments.some(seg => group.includes(seg));
+  });
+
   // Brands allowed for active salesperson & segment filter
   const allowedBrandsForActiveSalesperson = activeCompaniesPool.filter(c => {
     const matchesBrand = isCompanyAllowedForUser(c.company_name, activeSalespersonHandle, c.company_code);
-    const matchesSegment = selectedSegment === 'ALL' || c.segment === selectedSegment;
+    const seg = (c.segment || 'FMCG').toUpperCase();
+    const matchesSegment = selectedSegments.length === 0 || selectedSegments.some(s => seg.includes(s));
     return matchesBrand && matchesSegment;
   });
 
-  const [companyId, setCompanyId] = useState<string>('ALL'); // Default to 'ALL' Brands!
-  const [agencyId, setAgencyId] = useState(activeAgenciesPool[0]?.id || '');
+  const [agencyId, setAgencyId] = useState(allowedAgenciesForSegment[0]?.id || activeAgenciesPool[0]?.id || '');
+
+  // 1. Auto-fill logged-in user segment, assigned brands, and self-salesperson on modal open
+  useEffect(() => {
+    if (!isOpen || orderToEdit) return;
+    const effectiveUser = (currentUser?.id && mergedUsers.find(u => u.id === currentUser.id)) || currentUser;
+    if (effectiveUser?.id) {
+      setSalespersonId(effectiveUser.id);
+    }
+    const userSegment = resolveSegmentForUser(effectiveUser, activeCompaniesPool);
+    if (userSegment !== 'ALL') {
+      setSelectedSegments([userSegment]);
+    } else {
+      setSelectedSegments(['FMCG', 'FMCD']);
+    }
+
+    const spHandle = effectiveUser?.company_handle || 'All';
+    const allowed = activeCompaniesPool.filter(c => isCompanyAllowedForUser(c.company_name, spHandle, c.company_code));
+    if (allowed.length === 1) {
+      setSelectedCompanyIds([allowed[0].id]);
+      const bSeg = (allowed[0].segment || 'FMCG').toUpperCase();
+      if (bSeg === 'FMCG' || bSeg === 'FMCD') {
+        setSelectedSegments([bSeg]);
+      }
+    }
+  }, [isOpen, orderToEdit, currentUser, mergedUsers, activeCompaniesPool]);
+
+  // 2. Keep agency selection valid when selectedSegments changes
+  useEffect(() => {
+    if (!isOpen || orderToEdit) return;
+    const isCurrentAgencyValid = allowedAgenciesForSegment.some(a => a.id === agencyId);
+    if (!isCurrentAgencyValid && allowedAgenciesForSegment.length > 0) {
+      setAgencyId(allowedAgenciesForSegment[0].id);
+    }
+  }, [selectedSegments, allowedAgenciesForSegment, isOpen, orderToEdit]);
+
+  // 3. Auto-sync company/brand selection to user's assigned brands
+  useEffect(() => {
+    if (!isOpen || orderToEdit) return;
+    if (allowedBrandsForActiveSalesperson.length === 1) {
+      setSelectedCompanyIds([allowedBrandsForActiveSalesperson[0].id]);
+    } else {
+      setSelectedCompanyIds(prev => {
+        const valid = prev.filter(id => allowedBrandsForActiveSalesperson.some(c => c.id === id));
+        return valid;
+      });
+    }
+  }, [allowedBrandsForActiveSalesperson, isOpen, orderToEdit]);
+
+  // 4. Auto-select assigned salesperson when an agency is picked
+  useEffect(() => {
+    if (!agencyId || orderToEdit) return;
+    const selectedAgency = activeAgenciesPool.find(a => a.id === agencyId);
+    if (selectedAgency?.assigned_salesperson) {
+      const assignedNames = selectedAgency.assigned_salesperson
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
+
+      const matchedUser = salesTeamMembers.find(u => 
+        assignedNames.some(name => 
+          (u.full_name || '').toLowerCase().includes(name) || 
+          name.includes((u.full_name || '').toLowerCase())
+        )
+      );
+
+      if (matchedUser) {
+        setSalespersonId(matchedUser.id);
+      }
+    }
+  }, [agencyId, activeAgenciesPool, salesTeamMembers, orderToEdit]);
 
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
   const [remarks, setRemarks] = useState('');
@@ -434,35 +755,36 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     }
   ]);
 
-
   // Auto-sync company brand dropdown and product item list whenever selected Salesperson changes
   useEffect(() => {
     if (!isOpen || orderToEdit) return;
 
-    const activeSp = users.find(u => u.id === salespersonId) || currentUser;
+    const activeSp = mergedUsers.find(u => u.id === salespersonId) || currentUser;
     if (!activeSp) return;
 
     const spHandle = activeSp.company_handle || 'All';
-    const spSegment = resolveSegmentForUser(activeSp);
+    const spSegment = resolveSegmentForUser(activeSp, activeCompaniesPool);
 
-    // 1. Auto-sync segment if salesperson is dedicated to a segment
-    if (spSegment !== 'ALL') {
-      setSelectedSegment(spSegment);
-    }
-
-    // 2. Determine allowed companies for this salesperson
+    // 1. Determine allowed companies for this salesperson
     const allowedCompanies = activeCompaniesPool.filter(c => 
       isCompanyAllowedForUser(c.company_name, spHandle, c.company_code)
     );
 
-    // If single brand mapped to salesperson (e.g. Sagar -> Mogu Mogu), auto-select that single brand!
+    // If single brand mapped to salesperson (e.g. Keyur -> Hell [FMCD]), auto-select that single brand & its segment!
     if (allowedCompanies.length === 1) {
-      setCompanyId(allowedCompanies[0].id);
+      setSelectedCompanyIds([allowedCompanies[0].id]);
+      const brandSeg = (allowedCompanies[0].segment || 'FMCG').toUpperCase();
+      if (brandSeg === 'FMCG' || brandSeg === 'FMCD') {
+        setSelectedSegments([brandSeg]);
+      }
+    } else if (spSegment !== 'ALL') {
+      setSelectedSegments([spSegment]);
+      setSelectedCompanyIds([]);
     } else {
-      setCompanyId('ALL');
+      setSelectedCompanyIds([]);
     }
 
-    // 3. Auto-sync agency selector if current agency is not allowed for this salesperson
+    // 2. Auto-sync agency selector if current agency is not allowed for this salesperson
     const allowedAgencies = activeAgenciesPool.filter(a => {
       const spName = (activeSp.full_name || '').toLowerCase();
       const assignedSp = (a.assigned_salesperson || '').toLowerCase();
@@ -475,18 +797,27 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       setAgencyId(allowedAgencies[0].id);
     }
 
-    // 4. Ensure line items use products belonging to allowed brands for this salesperson
+    // 3. Ensure line items use products belonging to allowed brands & selected segments
     const allowedCompanyIds = allowedCompanies.map(c => c.id);
     const activeProductsPool = (liveProducts && liveProducts.length > 0) ? liveProducts : MOCK_PRODUCTS;
-    const validProducts = activeProductsPool.filter(p => 
-      allowedCompanyIds.length === 0 || allowedCompanyIds.includes(p.company_id) || isCompanyAllowedForUser(p.product_name, spHandle)
-    );
+    const validProducts = activeProductsPool.filter(p => {
+      const parentComp = activeCompaniesPool.find(c => c.id === p.company_id);
+      const matchesComp = allowedCompanyIds.length === 0 || allowedCompanyIds.includes(p.company_id) || isCompanyAllowedForUser(p.product_name, spHandle);
+      const prodSeg = (p.segment || parentComp?.segment || 'FMCG').toUpperCase();
+      const matchesSeg = selectedSegments.length === 0 || selectedSegments.some(s => prodSeg.includes(s));
+      return matchesComp && matchesSeg;
+    });
 
     if (validProducts.length > 0) {
       const defaultProd = validProducts[0];
       setItems(prev => prev.map(item => {
         const prod = activeProductsPool.find(p => p.id === item.product_id);
-        const isProdValid = prod && (allowedCompanyIds.length === 0 || allowedCompanyIds.includes(prod.company_id) || isCompanyAllowedForUser(prod.product_name, spHandle));
+        const parentComp = activeCompaniesPool.find(c => c.id === prod?.company_id);
+        const prodSeg = (prod?.segment || parentComp?.segment || 'FMCG').toUpperCase();
+        const isProdValid = prod && 
+          (allowedCompanyIds.length === 0 || allowedCompanyIds.includes(prod.company_id) || isCompanyAllowedForUser(prod.product_name, spHandle)) &&
+          (selectedSegments.length === 0 || selectedSegments.some(s => prodSeg.includes(s)));
+
         if (!isProdValid) {
           return {
             ...item,
@@ -498,13 +829,13 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         return item;
       }));
     }
-  }, [salespersonId, isOpen, orderToEdit, users, currentUser]);
+  }, [salespersonId, selectedSegments, isOpen, orderToEdit, mergedUsers, currentUser, activeCompaniesPool, liveProducts]);
 
 
   useEffect(() => {
     if (!isOpen) return;
     if (orderToEdit) {
-      setCompanyId(orderToEdit.company_id || 'ALL');
+      setSelectedCompanyIds(orderToEdit.company_id && orderToEdit.company_id !== 'ALL' && orderToEdit.company_id !== 'c01' ? [orderToEdit.company_id] : []);
       setAgencyId(orderToEdit.agency_id || MOCK_AGENCIES[0]?.id || '');
       setDeliveryType(orderToEdit.delivery_type || 'F.O.R');
       setRemarks(orderToEdit.remarks || '');
@@ -531,7 +862,14 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   if (!isOpen) return null;
 
   const handleProductChange = (index: number, productId: string) => {
-    const prod = MOCK_PRODUCTS.find(p => p.id === productId);
+    // Avoid multiple duplicate product selection
+    const isAlreadySelected = items.some((item, i) => i !== index && item.product_id === productId);
+    if (isAlreadySelected) {
+      alert('This product SKU is already added to this order. Please adjust box quantity on that row instead.');
+      return;
+    }
+
+    const prod = activeProductsPool.find(p => p.id === productId) || MOCK_PRODUCTS.find(p => p.id === productId);
     if (!prod) return;
 
     setItems(prev => {
@@ -569,16 +907,29 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   };
 
   const addItemRow = () => {
-    const firstProd = MOCK_PRODUCTS[0];
+    const existingProductIds = items.map(i => i.product_id);
+    const availableProds = activeProductsPool.filter(p => {
+      const parentComp = activeCompaniesPool.find(c => c.id === p.company_id);
+      const matchesBrand = (selectedCompanyIds.length === 0 || selectedCompanyIds.includes(p.company_id)) &&
+        isCompanyAllowedForUser(parentComp?.company_name, activeSalespersonHandle, parentComp?.company_code);
+      const prodSeg = (p.segment || parentComp?.segment || 'FMCG').toUpperCase();
+      const matchesSeg = selectedSegments.length === 0 || selectedSegments.some(s => prodSeg.includes(s));
+      return matchesBrand && matchesSeg;
+    });
+
+    const nextUnselectedProd = availableProds.find(p => !existingProductIds.includes(p.id)) || availableProds[0] || liveProducts[0] || MOCK_PRODUCTS[0];
+
+    if (!nextUnselectedProd) return;
+
     setItems(prev => [
       ...prev,
       {
-        product_id: firstProd?.id || '',
-        pcs_per_box: firstProd?.pcs_per_box || 24,
+        product_id: nextUnselectedProd.id,
+        pcs_per_box: nextUnselectedProd.pcs_per_box || 24,
         box_qty: 5,
         loose_pcs: 0,
         free_pcs: 0,
-        unit_price: firstProd?.unit_price || 0,
+        unit_price: nextUnselectedProd.unit_price || nextUnselectedProd.mrp_price || 0,
         remark: ''
       }
     ]);
@@ -640,11 +991,11 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   };
 
   const handleSubmit = (status: 'DRAFT' | 'SUBMITTED') => {
-    const selectedCompany = companyId === 'ALL' 
-      ? { id: 'ALL', company_name: selectedSegment === 'ALL' ? 'Multi-Brand' : `${selectedSegment} Multi-Brand`, company_code: 'PRG' }
-      : MOCK_COMPANIES.find(c => c.id === companyId);
+    const selectedCompany = selectedCompanyIds.length === 1 
+      ? activeCompaniesPool.find(c => c.id === selectedCompanyIds[0]) || MOCK_COMPANIES.find(c => c.id === selectedCompanyIds[0])
+      : { id: 'ALL', company_name: `${selectedSegments.join(' & ')} Multi-Brand`, company_code: 'PRG' };
     
-    const selectedAgency = MOCK_AGENCIES.find(a => a.id === agencyId);
+    const selectedAgency = activeAgenciesPool.find(a => a.id === agencyId) || MOCK_AGENCIES.find(a => a.id === agencyId);
 
     // Format Order Number: BrandCode-DDMMYYYY-Seq (e.g., PRG-08082026-001 or FMCG-08082026-001)
     const brandCode = selectedCompany?.company_code || 'PRG';
@@ -682,7 +1033,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       id: finalOrderId,
       order_number: finalOrderNumber,
       order_date: orderToEdit ? orderToEdit.order_date : new Date().toISOString().replace('T', ' ').substring(0, 16),
-      company_id: companyId === 'ALL' ? 'c01' : companyId,
+      company_id: selectedCompanyIds.length === 1 ? selectedCompanyIds[0] : 'c01',
       company_name: selectedCompany?.company_name,
       agency_id: agencyId,
       agency_name: selectedAgency?.agency_name,
@@ -728,24 +1079,60 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           </button>
         </div>
 
-        {/* Form Fields Grid: Segment, Salesperson, Company/Brand (with All Option), Agency, Delivery */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.5fr 1.5fr 1.5fr 1.1fr', gap: '0.85rem', marginBottom: '1.25rem' }}>
+        {/* Form Fields Grid: Segment (Multi-Select), Salesperson, Company/Brand (Multi-Select), Agency (Single Select), Delivery */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr 1.6fr 1.6fr 1fr', gap: '0.85rem', marginBottom: '1.25rem' }}>
           
-          {/* 1. SEGMENT */}
+          {/* 1. SEGMENTS (MULTI-SELECT TOGGLE PILLS) */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>SEGMENT</label>
-            <select 
-              value={selectedSegment} 
-              onChange={e => {
-                setSelectedSegment(e.target.value as any);
-                setCompanyId('ALL');
-              }}
-              style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#38bdf8', fontWeight: 700, fontSize: '0.825rem' }}
-            >
-              <option value="ALL">All Segments (FMCG & FMCD)</option>
-              <option value="FMCG">FMCG (Fast-Moving Consumer Goods)</option>
-              <option value="FMCD">FMCD (Fast-Moving Consumer Durables)</option>
-            </select>
+            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>
+              SEGMENTS (MULTI-SELECT)
+            </label>
+            <div style={{ display: 'flex', gap: '0.35rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.25rem', height: 38, alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => toggleSegment('FMCG')}
+                style={{
+                  flex: 1,
+                  height: '100%',
+                  borderRadius: 6,
+                  border: selectedSegments.includes('FMCG') ? '1px solid #34d399' : '1px solid transparent',
+                  background: selectedSegments.includes('FMCG') ? 'rgba(52, 211, 153, 0.2)' : 'transparent',
+                  color: selectedSegments.includes('FMCG') ? '#34d399' : '#64748b',
+                  fontWeight: 800,
+                  fontSize: '0.775rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.25rem',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {selectedSegments.includes('FMCG') && <Check size={12} strokeWidth={3} />} FMCG
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleSegment('FMCD')}
+                style={{
+                  flex: 1,
+                  height: '100%',
+                  borderRadius: 6,
+                  border: selectedSegments.includes('FMCD') ? '1px solid #38bdf8' : '1px solid transparent',
+                  background: selectedSegments.includes('FMCD') ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+                  color: selectedSegments.includes('FMCD') ? '#38bdf8' : '#64748b',
+                  fontWeight: 800,
+                  fontSize: '0.775rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.25rem',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {selectedSegments.includes('FMCD') && <Check size={12} strokeWidth={3} />} FMCD
+              </button>
+            </div>
           </div>
 
           {/* 2. SALESPERSON / FIELD EXEC */}
@@ -756,9 +1143,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                 value={salespersonId}
                 onChange={e => {
                   setSalespersonId(e.target.value);
-                  setCompanyId('ALL');
+                  setSelectedCompanyIds([]);
                 }}
-                style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem' }}
+                style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem', height: 38 }}
               >
                 {salesTeamMembers.map(u => {
                   const scopeStr = u.company_handle ? ` [Mapped: ${u.company_handle}]` : ' [All Brands]';
@@ -768,40 +1155,34 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                     </option>
                   );
                 })}
-
               </select>
             ) : (
-              <div style={{ padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '0.4rem', height: 38 }}>
                 <UserCheck size={16} color="#34d399" />
                 <span>{currentUser?.full_name} (Self)</span>
               </div>
             )}
           </div>
 
-          {/* 3. COMPANY / BRAND HANDLE (With 'All Brands' Option) */}
+          {/* 3. BRANDS / COMPANIES (MULTI-SELECT) */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>COMPANY / BRAND</label>
-            <select 
-              value={companyId} 
-              onChange={e => setCompanyId(e.target.value)}
-              style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, fontSize: '0.825rem' }}
-            >
-              <option value="ALL">All Brands ({allowedBrandsForActiveSalesperson.length})</option>
-              {allowedBrandsForActiveSalesperson.map(c => (
-                <option key={c.id} value={c.id}>{c.company_name}</option>
-              ))}
-            </select>
+            <SearchableMultiBrandSelect 
+              selectedCompanyIds={selectedCompanyIds}
+              onChangeCompanyIds={setSelectedCompanyIds}
+              availableCompanies={allowedBrandsForActiveSalesperson}
+              userCompanyHandle={activeSalespersonHandle}
+            />
           </div>
 
-          {/* 4. AGENCY / B2B PARTY */}
+          {/* 4. AGENCY / B2B PARTY (SINGLE SELECT) */}
           <div>
             <SearchableAgencySelect 
               selectedAgencyId={agencyId}
               onSelectAgency={setAgencyId}
-              agencies={activeAgenciesPool}
+              agencies={allowedAgenciesForSegment}
+              selectedSegments={selectedSegments}
             />
           </div>
-
 
           {/* 5. DELIVERY TYPE */}
           <div>
@@ -809,7 +1190,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <select 
               value={deliveryType} 
               onChange={e => setDeliveryType(e.target.value as 'F.O.R' | 'Self Pickup')}
-              style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, fontSize: '0.825rem' }}
+              style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, fontSize: '0.825rem', height: 38 }}
             >
               <option value="F.O.R">F.O.R</option>
               <option value="Self Pickup">Self Pickup</option>
@@ -818,14 +1199,18 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
         </div>
 
-        {/* Salesperson Assigned Brands Info Banner */}
+        {/* Salesperson Assigned Brands & Segments Banner */}
         <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.5rem 0.85rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.775rem' }}>
           <div>
-            <span style={{ color: '#94a3b8' }}>Assigned Brand Handles for <strong>{activeSalesperson?.full_name}</strong>: </span>
+            <span style={{ color: '#94a3b8' }}>Mapped Scope for <strong>{activeSalesperson?.full_name}</strong>: </span>
             <strong style={{ color: '#34d399' }}>{activeSalespersonHandle}</strong>
+            <span style={{ color: '#64748b', marginLeft: 8 }}>| Active Segments: </span>
+            <strong style={{ color: '#38bdf8' }}>{selectedSegments.join(' & ')}</strong>
           </div>
           <div style={{ color: '#38bdf8', fontWeight: 600 }}>
-            Active Selection: <strong>{companyId === 'ALL' ? 'All Assigned Brands' : MOCK_COMPANIES.find(c => c.id === companyId)?.company_name}</strong>
+            Brand Filter: <strong style={{ color: '#34d399' }}>{selectedCompanyIds.length === 0 ? `All (${allowedBrandsForActiveSalesperson.length})` : `${selectedCompanyIds.length} Selected`}</strong>
+            <span style={{ color: '#64748b', marginLeft: 8 }}>| Agencies Available: </span>
+            <strong style={{ color: '#f8fafc' }}>{allowedAgenciesForSegment.length}</strong>
           </div>
         </div>
 
@@ -856,12 +1241,13 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                   <td>
                     <SearchableProductSelect 
                       selectedProductId={item.product_id}
-                      selectedCompanyId={companyId}
-                      selectedSegment={selectedSegment}
+                      selectedCompanyIds={selectedCompanyIds}
+                      selectedSegments={selectedSegments}
                       userCompanyHandle={activeSalespersonHandle}
                       onSelectProduct={(productId) => handleProductChange(index, productId)}
                       products={liveProducts}
                       companies={liveCompanies}
+                      alreadySelectedProductIds={items.map(i => i.product_id)}
                     />
 
                   </td>
