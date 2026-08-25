@@ -32,15 +32,28 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
   const [isRegisterProductOpen, setIsRegisterProductOpen] = useState(false);
   const [productsList, setProductsList] = useState<Product[]>(MOCK_PRODUCTS);
 
+  // Active Dispatch Orders (Billing Completed in Stage 4)
   const dispatchQueueOrders = orders.filter(o => 
-    (o.status === 'APPROVED' || 
+    (o.status === 'BILLED' || 
+     o.status === 'INVOICED' || 
+     o.status === 'READY_FOR_PICKUP' || 
      o.status === 'PARTIALLY_DISPATCHED' || 
      o.status === 'DISPATCHED' || 
-     o.status === 'BILLED' || 
-     o.status === 'READY_FOR_PICKUP' || 
      o.status === 'OUT_FOR_DELIVERY' ||
      o.status === 'DELIVERED' ||
      o.status === 'COMPLETED') &&
+    isCompanyAllowedForUser(o.company_name, currentUser?.company_handle)
+  );
+
+  // Orders awaiting Billing in Stage 4
+  const awaitingBillingOrders = orders.filter(o =>
+    (o.status === 'APPROVED' || o.status === 'ACCOUNTS_APPROVED') &&
+    isCompanyAllowedForUser(o.company_name, currentUser?.company_handle)
+  );
+
+  // Orders on Hold
+  const heldOrders = orders.filter(o =>
+    o.status === 'HELD' &&
     isCompanyAllowedForUser(o.company_name, currentUser?.company_handle)
   );
 
@@ -205,9 +218,25 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
       {/* VIEW 1: Dispatch Processing Queue */}
       {activeTab === 'queue' && (
         <div className="data-table-container">
-          <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Dispatch & Delivery Queue ({dispatchQueueOrders.length})</h2>
-            <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 700 }}>Real-time Delivery Pipeline</span>
+          <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Stage 5: Warehouse Packing & Logistics Allocation ({dispatchQueueOrders.length})</h2>
+              <span style={{ fontSize: '0.775rem', color: '#94a3b8' }}>Only orders with completed Tax Invoicing (Stage 4) are cleared for vehicle loading</span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.12)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.25rem 0.65rem', borderRadius: 6 }}>
+                🟢 Cleared for Dispatch: {dispatchQueueOrders.length}
+              </span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '0.25rem 0.65rem', borderRadius: 6 }}>
+                🔒 Awaiting Invoicing in Stage 4: {awaitingBillingOrders.length}
+              </span>
+              {heldOrders.length > 0 && (
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#fbbf24', background: 'rgba(251, 191, 36, 0.15)', border: '1px solid rgba(251, 191, 36, 0.3)', padding: '0.25rem 0.65rem', borderRadius: 6 }}>
+                  ⏸️ On Hold: {heldOrders.length}
+                </span>
+              )}
+            </div>
           </div>
 
         <table className="data-table">

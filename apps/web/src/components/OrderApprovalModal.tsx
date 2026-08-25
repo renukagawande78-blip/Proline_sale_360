@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, CheckCircle, AlertTriangle, Building2, Store, Clock, Calendar, Truck, User, FileText, ShieldAlert, CreditCard, DollarSign, MessageSquare, Check, XCircle, RefreshCw } from 'lucide-react';
+import { X, CheckCircle, AlertTriangle, FileText, ShieldAlert, ShieldCheck, Check, XCircle, RefreshCw, Lock, Unlock, User } from 'lucide-react';
 import { Order, HoldReason } from '../types';
-import { MOCK_HOLD_REASONS, getOrderAccessPermission, getAgencyFinancialsByAgencyId, isCompanyAllowedForUser } from '../lib/supabase';
+import { MOCK_HOLD_REASONS, getOrderAccessPermission, getAgencyFinancialsByAgencyId } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -18,39 +18,24 @@ interface OrderApprovalModalProps {
 }
 
 export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
-  order,
-  isOpen,
-  onClose,
-  onApprove,
-  onHold,
-  onReject,
-  onRequestAccountsClearance,
-  onApproveReturnRequest,
-  onRejectReturnRequest
+  order, isOpen, onClose, onApprove, onHold, onReject,
+  onRequestAccountsClearance, onApproveReturnRequest, onRejectReturnRequest
 }) => {
   const { currentUser, hasPermission } = useAuth();
   const { addNotification } = useNotifications();
   const role = currentUser?.role_name || 'SALES_PERSON';
-  
-  const isChiragAdmin = (currentUser?.full_name || '').toLowerCase().includes('chirag');
-  const isHarshadAdmin = (currentUser?.full_name || '').toLowerCase().includes('harshad');
-  const isSuperAdmin = role === 'SUPER_ADMIN' || isChiragAdmin || isHarshadAdmin;
-  const isAccountsUser = role === 'ACCOUNTS' || hasPermission('order_transfer_to_billing');
-  const canGrantAccountsApproval = isSuperAdmin || isAccountsUser;
+
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+    || (currentUser?.full_name || '').toLowerCase().includes('chirag')
+    || (currentUser?.full_name || '').toLowerCase().includes('harshad');
+  const isSalesAdmin = role === 'SALES_ADMIN';
 
   const accessPerm = order ? getOrderAccessPermission(order, currentUser) : { canExecuteActions: false, accessReason: '', isItemBrandOwner: false };
-  const canApproveOrHold = isSuperAdmin || (accessPerm.canExecuteActions && (role === 'SALES_ADMIN' || role === 'ACCOUNTS' || hasPermission('order_transfer_to_billing')));
 
   const [selectedHoldReason, setSelectedHoldReason] = useState<string>(MOCK_HOLD_REASONS[0]?.id || '');
-  const [remarks, setRemarks] = useState('');
+  const [salesAdminRemarks, setSalesAdminRemarks] = useState('');
+  const [superAdminRemarks, setSuperAdminRemarks] = useState('');
   const [showHoldPanel, setShowHoldPanel] = useState(false);
-  
-  // Accounts Approval Query State
-  const [queryText, setQueryText] = useState('');
-  const [showQueryPanel, setShowQueryPanel] = useState(false);
-  const [accountsApprovalStatus, setAccountsApprovalStatus] = useState<'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED'>('NONE');
-
-  // Stage 2 & 3 Diagram Flow Controls
   const [paymentType, setPaymentType] = useState<'ADVANCE' | 'OVERDUE' | 'CREDIT'>(order?.payment_type || 'CREDIT');
   const [paymentReceiptNo, setPaymentReceiptNo] = useState(order?.payment_receipt_no || '');
   const [priority, setPriority] = useState<'HIGH' | 'MEDIUM' | 'LOW'>(order?.priority || 'MEDIUM');
@@ -58,201 +43,101 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
 
   if (!order || (isOpen !== undefined && !isOpen)) return null;
 
-  const agencyFinancials = getAgencyFinancialsByAgencyId(order.agency_id);
-  const availableCredit = agencyFinancials.available_credit || 0;
-  const creditLimit = agencyFinancials.credit_limit || 250000;
-  const currentOutstanding = agencyFinancials.current_outstanding || agencyFinancials.outstanding_amount || 0;
-  const creditScore = agencyFinancials.credit_score || 90;
-  const isCreditBreached = order.total_amount > availableCredit;
-  const hasOverduePayment = (agencyFinancials.overdue_amount || 0) > 0;
+  const salesAdminSigned = !!order.sales_admin_approved;
+  const superAdminSigned = !!order.superadmin_approved;
+  const bothApproved = salesAdminSigned && superAdminSigned;
+  const waitingForSuperAdmin = salesAdminSigned && !superAdminSigned && order.status === 'SALES_ADMIN_APPROVED';
 
-  const handleSendAccountsQuery = () => {
-    if (!queryText.trim()) return;
-    
-    setAccountsApprovalStatus('PENDING');
-    setShowQueryPanel(false);
-    
-    addNotification({
-      title: `Accounts Clearance Query: ${order.order_number}`,
-      message: `System Admin query sent to Accounts Team. Query: "${queryText}"`,
-      event_type: 'ACCOUNTS_QUERY_SENT',
-      order_id: order.id
-    });
-
-    if (onRequestAccountsClearance) {
-      onRequestAccountsClearance(order.id, queryText);
-    }
-  };
-
-  const handleGrantAccountsApproval = () => {
-    setAccountsApprovalStatus('APPROVED');
-    addNotification({
-      title: `Accounts Clearance Granted: ${order.order_number}`,
-      message: `Accounts Admin / Chirag Sir granted credit waiver & payment clearance for ${order.agency_name}.`,
-      event_type: 'ACCOUNTS_APPROVED',
-      order_id: order.id
-    });
-  };
-
-  const handleDeclineAccountsApproval = () => {
-    setAccountsApprovalStatus('REJECTED');
-    addNotification({
-      title: `Accounts Clearance Declined: ${order.order_number}`,
-      message: `Accounts Admin / Chirag Sir declined credit waiver for ${order.agency_name}. Order should be held or rejected.`,
-      event_type: 'ACCOUNTS_REJECTED',
-      order_id: order.id
-    });
+  const fmtDate = (d?: string) => {
+    if (!d) return '-';
+    try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
+    catch { return d; }
   };
 
   const handleApproveReturn = () => {
-    if (!order) return;
-    if (onApproveReturnRequest) {
-      onApproveReturnRequest(order.id);
-    }
-    addNotification({
-      title: `🔁 Return Request Approved: ${order.order_number}`,
-      message: `System Admin approved return/replacement request. Alert sent to Dispatch Manager for inventory stock update.`,
-      event_type: 'RETURN_APPROVED',
-      order_id: order.id
-    });
+    if (onApproveReturnRequest) onApproveReturnRequest(order.id);
+    addNotification({ title: 'Return Approved: ' + order.order_number, message: 'Return approved. Dispatch alerted.', event_type: 'RETURN_APPROVED', order_id: order.id });
     onClose();
   };
-
   const handleRejectReturn = () => {
-    if (!order) return;
-    if (onRejectReturnRequest) {
-      onRejectReturnRequest(order.id);
-    }
-    addNotification({
-      title: `❌ Return Request Declined: ${order.order_number}`,
-      message: `System Admin declined return/replacement request.`,
-      event_type: 'RETURN_REJECTED',
-      order_id: order.id
-    });
+    if (onRejectReturnRequest) onRejectReturnRequest(order.id);
+    addNotification({ title: 'Return Declined: ' + order.order_number, message: 'Return declined.', event_type: 'RETURN_REJECTED', order_id: order.id });
     onClose();
   };
 
   return (
     <div className="modal-overlay">
-      <div className="modal-card" style={{ maxWidth: 900, width: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
-        
-        {/* Modal Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
+      <div className="modal-card" style={{ maxWidth: 980, width: '96vw', maxHeight: '93vh', overflowY: 'auto' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
-                Sales Order Details & Status Review
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                Order Review — Stage 2: Dual Approval Gate
               </h2>
-              <span className={`status-badge status-${order.status}`}>{order.status}</span>
-              {accountsApprovalStatus === 'APPROVED' && (
-                <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>
-                  ✅ Accounts Clearance Granted
-                </span>
-              )}
+              <span className={'status-badge status-' + order.status}>{order.status}</span>
+              {bothApproved && <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#34d399', background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>✅ Both Approvals Complete</span>}
+              {waitingForSuperAdmin && <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#fbbf24', background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>🔔 Awaiting Super Admin Final Sign-off</span>}
             </div>
-            <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 2 }}>
-              Order No: <strong style={{ color: '#38bdf8' }}>{order.order_number}</strong> | Date: {order.order_date}
+            <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 3 }}>
+              Order: <strong style={{ color: '#38bdf8' }}>{order.order_number}</strong>
+              &nbsp;|&nbsp; Date: {fmtDate(order.order_date)}
+              &nbsp;|&nbsp; Brand: <strong style={{ color: '#fbbf24' }}>{order.company_name}</strong>
             </p>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
-            <X size={20} />
-          </button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}><X size={20} /></button>
         </div>
 
-        {/* Info Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem', marginBottom: '1.25rem', background: '#0f172a', padding: '1rem', borderRadius: 10, border: '1px solid #334155', fontSize: '0.825rem' }}>
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>COMPANY / SEGMENT</div>
-            <div style={{ fontWeight: 700, color: '#f8fafc', marginTop: 2 }}>{order.company_name || 'FMCG'}</div>
-          </div>
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>AGENCY / B2B PARTY</div>
-            <div style={{ fontWeight: 700, color: '#38bdf8', marginTop: 2 }}>{order.agency_name}</div>
-          </div>
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>BOOKED SALESPERSON</div>
-            <div style={{ fontWeight: 700, color: '#34d399', marginTop: 2 }}>{order.salesperson_name || 'Amit Kumar'}</div>
-          </div>
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>DELIVERY TYPE</div>
-            <div style={{ fontWeight: 700, color: '#fbbf24', marginTop: 2 }}>{order.delivery_type || 'F.O.R'}</div>
-          </div>
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>TOTAL VOLUME</div>
-            <div style={{ fontWeight: 700, color: '#f8fafc', marginTop: 2 }}>{order.total_box_qty} Boxes ({order.total_qty_pcs} PCS)</div>
-          </div>
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: '0.725rem', fontWeight: 700 }}>COSTING STAGE</div>
-            <div style={{ fontWeight: 800, color: '#38bdf8', marginTop: 2, fontSize: '0.8rem' }}>🔒 Next Phase (Billing)</div>
-          </div>
+        {/* Order Summary Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem', marginBottom: '1.25rem', background: '#0f172a', padding: '0.85rem 1rem', borderRadius: 10, border: '1px solid #334155' }}>
+          {[
+            { label: 'AGENCY / PARTY', value: order.agency_name, color: '#38bdf8' },
+            { label: 'TERRITORY', value: order.area_name || '—', color: '#94a3b8' },
+            { label: 'SALESPERSON', value: order.salesperson_name || 'Sales Rep', color: '#34d399' },
+            { label: 'DELIVERY', value: order.delivery_type || 'F.O.R', color: '#fbbf24' },
+            { label: 'TOTAL BOXES', value: order.total_box_qty + ' Boxes', color: '#f8fafc' },
+            { label: 'TOTAL PCS', value: order.total_qty_pcs + ' PCS', color: '#38bdf8' },
+            { label: 'ORDER VALUE', value: '₹ ' + Number(order.total_amount || 0).toLocaleString('en-IN'), color: '#10b981' },
+          ].map(function(item) {
+            return (
+              <div key={item.label}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', marginBottom: 2 }}>{item.label}</div>
+                <div style={{ fontWeight: 700, color: item.color, fontSize: '0.825rem' }}>{item.value}</div>
+              </div>
+            );
+          })}
         </div>
 
-        {/* AGENCY DETAILS & ORDER VERIFICATION BANNER */}
-        <div style={{ background: '#0b1329', border: '1px solid #1e293b', borderRadius: 10, padding: '0.85rem 1rem', marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Building2 size={16} /> Agency Information: {order.agency_name}
-              </span>
-              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.12)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>
-                Territory: {order.area_name || 'Active Territory'}
-              </span>
-            </div>
-
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-              Booked Salesperson: <strong style={{ color: '#38bdf8' }}>{order.salesperson_name || 'Sales Representative'}</strong>
-            </div>
-          </div>
-          {order.remarks && (
-            <div style={{ marginTop: '0.5rem', fontSize: '0.775rem', color: '#cbd5e1', background: '#1e293b', padding: '0.4rem 0.65rem', borderRadius: 6, border: '1px solid #334155' }}>
-              <strong style={{ color: '#94a3b8' }}>Order Notes / Instructions: </strong> {order.remarks}
-            </div>
-          )}
-        </div>
-
-        {/* Line Items Table */}
+        {/* Line Items */}
         <div style={{ marginBottom: '1.25rem' }}>
-          <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem', color: '#f8fafc' }}>Line Items Summary</h3>
-          <div className="data-table-container" style={{ maxHeight: 180, overflowY: 'auto' }}>
-            <table className="data-table" style={{ fontSize: '0.8rem' }}>
+          <h3 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.5rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <FileText size={14} /> Line Items
+          </h3>
+          <div className="data-table-container" style={{ maxHeight: 170, overflowY: 'auto' }}>
+            <table className="data-table" style={{ fontSize: '0.775rem' }}>
               <thead>
                 <tr>
-                  <th>Product Item ID</th>
-                  <th>Product SKU Name</th>
-                  <th>Brand / Company</th>
-                  <th style={{ textAlign: 'center' }}>Admin Authority</th>
-                  <th style={{ textAlign: 'center' }}>Pack Size</th>
+                  <th>Product SKU</th>
+                  <th>Brand</th>
+                  <th style={{ textAlign: 'center' }}>Pack</th>
                   <th style={{ textAlign: 'center' }}>Boxes</th>
-                  <th style={{ textAlign: 'center' }}>Total Qty</th>
-                  <th style={{ textAlign: 'right' }}>MRP Unit Price</th>
-                  <th style={{ textAlign: 'right' }}>Total Cost (₹)</th>
+                  <th style={{ textAlign: 'center' }}>Total PCS</th>
+                  <th style={{ textAlign: 'right' }}>MRP</th>
+                  <th style={{ textAlign: 'right' }}>Amount (₹)</th>
                 </tr>
               </thead>
               <tbody>
-                {order.items?.map((item, idx) => {
-                  const itemBrand = order.company_name || 'Priyagold';
-                  const belongsToAdmin = isCompanyAllowedForUser(itemBrand, currentUser?.company_handle);
+                {(order.items || []).map(function(item, idx) {
                   return (
                     <tr key={idx}>
-                      <td><code style={{ color: '#38bdf8', fontSize: '0.75rem' }}>{item.id}</code></td>
-                      <td><strong style={{ color: '#f8fafc' }}>{item?.product_name || 'Product SKU'}</strong></td>
-                      <td><span style={{ color: '#fbbf24', fontSize: '0.75rem', fontWeight: 700 }}>{itemBrand}</span></td>
-                      <td style={{ textAlign: 'center' }}>
-                        {belongsToAdmin ? (
-                          <span style={{ fontSize: '0.675rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.15rem 0.45rem', borderRadius: 4, fontWeight: 800 }}>
-                            🟢 YOUR BRAND (ACTIONABLE)
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '0.675rem', color: '#94a3b8', background: '#1e293b', border: '1px solid #334155', padding: '0.15rem 0.45rem', borderRadius: 4, fontWeight: 600 }}>
-                            🔒 READ-ONLY (OTHER ADMIN)
-                          </span>
-                        )}
-                      </td>
+                      <td><strong style={{ color: '#f8fafc' }}>{item.product_name || 'Product'}</strong></td>
+                      <td><span style={{ color: '#fbbf24', fontWeight: 700 }}>{order.company_name}</span></td>
                       <td style={{ textAlign: 'center' }}>{item.pcs_per_box} pcs/box</td>
                       <td style={{ textAlign: 'center' }}>{item.box_qty}</td>
                       <td style={{ textAlign: 'center', fontWeight: 800, color: '#34d399' }}>{item.total_qty_pcs}</td>
                       <td style={{ textAlign: 'right' }}>₹{item.unit_price}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>₹{item.total_price.toLocaleString()}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>₹{(item.total_price || 0).toLocaleString()}</td>
                     </tr>
                   );
                 })}
@@ -261,235 +146,271 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           </div>
         </div>
 
-        {/* Send Accounts Query Panel */}
-        {showQueryPanel && (
-          <div style={{ background: 'rgba(56, 189, 248, 0.12)', border: '1px solid #38bdf8', borderRadius: 8, padding: '0.85rem', marginBottom: '1.25rem' }}>
-            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 800, color: '#38bdf8', marginBottom: 4 }}>
-              SEND FINANCIAL CLEARANCE QUERY TO ACCOUNTS TEAM
-            </label>
-            <input 
-              type="text" 
-              value={queryText}
-              onChange={e => setQueryText(e.target.value)}
-              placeholder="e.g. Overdue payment waiver requested for Krishna Trading Agency due to PDC cheque submitted..."
-              style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.825rem', marginBottom: '0.65rem' }}
-            />
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              <button className="btn btn-outline" onClick={() => setShowQueryPanel(false)} style={{ fontSize: '0.75rem' }}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSendAccountsQuery} style={{ fontSize: '0.75rem' }}>
-                Submit Query to Accounts
-              </button>
+        {/* DUAL APPROVAL GATE */}
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
+            <ShieldCheck size={16} color="#38bdf8" />
+            <h3 style={{ fontSize: '0.925rem', fontWeight: 800, color: '#38bdf8', margin: 0 }}>
+              Stage 2 Dual-Review Gate — Both Sign-offs Required Before Billing
+            </h3>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.9rem' }}>
+
+            {/* Card 1: Sales Admin */}
+            <div style={{
+              background: salesAdminSigned ? 'rgba(16,185,129,0.07)' : 'rgba(56,189,248,0.05)',
+              border: salesAdminSigned ? '1.5px solid #10b981' : '1.5px solid #475569',
+              borderRadius: 12, padding: '1rem'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.7rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <User size={15} color={salesAdminSigned ? '#10b981' : '#94a3b8'} />
+                  <span style={{ fontSize: '0.825rem', fontWeight: 800, color: salesAdminSigned ? '#34d399' : '#f8fafc' }}>
+                    1 — SALES ADMIN SIGN-OFF
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: 800,
+                  color: salesAdminSigned ? '#34d399' : '#fb923c',
+                  background: salesAdminSigned ? 'rgba(52,211,153,0.15)' : 'rgba(234,88,12,0.15)',
+                  border: '1px solid ' + (salesAdminSigned ? 'rgba(52,211,153,0.3)' : 'rgba(234,88,12,0.3)'),
+                  padding: '0.15rem 0.5rem', borderRadius: 20
+                }}>
+                  {salesAdminSigned ? '✅ SIGNED' : '⏳ PENDING'}
+                </span>
+              </div>
+
+              {salesAdminSigned ? (
+                <div style={{ fontSize: '0.775rem', color: '#94a3b8', lineHeight: 1.6 }}>
+                  <div style={{ color: '#34d399', fontWeight: 700, marginBottom: 2 }}>{order.sales_admin_approved_by}</div>
+                  <div>Signed at: {order.sales_admin_approved_at}</div>
+                  {order.sales_admin_remarks && <div style={{ marginTop: 4, fontStyle: 'italic', color: '#cbd5e1' }}>"{order.sales_admin_remarks}"</div>}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginBottom: '0.6rem' }}>
+                    Assigned to: <strong style={{ color: '#f8fafc' }}>Dixit / Jay / Sumit</strong> (Sales Admin for {order.company_name})
+                  </div>
+                  {(isSalesAdmin || isSuperAdmin) && (order.status === 'SUBMITTED' || order.status === 'HELD') && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                      <select value={paymentType} onChange={function(e) { setPaymentType(e.target.value as any); }}
+                        style={{ padding: '0.4rem 0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.775rem', fontWeight: 600 }}>
+                        <option value="CREDIT">💳 Credit Order (Standard)</option>
+                        <option value="ADVANCE">💰 Advance Payment</option>
+                        <option value="OVERDUE">⚠️ Overdue (Needs Clearance)</option>
+                      </select>
+                      {paymentType === 'ADVANCE' && (
+                        <input type="text" placeholder="Payment Receipt No. (mandatory)*" value={paymentReceiptNo}
+                          onChange={function(e) { setPaymentReceiptNo(e.target.value); }}
+                          style={{ padding: '0.4rem 0.5rem', background: '#0f172a', border: paymentReceiptNo ? '1px solid #10b981' : '1px solid #ef4444', borderRadius: 6, color: '#f8fafc', fontSize: '0.775rem' }} />
+                      )}
+                      <select value={priority} onChange={function(e) { setPriority(e.target.value as any); }}
+                        style={{ padding: '0.4rem 0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.775rem', fontWeight: 600 }}>
+                        <option value="HIGH">🔴 High Priority (Top of Billing Queue)</option>
+                        <option value="MEDIUM">🟡 Medium Priority</option>
+                        <option value="LOW">🟢 Low Priority</option>
+                      </select>
+                      <select value={inventoryStatus} onChange={function(e) { setInventoryStatus(e.target.value as any); }}
+                        style={{ padding: '0.4rem 0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.775rem', fontWeight: 600 }}>
+                        <option value="IN_STOCK">✅ Stock Available — Approve for Billing</option>
+                        <option value="WAIT_FOR_STOCK">⏳ Wait for Stock — Alert Salesman</option>
+                      </select>
+                      <input type="text" placeholder="Sales Admin remarks (optional)..." value={salesAdminRemarks}
+                        onChange={function(e) { setSalesAdminRemarks(e.target.value); }}
+                        style={{ padding: '0.4rem 0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.775rem' }} />
+                      {isSalesAdmin && (
+                        <button className="btn btn-primary"
+                          style={{ fontWeight: 800, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}
+                          onClick={function() { onApprove(order.id, salesAdminRemarks, { payment_type: paymentType, payment_receipt_no: paymentReceiptNo, priority: priority, inventory_status: inventoryStatus }); }}>
+                          <CheckCircle size={14} />
+                          {inventoryStatus === 'WAIT_FOR_STOCK' ? 'Flag: Wait for Stock' : 'Sales Admin Sign-off ✓'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Card 2: Super Admin */}
+            <div style={{
+              background: superAdminSigned ? 'rgba(99,102,241,0.09)' : waitingForSuperAdmin ? 'rgba(251,191,36,0.07)' : 'rgba(99,102,241,0.03)',
+              border: superAdminSigned ? '1.5px solid #6366f1' : waitingForSuperAdmin ? '1.5px solid #f59e0b' : '1.5px solid #475569',
+              borderRadius: 12, padding: '1rem'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.7rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <ShieldCheck size={15} color={superAdminSigned ? '#818cf8' : waitingForSuperAdmin ? '#fbbf24' : '#64748b'} />
+                  <span style={{ fontSize: '0.825rem', fontWeight: 800, color: superAdminSigned ? '#818cf8' : waitingForSuperAdmin ? '#fbbf24' : '#94a3b8' }}>
+                    2 — SUPER ADMIN FINAL SIGN-OFF
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: 800,
+                  color: superAdminSigned ? '#818cf8' : waitingForSuperAdmin ? '#fbbf24' : '#64748b',
+                  background: superAdminSigned ? 'rgba(99,102,241,0.15)' : waitingForSuperAdmin ? 'rgba(245,158,11,0.15)' : '#1e293b',
+                  border: '1px solid ' + (superAdminSigned ? 'rgba(99,102,241,0.3)' : waitingForSuperAdmin ? 'rgba(245,158,11,0.3)' : '#334155'),
+                  padding: '0.15rem 0.5rem', borderRadius: 20
+                }}>
+                  {superAdminSigned ? '✅ APPROVED' : waitingForSuperAdmin ? '🔔 AWAITING' : '🔒 LOCKED'}
+                </span>
+              </div>
+
+              {superAdminSigned ? (
+                <div style={{ fontSize: '0.775rem', color: '#94a3b8', lineHeight: 1.6 }}>
+                  <div style={{ color: '#818cf8', fontWeight: 700, marginBottom: 2 }}>{order.superadmin_approved_by}</div>
+                  <div>Final sign-off at: {order.superadmin_approved_at}</div>
+                  {order.superadmin_remarks && <div style={{ marginTop: 4, fontStyle: 'italic', color: '#cbd5e1' }}>"{order.superadmin_remarks}"</div>}
+                </div>
+              ) : isSuperAdmin ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  {waitingForSuperAdmin && (
+                    <div style={{ fontSize: '0.75rem', color: '#fbbf24', fontWeight: 700, padding: '0.35rem 0.5rem', background: 'rgba(245,158,11,0.1)', borderRadius: 6, marginBottom: 2 }}>
+                      🔔 Sales Admin signed off. Your final approval routes order to Billing.
+                    </div>
+                  )}
+                  {!salesAdminSigned && (
+                    <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginBottom: 2 }}>
+                      Sales Admin has not signed yet. You may approve directly or wait.
+                    </div>
+                  )}
+                  {!salesAdminSigned && (
+                    <>
+                      <select value={priority} onChange={function(e) { setPriority(e.target.value as any); }}
+                        style={{ padding: '0.4rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.775rem', fontWeight: 600 }}>
+                        <option value="HIGH">🔴 High Priority</option>
+                        <option value="MEDIUM">🟡 Medium Priority</option>
+                        <option value="LOW">🟢 Low Priority</option>
+                      </select>
+                      <select value={inventoryStatus} onChange={function(e) { setInventoryStatus(e.target.value as any); }}
+                        style={{ padding: '0.4rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.775rem', fontWeight: 600 }}>
+                        <option value="IN_STOCK">✅ Stock Available</option>
+                        <option value="WAIT_FOR_STOCK">⏳ Wait for Stock</option>
+                      </select>
+                    </>
+                  )}
+                  <input type="text" placeholder="Super Admin remarks (optional)..." value={superAdminRemarks}
+                    onChange={function(e) { setSuperAdminRemarks(e.target.value); }}
+                    style={{ padding: '0.4rem 0.5rem', background: '#0f172a', border: '1px solid #6366f1', borderRadius: 6, color: 'white', fontSize: '0.775rem' }} />
+                  {order.status !== 'HELD' && order.status !== 'APPROVED' && order.status !== 'CANCELLED' && (
+                    <button className="btn btn-success"
+                      style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)', fontWeight: 800, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}
+                      onClick={function() { onApprove(order.id, superAdminRemarks, { payment_type: paymentType, payment_receipt_no: paymentReceiptNo, priority: priority, inventory_status: inventoryStatus }); }}>
+                      <ShieldCheck size={14} />
+                      {inventoryStatus === 'WAIT_FOR_STOCK' ? 'Set Wait for Stock' : salesAdminSigned ? 'Final Approval ✓ (Route to Billing)' : 'Approve Directly (Super Admin)'}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: 1.6 }}>
+                  <div style={{ marginBottom: 4 }}>Authority: <strong style={{ color: '#f8fafc' }}>Chirag Sir / Harshad Sir</strong></div>
+                  <div>{salesAdminSigned ? '✅ Sales Admin signed. Awaiting Super Admin final sign-off.' : '🔒 Locked until Sales Admin completes Stage 2a sign-off.'}</div>
+                </div>
+              )}
             </div>
           </div>
-        )}
 
-        {/* Accounts Query Clearance Review Panel */}
-        {accountsApprovalStatus === 'PENDING' && (
-          canGrantAccountsApproval ? (
-            <div style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid #38bdf8', borderRadius: 8, padding: '0.85rem', marginBottom: '1.25rem' }}>
-              <div style={{ fontSize: '0.825rem', color: '#38bdf8', fontWeight: 800, marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <MessageSquare size={16} /> ACCOUNTS CLEARANCE APPROVAL REQUIRED (Query Pending Review)
+          {/* Progress Bar */}
+          <div style={{ marginTop: '0.85rem', background: '#0f172a', borderRadius: 8, padding: '0.7rem 0.9rem', border: '1px solid #1e293b' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ flex: 1, height: 7, background: '#1e293b', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: bothApproved ? '100%' : salesAdminSigned ? '50%' : '0%',
+                  background: bothApproved ? 'linear-gradient(90deg,#10b981,#6366f1)' : 'linear-gradient(90deg,#38bdf8,#10b981)',
+                  borderRadius: 4, transition: 'width 0.45s ease'
+                }} />
               </div>
-              <p style={{ fontSize: '0.775rem', color: '#cbd5e1', marginBottom: '0.75rem' }}>
-                Query submitted by System Admin: <strong style={{ color: '#f8fafc' }}>"{queryText || 'Credit limit & payment clearance waiver requested'}"</strong>
-              </p>
-              <div style={{ display: 'flex', gap: '0.65rem', justifyContent: 'flex-end' }}>
-                <button 
-                  className="btn btn-danger" 
-                  onClick={handleDeclineAccountsApproval}
-                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
-                >
-                  <XCircle size={14} /> Decline Waiver
-                </button>
-                <button 
-                  className="btn btn-success" 
-                  onClick={handleGrantAccountsApproval}
-                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
-                >
-                  <Check size={14} /> Grant Accounts Clearance Waiver (Accounts / Chirag Sir)
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ background: 'rgba(56, 189, 248, 0.12)', border: '1px solid #38bdf8', borderRadius: 8, padding: '0.75rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Clock size={16} color="#38bdf8" style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: '0.775rem', color: '#38bdf8', fontWeight: 700 }}>
-                Query Pending Accounts Approval: Query sent to Accounts Team & Chirag Sir. Only Accounts personnel or Chirag Sir have authority to grant clearance waiver.
+              <span style={{ fontSize: '0.725rem', fontWeight: 800, whiteSpace: 'nowrap',
+                color: bothApproved ? '#34d399' : salesAdminSigned ? '#fbbf24' : '#94a3b8' }}>
+                {bothApproved ? '✅ Both Approved — Ready for Billing (Stage 4)' : salesAdminSigned ? '1 of 2 — Awaiting Super Admin' : '0 of 2 — Pending Review'}
               </span>
             </div>
-          )
-        )}
+          </div>
+        </div>
 
-        {/* Accounts Rejected Notice */}
-        {accountsApprovalStatus === 'REJECTED' && (
-          <div style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid #f43f5e', borderRadius: 8, padding: '0.75rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <XCircle size={16} color="#f43f5e" style={{ flexShrink: 0 }} />
-            <span style={{ fontSize: '0.775rem', color: '#f43f5e', fontWeight: 700 }}>
-              ❌ Accounts Clearance Declined: Accounts Team / Chirag Sir declined credit waiver for this order. System Admin should hold or reject order.
-            </span>
+        {/* Hold Freeze Banner */}
+        {order.status === 'HELD' && (
+          <div style={{ background: 'rgba(245,158,11,0.15)', border: '1.5px solid #f59e0b', borderRadius: 8, padding: '0.85rem 1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <AlertTriangle size={22} color="#f59e0b" style={{ flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 800, color: '#fbbf24', fontSize: '0.85rem' }}>ORDER ON HOLD — ALL ACTIVITIES FROZEN</div>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', marginTop: 2 }}>Reason: <strong>{order.hold_reason || 'Admin directive'}</strong>. Only Super Admin can release hold to resume workflow.</div>
+            </div>
           </div>
         )}
 
-        {/* Post-Delivery Return & Replacement Approval Panel */}
-        {order.return_request && order.return_request.status === 'PENDING_ADMIN_APPROVAL' && (
-          <div style={{ background: 'rgba(251, 191, 36, 0.15)', border: '1px solid #fbbf24', borderRadius: 8, padding: '0.85rem', marginBottom: '1.25rem' }}>
-            <div style={{ fontSize: '0.825rem', fontWeight: 800, color: '#fbbf24', marginBottom: 4, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <RefreshCw size={16} /> POST-DELIVERY {order.return_request.return_type === 'REPLACEMENT' ? 'STOCK REPLACEMENT' : 'DAMAGED GOODS RETURN'} REQUEST PENDING APPROVAL
-            </div>
-            <p style={{ fontSize: '0.775rem', color: '#cbd5e1', marginBottom: '0.65rem' }}>
-              Requested by Salesperson: <strong style={{ color: '#f8fafc' }}>{order.return_request.requested_by_name}</strong> | Reason: <em>"{order.return_request.reason}"</em>
-            </p>
-            <div style={{ display: 'flex', gap: '0.65rem', justifyContent: 'flex-end' }}>
-              <button className="btn btn-danger" onClick={handleRejectReturn} style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}>
-                Decline Request
-              </button>
-              <button className="btn btn-success" onClick={handleApproveReturn} style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800 }}>
-                <Check size={14} /> Approve Return/Replacement & Transfer to Dispatch Manager
+        {/* Return Request Panel */}
+        {order.return_request?.status === 'PENDING_ADMIN_APPROVAL' && (
+          <div style={{ background: 'rgba(251,191,36,0.15)', border: '1px solid #fbbf24', borderRadius: 8, padding: '0.85rem', marginBottom: '1.25rem' }}>
+            <div style={{ fontSize: '0.825rem', fontWeight: 800, color: '#fbbf24', marginBottom: 4 }}>🔁 RETURN / REPLACEMENT REQUEST PENDING</div>
+            <p style={{ fontSize: '0.775rem', color: '#cbd5e1', marginBottom: '0.65rem' }}>By: <strong>{order.return_request.requested_by_name}</strong> — "{order.return_request.reason}"</p>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-danger" onClick={handleRejectReturn} style={{ fontSize: '0.75rem' }}>Decline</button>
+              <button className="btn btn-success" onClick={handleApproveReturn} style={{ fontSize: '0.75rem', fontWeight: 800 }}>
+                <Check size={13} /> Approve & Transfer to Dispatch
               </button>
             </div>
           </div>
         )}
 
-        {/* Hold Panel if selected */}
+        {/* Hold Reason Input */}
         {showHoldPanel && (
-          <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid #f59e0b', borderRadius: 8, padding: '0.85rem', marginBottom: '1.25rem' }}>
-            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#fbbf24', marginBottom: 4 }}>SELECT REASON FOR HOLDING ORDER</label>
-            <select 
-              value={selectedHoldReason}
-              onChange={e => setSelectedHoldReason(e.target.value)}
-              style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.825rem' }}
-            >
-              {MOCK_HOLD_REASONS.map(r => (
-                <option key={r.id} value={r.id}>{r.reason_description} ({r.reason_code})</option>
-              ))}
+          <div style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid #f59e0b', borderRadius: 8, padding: '0.85rem', marginBottom: '1.25rem' }}>
+            <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#fbbf24', marginBottom: 4 }}>SELECT HOLD REASON</label>
+            <select value={selectedHoldReason} onChange={function(e) { setSelectedHoldReason(e.target.value); }}
+              style={{ width: '100%', padding: '0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+              {MOCK_HOLD_REASONS.map(function(r) { return <option key={r.id} value={r.id}>{r.reason_description} ({r.reason_code})</option>; })}
             </select>
-            <input 
-              type="text" 
-              value={remarks}
-              onChange={e => setRemarks(e.target.value)}
-              placeholder="Enter hold remarks for Salesperson & Field Exec..."
-              style={{ width: '100%', padding: '0.45rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.8rem' }}
-            />
-          </div>
-        )}
-
-        {/* Stage 2 & Stage 3 Operational Audit Panel */}
-        {canApproveOrHold && (
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '0.85rem', marginBottom: '1.25rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
-              
-              {/* Stage 2: Payment Type Gate */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', marginBottom: 4 }}>
-                  STAGE 2: PAYMENT TYPE GATE
-                </label>
-                <select
-                  value={paymentType}
-                  onChange={e => setPaymentType(e.target.value as any)}
-                  style={{ width: '100%', padding: '0.45rem', background: '#1e293b', border: '1px solid #475569', borderRadius: 6, color: 'white', fontWeight: 700, fontSize: '0.8rem' }}
-                >
-                  <option value="ADVANCE">Advance Payment (Sales Admin Approved)</option>
-                  <option value="OVERDUE">Overdue Payment (Harshad Sir Approval)</option>
-                  <option value="CREDIT">Credit Order (Harshad / Chirag Sir Approval)</option>
-                </select>
-                {paymentType === 'ADVANCE' && (
-                  <input
-                    type="text"
-                    placeholder="Enter Payment Receipt No. (Mandatory)*"
-                    value={paymentReceiptNo}
-                    onChange={e => setPaymentReceiptNo(e.target.value)}
-                    style={{ width: '100%', marginTop: 6, padding: '0.4rem 0.5rem', background: '#1e293b', border: paymentReceiptNo ? '1px solid #10b981' : '1px solid #ef4444', borderRadius: 6, color: '#f8fafc', fontSize: '0.775rem' }}
-                  />
-                )}
-              </div>
-
-              {/* Stage 3: Order Priority */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#f59e0b', marginBottom: 4 }}>
-                  STAGE 3: ROUTING PRIORITY
-                </label>
-                <select
-                  value={priority}
-                  onChange={e => setPriority(e.target.value as any)}
-                  style={{ width: '100%', padding: '0.45rem', background: '#1e293b', border: '1px solid #475569', borderRadius: 6, color: 'white', fontWeight: 700, fontSize: '0.8rem' }}
-                >
-                  <option value="HIGH">🔴 High Priority (Pinned at top of Billing)</option>
-                  <option value="MEDIUM">🟡 Medium Priority</option>
-                  <option value="LOW">🟢 Low Priority</option>
-                </select>
-              </div>
-
-              {/* Stage 3: Inventory Stock Audit */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#a855f7', marginBottom: 4 }}>
-                  INVENTORY AUDIT ACTION
-                </label>
-                <select
-                  value={inventoryStatus}
-                  onChange={e => setInventoryStatus(e.target.value as any)}
-                  style={{ width: '100%', padding: '0.45rem', background: '#1e293b', border: '1px solid #475569', borderRadius: 6, color: 'white', fontWeight: 700, fontSize: '0.8rem' }}
-                >
-                  <option value="IN_STOCK">✅ Physical Stock Available (Approve for Billing)</option>
-                  <option value="WAIT_FOR_STOCK">⏳ Out of Stock (Wait for Stock — Alert Salesman)</option>
-                </select>
-              </div>
-
-            </div>
+            <input type="text" value={superAdminRemarks} onChange={function(e) { setSuperAdminRemarks(e.target.value); }}
+              placeholder="Hold remarks for salesperson..."
+              style={{ width: '100%', padding: '0.4rem 0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.775rem' }} />
           </div>
         )}
 
         {/* Footer Actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-          {!canApproveOrHold ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0f172a', border: '1px solid #334155', padding: '0.5rem 0.85rem', borderRadius: 6, fontSize: '0.775rem', color: '#fbbf24' }}>
-              <ShieldAlert size={16} color="#fbbf24" />
-              <span>
-                {!accessPerm.canExecuteActions 
-                  ? accessPerm.accessReason 
-                  : 'Salesperson View Mode: Approve, Hold & Rejection authority is handled by System Admin.'
-                }
-              </span>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
-              
-              {/* Send Accounts Query Button */}
-              {!showQueryPanel && (
-                <button 
-                  className="btn btn-outline" 
-                  onClick={() => setShowQueryPanel(true)}
-                  style={{ borderColor: '#38bdf8', color: '#38bdf8', fontSize: '0.8rem', fontWeight: 700 }}
-                >
-                  <MessageSquare size={15} /> Send Accounts Query
-                </button>
-              )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '1rem', flexWrap: 'wrap', gap: '0.65rem' }}>
+          <div style={{ fontSize: '0.725rem', fontWeight: 700 }}>
+            {isSuperAdmin
+              ? <span style={{ color: '#818cf8' }}>👑 Super Admin — Hold Authority & Final Sign-off Power</span>
+              : isSalesAdmin
+                ? <span style={{ color: '#34d399' }}>🏢 Sales Admin — Stage 2a Sign-off Authority</span>
+                : <span style={{ color: '#fbbf24' }}><ShieldAlert size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />Read-Only — Approval by Sales Admin & Super Admin</span>
+            }
+          </div>
 
-              {/* Reject Button */}
-              <button className="btn btn-danger" onClick={() => onReject(order.id, remarks)}>
-                Reject Order
+          <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
+            {(isSalesAdmin || isSuperAdmin) && order.status !== 'APPROVED' && order.status !== 'COMPLETED' && (
+              <button className="btn btn-danger" onClick={function() { onReject(order.id, superAdminRemarks || salesAdminRemarks); }} style={{ fontSize: '0.8rem' }}>
+                <XCircle size={14} /> Reject Order
               </button>
-
-              {/* Hold Button */}
-              {!showHoldPanel ? (
-                <button className="btn btn-warning" onClick={() => setShowHoldPanel(true)}>
-                  <AlertTriangle size={16} /> Hold Order
+            )}
+            {isSuperAdmin && (
+              order.status === 'HELD' ? (
+                <button className="btn btn-success"
+                  style={{ background: 'linear-gradient(135deg,#10b981,#059669)', fontSize: '0.8rem' }}
+                  onClick={function() { onApprove(order.id, 'Hold released by Super Admin', { payment_type: paymentType, priority: priority, inventory_status: inventoryStatus }); }}>
+                  <Unlock size={14} /> Release Hold & Resume
+                </button>
+              ) : !showHoldPanel ? (
+                <button className="btn btn-warning" onClick={function() { setShowHoldPanel(true); }} style={{ fontSize: '0.8rem' }}>
+                  <Lock size={14} /> Hold Order (Super Admin)
                 </button>
               ) : (
-                <button className="btn btn-warning" onClick={() => onHold(order.id, selectedHoldReason, remarks)}>
+                <button className="btn btn-warning" onClick={function() { onHold(order.id, selectedHoldReason, superAdminRemarks); }} style={{ fontSize: '0.8rem' }}>
                   Confirm Hold
                 </button>
-              )}
-
-              {/* Approve Button */}
-              <button 
-                className="btn btn-success" 
-                onClick={() => onApprove(order.id, remarks, { payment_type: paymentType, payment_receipt_no: paymentReceiptNo, priority, inventory_status: inventoryStatus })}
-              >
-                <CheckCircle size={16} /> {inventoryStatus === 'WAIT_FOR_STOCK' ? 'Set Wait for Stock & Alert Salesman' : 'Approve & Route to Billing/Dispatch'}
-              </button>
-            </div>
-          )}
+              )
+            )}
+            {order.status === 'APPROVED' && (
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.85rem', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 8 }}>
+                <CheckCircle size={14} /> Fully Approved — In Billing Queue (Stage 4)
+              </div>
+            )}
+          </div>
         </div>
+
       </div>
     </div>
   );

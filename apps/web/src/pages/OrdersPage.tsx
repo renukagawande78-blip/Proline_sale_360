@@ -7,6 +7,9 @@ interface OrdersPageProps {
   onOpenCreateOrder: () => void;
   onOpenEditOrder?: (order: Order) => void;
   onSelectOrderForApproval: (order: Order) => void;
+  onApprove?: (orderId: string, remarks: string, details?: any) => void;
+  onHold?: (orderId: string, reasonId: string, remarks: string) => void;
+  onReject?: (orderId: string, remarks: string) => void;
   onViewInvoice?: (order: Order) => void;
   onCancelOrder?: (orderId: string) => void;
   onDeleteOrder?: (orderId: string) => void;

@@ -34,11 +34,11 @@ export const isValidUuid = (str: any): boolean => {
 };
 
 export const isCompanyAllowedForUser = (companyNameOrCode?: string, userCompanyHandle?: any, companyCode?: string): boolean => {
-  if (!userCompanyHandle) return true;
+  if (!userCompanyHandle) return false;
   
   let allowedBrands: string[] = [];
   if (Array.isArray(userCompanyHandle)) {
-    allowedBrands = userCompanyHandle.map(b => String(b).trim().toLowerCase());
+    allowedBrands = userCompanyHandle.map(b => String(b).trim().toLowerCase()).filter(Boolean);
   } else if (typeof userCompanyHandle === 'string') {
     const raw = userCompanyHandle.trim();
     if (raw === 'All' || raw === '*' || raw.toLowerCase() === 'all') return true;
@@ -46,47 +46,52 @@ export const isCompanyAllowedForUser = (companyNameOrCode?: string, userCompanyH
       try {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          allowedBrands = parsed.map(b => String(b).trim().toLowerCase());
+          allowedBrands = parsed.map(b => String(b).trim().toLowerCase()).filter(Boolean);
         }
       } catch {
-        allowedBrands = raw.replace(/[\[\]"']/g, '').split(',').map(b => b.trim().toLowerCase());
+        allowedBrands = raw.replace(/[\[\]"']/g, '').split(',').map(b => b.trim().toLowerCase()).filter(Boolean);
       }
     } else {
-      allowedBrands = raw.split(',').map(b => b.trim().toLowerCase());
+      allowedBrands = raw.split(',').map(b => b.trim().toLowerCase()).filter(Boolean);
     }
   }
 
-  if (allowedBrands.length === 0 || allowedBrands.includes('all') || allowedBrands.includes('*')) {
-    return true;
-  }
+  if (allowedBrands.length === 0) return false;
+  if (allowedBrands.includes('all') || allowedBrands.includes('*')) return true;
 
   const targetName = (companyNameOrCode || '').toLowerCase().trim();
   const targetCode = (companyCode || '').toLowerCase().trim();
   
+  if (!targetName && !targetCode) return false;
+
   return allowedBrands.some(allowed => {
     if (!allowed) return false;
-    return (
-      targetName.includes(allowed) || 
-      allowed.includes(targetName) ||
-      (targetCode && (targetCode === allowed || allowed.includes(targetCode))) ||
-      (allowed.includes('priyagold') && targetName.includes('pringod')) ||
-      (allowed.includes('pringod') && targetName.includes('priyagold'))
-    );
+    
+    // Direct exact matches
+    if (targetName && targetName === allowed) return true;
+    if (targetCode && targetCode === allowed) return true;
+    
+    // Normalized word comparison (e.g. "priyagold" matches "priya gold" or "pringod", "mogu mogu" matches "mogumogu")
+    const normTarget = targetName.replace(/[\s\-_]/g, '');
+    const normAllowed = allowed.replace(/[\s\-_]/g, '');
+    if (normTarget && normAllowed && (normTarget === normAllowed || (normTarget.length >= 3 && normAllowed.length >= 3 && (normTarget.includes(normAllowed) || normAllowed.includes(normTarget))))) {
+      return true;
+    }
+
+    return false;
   });
 };
 
 export const checkIsSuperAdmin = (user: any): boolean => {
-  if (!user) return true;
+  if (!user) return false;
   const role = (user?.role_name || '').toUpperCase();
   const name = (user?.full_name || '').toLowerCase();
   const email = (user?.email || '').toLowerCase();
   return (
     role === 'SUPER_ADMIN' ||
-    role === 'ADMIN' ||
-    role.includes('ADMIN') ||
     name.includes('chirag') ||
     name.includes('harshad') ||
-    email.includes('admin') ||
+    (email.includes('admin') && role !== 'SALES_ADMIN') ||
     user?.company_handle === 'All'
   );
 };
@@ -101,7 +106,7 @@ export interface OrderAccessPermission {
 
 export const getOrderAccessPermission = (
   order: Order, 
-  user: { id?: string; full_name?: string; role_name?: string; company_handle?: string } | null,
+  user: { id?: string; full_name?: string; role_name?: string; company_handle?: string; area_id?: string } | null,
   companiesPool?: any[],
   productsPool?: any[]
 ): OrderAccessPermission => {
@@ -117,109 +122,176 @@ export const getOrderAccessPermission = (
 
   const role = (user.role_name || '').toUpperCase();
   const userHandle = user.company_handle || '';
-  const isSuperAdmin = role === 'SUPER_ADMIN' || 
-                       userHandle === 'All' || 
-                       !userHandle ||
-                       (user.full_name || '').toLowerCase().includes('chirag') || 
-                       (user.full_name || '').toLowerCase().includes('harshad');
+  const userName = (user.full_name || '').toLowerCase();
 
-  // 1. Super Admin sees ALL Sales Orders
+  // ── 1. SUPER ADMIN — sees ALL orders globally ──────────────────────
+  const isSuperAdmin = role === 'SUPER_ADMIN' ||
+                       userName.includes('chirag') ||
+                       userName.includes('harshad') ||
+                       userHandle === 'All';
+
   if (isSuperAdmin) {
     return {
       canView: true,
       canExecuteActions: true,
       isDirectBrandOwner: true,
       isItemBrandOwner: true,
-      accessReason: 'Super Admin / Master Corporate Scope'
+      accessReason: 'Super Admin — Global Scope'
     };
   }
 
-  // 2. Sales Admin with All Brands scope sees ALL Sales Orders
-  if (role === 'SALES_ADMIN' && (userHandle === 'All' || !userHandle)) {
-    return {
-      canView: true,
-      canExecuteActions: true,
-      isDirectBrandOwner: true,
-      isItemBrandOwner: true,
-      accessReason: 'Sales Admin Master Scope'
-    };
-  }
-
-  // 3. Check if order was booked by this salesperson / user
-  const isBookedByUser = (user.id && order.salesperson_id === user.id) ||
-                         (user.full_name && order.salesperson_name && (
-                           order.salesperson_name.toLowerCase().includes(user.full_name.toLowerCase()) ||
-                           user.full_name.toLowerCase().includes(order.salesperson_name.toLowerCase())
-                         ));
-
-  if (isBookedByUser) {
-    return {
-      canView: true,
-      canExecuteActions: true,
-      isDirectBrandOwner: true,
-      isItemBrandOwner: true,
-      accessReason: 'Booked Sales Representative'
-    };
-  }
-
-  // 4. Direct Brand Ownership check on order.company_name or order.order_number prefix
-  const isDirectOwner = isCompanyAllowedForUser(order.company_name, userHandle) ||
-                        isCompanyAllowedForUser(order.order_number, userHandle);
-
-  if (isDirectOwner) {
-    return {
-      canView: true,
-      canExecuteActions: true,
-      isDirectBrandOwner: true,
-      isItemBrandOwner: true,
-      accessReason: 'Related Sales Admin / Brand Manager'
-    };
-  }
-
-  // 5. Check if any line items belong to user's assigned brand
+  // Resolve order's company and company code
   const cPool = (companiesPool && companiesPool.length > 0) ? companiesPool : MOCK_COMPANIES;
-  const pPool = (productsPool && productsPool.length > 0) ? productsPool : MOCK_PRODUCTS;
+  const orderComp = cPool.find((c: any) => c.id === order.company_id || c.company_name === order.company_name || c.company_code === order.company_name);
+  const resolvedCompName = orderComp?.company_name || (order.company_name && order.company_name !== 'Proline Foods' ? order.company_name : '');
+  const resolvedCompCode = orderComp?.company_code || '';
 
-  const hasMatchingItemBrand = (order.items || []).some(item => {
-    const itemName = item.product_name || '';
-    if (itemName && isCompanyAllowedForUser(itemName, userHandle)) {
-      return true;
+  const isBrandAllowed = isCompanyAllowedForUser(resolvedCompName, userHandle, resolvedCompCode);
+
+  // ── 2. SALES PERSON — sees ONLY their own orders ──────────────────
+  if (role === 'SALES_PERSON' || role === 'SALESPERSON') {
+    const orderSalesperson = (order.salesperson_name || '').toLowerCase();
+    const isOwnOrder: boolean = Boolean(
+      (user.id && order.salesperson_id === user.id) ||
+      (userName && orderSalesperson && (
+        orderSalesperson.includes(userName) ||
+        userName.includes(orderSalesperson)
+      ))
+    );
+
+    const canSee = isOwnOrder && isBrandAllowed;
+    return {
+      canView: canSee,
+      canExecuteActions: canSee,
+      isDirectBrandOwner: canSee,
+      isItemBrandOwner: canSee,
+      accessReason: canSee ? 'Own Order — Salesperson' : 'Not your order or brand'
+    };
+  }
+
+  // ── 3. AREA SALES MANAGER — sees ONLY their area orders + mapped brand ──
+  if (role === 'AREA_SALES_MANAGER') {
+    const userAreaId = (user as any).area_id || '';
+    const isAreaAllowed = !userAreaId ||
+      (order.area_id && order.area_id === userAreaId) ||
+      (order.asm_id && order.asm_id === user.id);
+
+    const canSee = isBrandAllowed && (isAreaAllowed || !userAreaId);
+    return {
+      canView: canSee,
+      canExecuteActions: canSee,
+      isDirectBrandOwner: isBrandAllowed,
+      isItemBrandOwner: isBrandAllowed,
+      accessReason: canSee ? 'Area Manager — Area + Brand Scope' : 'Outside area or brand scope'
+    };
+  }
+
+  // ── 4. SALES ADMIN — sees only their MAPPED BRAND(S) orders ──────
+  if (role === 'SALES_ADMIN') {
+    if (!userHandle || userHandle === '') {
+      return {
+        canView: false,
+        canExecuteActions: false,
+        isDirectBrandOwner: false,
+        isItemBrandOwner: false,
+        accessReason: 'Sales Admin — No brand assigned'
+      };
     }
-    const prod = pPool.find((p: any) => p.id === item.product_id || p.product_name === item.product_name);
-    const itemCompany = cPool.find((c: any) => c.id === prod?.company_id);
-    const brandName = itemCompany?.company_name || prod?.product_name || '';
-    return isCompanyAllowedForUser(brandName, userHandle, itemCompany?.company_code);
-  });
 
-  if (hasMatchingItemBrand) {
+    // Once forwarded to Super Admin (Harshad Sir), the order leaves Sales Admin's queue
+    if (order.status === 'SALES_ADMIN_APPROVED') {
+      return {
+        canView: false,
+        canExecuteActions: false,
+        isDirectBrandOwner: false,
+        isItemBrandOwner: false,
+        accessReason: 'Order forwarded to Super Admin — no longer in Sales Admin scope'
+      };
+    }
+
+    if (userHandle === 'All' || userHandle === '*') {
+      return {
+        canView: true,
+        canExecuteActions: true,
+        isDirectBrandOwner: true,
+        isItemBrandOwner: true,
+        accessReason: 'Sales Admin — All Brands Scope'
+      };
+    }
+
+    if (isBrandAllowed) {
+      return {
+        canView: true,
+        canExecuteActions: true,
+        isDirectBrandOwner: true,
+        isItemBrandOwner: true,
+        accessReason: 'Sales Admin — Mapped Brand Scope'
+      };
+    }
+
+    // Line items check if items are present
+    const pPool = (productsPool && productsPool.length > 0) ? productsPool : MOCK_PRODUCTS;
+    const hasItemMatch = (order.items || []).length > 0 && (order.items || []).some(item => {
+      const prod = pPool.find((p: any) => p.id === item.product_id || p.product_name === item.product_name);
+      const itemComp = cPool.find((c: any) => c.id === prod?.company_id);
+      const brandName = itemComp?.company_name || '';
+      const brandCode = itemComp?.company_code || '';
+      if (!brandName && !brandCode) return false;
+      return isCompanyAllowedForUser(brandName, userHandle, brandCode);
+    });
+
+    if (hasItemMatch) {
+      return {
+        canView: true,
+        canExecuteActions: true,
+        isDirectBrandOwner: false,
+        isItemBrandOwner: true,
+        accessReason: 'Sales Admin — Brand matched via order items'
+      };
+    }
+
     return {
-      canView: true,
-      canExecuteActions: role === 'SALES_ADMIN' || role === 'AREA_SALES_MANAGER',
-      isDirectBrandOwner: true,
-      isItemBrandOwner: true,
-      accessReason: 'Order contains items from assigned brand'
+      canView: false,
+      canExecuteActions: false,
+      isDirectBrandOwner: false,
+      isItemBrandOwner: false,
+      accessReason: 'Order brand not in Sales Admin scope'
     };
   }
 
-  // 6. Billing / Dispatch / Accounts Roles
-  if (role === 'BILLING' || role === 'ACCOUNTS' || role === 'DISPATCH_MANAGER') {
+  // ── 5. BILLING / ACCOUNTS — sees only mapped company orders ────────
+  if (role === 'BILLING' || role === 'ACCOUNTS') {
     return {
-      canView: true,
-      canExecuteActions: true,
-      isDirectBrandOwner: true,
-      isItemBrandOwner: true,
-      accessReason: 'Operations / Logistics Department Scope'
+      canView: isBrandAllowed,
+      canExecuteActions: isBrandAllowed,
+      isDirectBrandOwner: isBrandAllowed,
+      isItemBrandOwner: isBrandAllowed,
+      accessReason: isBrandAllowed ? 'Billing/Accounts — Company Scope' : 'Order outside billing scope'
     };
   }
 
+  // ── 6. DISPATCH MANAGER — sees only mapped company orders ─────────
+  if (role === 'DISPATCH_MANAGER' || role === 'DISPATCH') {
+    return {
+      canView: isBrandAllowed,
+      canExecuteActions: isBrandAllowed,
+      isDirectBrandOwner: isBrandAllowed,
+      isItemBrandOwner: isBrandAllowed,
+      accessReason: isBrandAllowed ? 'Dispatch — Company Scope' : 'Order outside dispatch scope'
+    };
+  }
+
+  // ── 7. Fallback — no access ────────────────────────────────────────
   return {
     canView: false,
     canExecuteActions: false,
     isDirectBrandOwner: false,
     isItemBrandOwner: false,
-    accessReason: 'No brand mapping'
+    accessReason: 'No matching role or brand mapping'
   };
 };
+
+
 
 export const DYNAMIC_AGENCY_FINANCIALS: Record<string, AgencyFinancials> = {};
 

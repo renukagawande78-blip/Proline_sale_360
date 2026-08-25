@@ -30,11 +30,13 @@ import {
   MOCK_PRODUCTS, 
   MOCK_HOLD_REASONS,
   fetchOrdersFromSupabase,
+  fetchCompaniesFromSupabase,
+  getOrderAccessPermission,
   saveOrderToSupabase,
   deleteOrderFromSupabase,
   updateOrderStatusInSupabase
 } from './lib/supabase';
-import { Order, GlobalFilterState, Agency, Product, User } from './types';
+import { Order, GlobalFilterState, Agency, Product, User, Company } from './types';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -86,13 +88,20 @@ const MainLayout: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  const [liveCompanies, setLiveCompanies] = useState<Company[]>([]);
+
   React.useEffect(() => {
     fetchOrdersFromSupabase().then(({ orders: liveOrders, error }) => {
       if (liveOrders && liveOrders.length > 0 && !error) {
         setOrders(liveOrders);
       }
     });
+    fetchCompaniesFromSupabase().then(comps => {
+      if (comps && comps.length > 0) setLiveCompanies(comps);
+    });
   }, []);
+
+  const companiesPool = liveCompanies.length > 0 ? liveCompanies : MOCK_COMPANIES;
 
   React.useEffect(() => {
     if (!currentUser) return;
@@ -150,8 +159,12 @@ const MainLayout: React.FC = () => {
   const [globalFilterState, setGlobalFilterState] = useState<GlobalFilterState>(DEFAULT_GLOBAL_FILTER);
   const [isGlobalFilterOpen, setIsGlobalFilterOpen] = useState(false);
 
-  // App-Wide Globally Filtered Orders List across all 10 dimensions
+  // App-Wide Globally Filtered Orders List across all 10 dimensions + Role/Brand Access Scoping
   const globallyFilteredOrders = orders.filter(o => {
+    // 0. User Access Scoping (Role & Brand Scoping)
+    const accessPerm = getOrderAccessPermission(o, currentUser, companiesPool);
+    if (!accessPerm.canView) return false;
+
     // 1. Segment Filter
     if (globalFilterState.segment !== 'ALL') {
       const comp = MOCK_COMPANIES.find(c => c.id === o.company_id || c.company_name === o.company_name);
@@ -268,44 +281,134 @@ const MainLayout: React.FC = () => {
   };
 
   const handleApproveOrder = (orderId: string, remarks: string, approvalDetails?: any) => {
-    const approverName = currentUser ? `${currentUser.full_name} (${currentUser.role_name === 'SUPER_ADMIN' ? 'Super Admin' : 'System Admin'})` : 'System Admin';
-    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const approverName = currentUser ? `${currentUser.full_name}` : 'Admin';
+    const approverRole = currentUser?.role_name || 'SALES_ADMIN';
+    const timestamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    const isSuperAdminUser = approverRole === 'SUPER_ADMIN' ||
+      (currentUser?.full_name || '').toLowerCase().includes('chirag') ||
+      (currentUser?.full_name || '').toLowerCase().includes('harshad');
+
+    const isSalesAdminUser = approverRole === 'SALES_ADMIN';
 
     setOrders(prev => prev.map(o => {
-      if (o.id === orderId) {
-        const isWaitForStock = approvalDetails?.inventory_status === 'WAIT_FOR_STOCK';
+      if (o.id !== orderId) return o;
+
+      const isWaitForStock = approvalDetails?.inventory_status === 'WAIT_FOR_STOCK';
+
+      // ── Super Admin Final Sign-off ──────────────────────────────────────
+      if (isSuperAdminUser) {
+        // Super Admin can approve at any stage (SUBMITTED / SALES_ADMIN_APPROVED / HELD)
         const newStatus = isWaitForStock ? 'WAIT_FOR_STOCK' : 'APPROVED';
-        return { 
-          ...o, 
+        return {
+          ...o,
           status: newStatus,
+          superadmin_approved: true,
+          superadmin_approved_by: approverName,
+          superadmin_approved_at: timestamp,
+          superadmin_remarks: remarks || '',
+          // If Sales Admin hasn't signed yet, record them too (Super Admin can approve directly)
+          sales_admin_approved: o.sales_admin_approved ?? true,
           approved_by_name: approverName,
           approved_at: timestamp,
           payment_type: approvalDetails?.payment_type || o.payment_type || 'CREDIT',
           payment_receipt_no: approvalDetails?.payment_receipt_no || o.payment_receipt_no,
-          financial_approval_by: approverName,
           priority: approvalDetails?.priority || o.priority || 'MEDIUM',
           inventory_status: approvalDetails?.inventory_status || 'IN_STOCK',
           credit_days: approvalDetails?.payment_type === 'ADVANCE' ? 0 : (approvalDetails?.credit_days || o.credit_days || 30)
         };
       }
+
+      // ── Sales Admin Sign-off ──────────────────────────────────────────
+      if (isSalesAdminUser || !isSuperAdminUser) {
+        if (approvalDetails?.directApprove) {
+          // Direct Approval: bypass higher authority and move straight to APPROVED (Stage 3)
+          return {
+            ...o,
+            status: isWaitForStock ? 'WAIT_FOR_STOCK' : 'APPROVED',
+            sales_admin_approved: true,
+            sales_admin_approved_by: approverName,
+            sales_admin_approved_at: timestamp,
+            superadmin_approved: true,
+            approved_by_name: approverName,
+            approved_at: timestamp,
+            sales_admin_remarks: remarks || 'Directly approved by Sales Admin',
+            payment_type: approvalDetails?.payment_type || o.payment_type || 'CREDIT',
+            payment_receipt_no: approvalDetails?.payment_receipt_no || o.payment_receipt_no,
+            priority: approvalDetails?.priority || o.priority || 'MEDIUM',
+            inventory_status: approvalDetails?.inventory_status || 'IN_STOCK',
+            credit_days: approvalDetails?.payment_type === 'ADVANCE' ? 0 : (approvalDetails?.credit_days || o.credit_days || 30)
+          };
+        }
+
+        if (isWaitForStock) {
+          return {
+            ...o,
+            status: 'WAIT_FOR_STOCK',
+            sales_admin_approved: true,
+            sales_admin_approved_by: approverName,
+            sales_admin_approved_at: timestamp,
+            sales_admin_remarks: remarks || '',
+            priority: approvalDetails?.priority || o.priority || 'MEDIUM',
+            inventory_status: 'WAIT_FOR_STOCK'
+          };
+        }
+
+        // Forward to Harshad Sir / Higher Authority for Approval
+        return {
+          ...o,
+          status: 'SALES_ADMIN_APPROVED',
+          sales_admin_approved: true,
+          sales_admin_approved_by: approverName,
+          sales_admin_approved_at: timestamp,
+          sales_admin_remarks: remarks || 'Forwarded for Harshad Sir approval',
+          payment_type: approvalDetails?.payment_type || o.payment_type || 'CREDIT',
+          payment_receipt_no: approvalDetails?.payment_receipt_no || o.payment_receipt_no,
+          priority: approvalDetails?.priority || o.priority || 'MEDIUM',
+          inventory_status: approvalDetails?.inventory_status || 'IN_STOCK',
+        };
+      }
+
       return o;
     }));
 
     const target = orders.find(o => o.id === orderId);
     if (target) {
       const isWait = approvalDetails?.inventory_status === 'WAIT_FOR_STOCK';
-      updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'APPROVED', remarks);
-      addNotification({
-        title: isWait ? `⚠️ Wait for Stock Alert: ${target.order_number}` : `Order Approved: ${target.order_number}`,
-        message: isWait 
-          ? `Sales Admin requested Wait for Stock. Alert sent to Salesman (${target.salesperson_name}).`
-          : `Approved by ${approverName}. Priority: ${approvalDetails?.priority || 'MEDIUM'}. Transferred to Billing / Dispatch Queue.`,
-        event_type: isWait ? 'WAIT_FOR_STOCK' : 'ORDER_APPROVED',
-        order_id: target.id
-      });
+
+      if (isSuperAdminUser) {
+        updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'APPROVED', remarks);
+        addNotification({
+          title: isWait ? `⚠️ Wait for Stock: ${target.order_number}` : `✅ Final Approval: ${target.order_number}`,
+          message: isWait
+            ? `Super Admin set Wait for Stock. Alert sent to Salesman (${target.salesperson_name}).`
+            : `Super Admin ${approverName} gave final sign-off. Order fully APPROVED & routed to Stage 4 (Billing).`,
+          event_type: isWait ? 'WAIT_FOR_STOCK' : 'ORDER_APPROVED',
+          order_id: target.id
+        });
+      } else if (approvalDetails?.directApprove) {
+        updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'APPROVED', remarks);
+        addNotification({
+          title: isWait ? `⚠️ Wait for Stock: ${target.order_number}` : `✅ Direct Approval: ${target.order_number}`,
+          message: `Sales Admin ${approverName} directly approved order without Higher Authority sign-off. Order routed to Stage 3.`,
+          event_type: 'ORDER_APPROVED',
+          order_id: target.id
+        });
+      } else {
+        updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'SALES_ADMIN_APPROVED', remarks);
+        addNotification({
+          title: isWait ? `⚠️ Wait for Stock: ${target.order_number}` : `🟡 Sent to Harshad Sir: ${target.order_number}`,
+          message: `Sales Admin ${approverName} sent order to Harshad Sir for approval. Note: "${remarks || 'Approval requested'}".`,
+          event_type: 'ORDER_APPROVED',
+          order_id: target.id
+        });
+      }
     }
+
     setSelectedOrderForApproval(null);
   };
+
+
 
   const handleHoldOrder = (orderId: string, reasonId: string, remarks: string) => {
     const reasonObj = MOCK_HOLD_REASONS.find(r => r.id === reasonId);
@@ -602,16 +705,26 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'approvals' && (
           <OrdersPage 
-            orders={globallyFilteredOrders.filter(o => o.status === 'SUBMITTED' || o.status === 'HELD')} 
+            orders={globallyFilteredOrders.filter(o => 
+              o.status === 'SUBMITTED' || 
+              o.status === 'SALES_ADMIN_APPROVED' || 
+              o.status === 'HELD' ||
+              o.status === 'APPROVED' ||
+              o.status === 'REJECTED'
+            )} 
             onOpenCreateOrder={() => { setOrderToEdit(null); setIsCreateOpen(true); }}
             onOpenEditOrder={handleOpenEditOrder}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
+            onApprove={handleApproveOrder}
+            onHold={handleHoldOrder}
+            onReject={handleRejectOrder}
             onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
             onCancelOrder={handleCancelOrder}
             onDeleteOrder={handleDeleteOrder}
             onOpenReturnRequestModal={(o) => setSelectedOrderForReturnRequest(o)}
           />
         )}
+
 
         {currentTab === 'masters' && (
           <MastersPage 

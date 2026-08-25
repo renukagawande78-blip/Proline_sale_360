@@ -153,13 +153,15 @@ export const getBrandDefaultPackSize = (brandNameOrCode?: string): number => {
 export type OrderStatus =
   | 'DRAFT'
   | 'SUBMITTED'
+  | 'SALES_ADMIN_APPROVED'     // Stage 2a: Sales Admin signed off, waiting for Super Admin
   | 'ACCOUNTS_APPROVED'
-  | 'APPROVED'
+  | 'APPROVED'                  // Stage 2b: Both Sales Admin + Super Admin signed off → ready for Billing
   | 'HELD'
   | 'REJECTED'
   | 'WAIT_FOR_STOCK'
   | 'INVENTORY_AUDITED'
   | 'BILLED'
+  | 'INVOICED'
   | 'DISPATCH_PENDING'
   | 'READY_FOR_PICKUP'
   | 'READY_FOR_SELF_PICKUP'
@@ -391,6 +393,16 @@ export interface Order {
   grn_number?: string;
   grn_value?: number;
   previous_status_before_hold?: OrderStatus;
+
+  // Dual-Approval Gate (Stage 2: Sales Admin + Super Admin)
+  sales_admin_approved?: boolean;
+  sales_admin_approved_by?: string;
+  sales_admin_approved_at?: string;
+  sales_admin_remarks?: string;
+  superadmin_approved?: boolean;
+  superadmin_approved_by?: string;
+  superadmin_approved_at?: string;
+  superadmin_remarks?: string;
 }
 
 export type ReturnType = 'REPLACEMENT' | 'DAMAGED_RETURN';
