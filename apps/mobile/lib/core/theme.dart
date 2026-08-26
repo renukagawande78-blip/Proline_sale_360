@@ -1,4 +1,4 @@
-import 'package:flutter/material';
+import 'package:flutter/material.dart';
 
 class ProlineTheme {
   static ThemeData get darkTheme {
@@ -9,7 +9,6 @@ class ProlineTheme {
       colorScheme: const ColorScheme.dark(
         primary: Color(0xFF38BDF8),
         surface: Color(0xFF1E293B),
-        background: Color(0xFF0F172A),
         error: Color(0xFFF43F5E),
       ),
       cardTheme: CardTheme(
