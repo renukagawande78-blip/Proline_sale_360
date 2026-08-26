@@ -98,7 +98,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
             { label: 'DELIVERY', value: order.delivery_type || 'F.O.R', color: '#fbbf24' },
             { label: 'TOTAL BOXES', value: order.total_box_qty + ' Boxes', color: '#f8fafc' },
             { label: 'TOTAL PCS', value: order.total_qty_pcs + ' PCS', color: '#38bdf8' },
-            { label: 'ORDER VALUE', value: '₹ ' + Number(order.total_amount || 0).toLocaleString('en-IN'), color: '#10b981' },
+            { label: 'LOOSE PCS', value: (order.total_loose_pcs || 0) + ' PCS', color: '#94a3b8' },
           ].map(function(item) {
             return (
               <div key={item.label}>
@@ -123,8 +123,6 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                   <th style={{ textAlign: 'center' }}>Pack</th>
                   <th style={{ textAlign: 'center' }}>Boxes</th>
                   <th style={{ textAlign: 'center' }}>Total PCS</th>
-                  <th style={{ textAlign: 'right' }}>MRP</th>
-                  <th style={{ textAlign: 'right' }}>Amount (₹)</th>
                 </tr>
               </thead>
               <tbody>
@@ -136,8 +134,6 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                       <td style={{ textAlign: 'center' }}>{item.pcs_per_box} pcs/box</td>
                       <td style={{ textAlign: 'center' }}>{item.box_qty}</td>
                       <td style={{ textAlign: 'center', fontWeight: 800, color: '#34d399' }}>{item.total_qty_pcs}</td>
-                      <td style={{ textAlign: 'right' }}>₹{item.unit_price}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>₹{(item.total_price || 0).toLocaleString()}</td>
                     </tr>
                   );
                 })}

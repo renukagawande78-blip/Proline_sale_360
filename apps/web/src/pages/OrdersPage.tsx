@@ -14,6 +14,9 @@ interface OrdersPageProps {
   onCancelOrder?: (orderId: string) => void;
   onDeleteOrder?: (orderId: string) => void;
   onOpenReturnRequestModal?: (order: Order) => void;
+  onRequestAccountsApproval?: (orderId: string, message: string) => void;
+  onAccountsApprovalResponse?: (orderId: string, status: 'APPROVED' | 'HOLD' | 'REJECTED', remark: string) => void;
+  onOpenPODModal?: (order: Order) => void;
 }
 
 export const OrdersPage: React.FC<OrdersPageProps> = (props) => {

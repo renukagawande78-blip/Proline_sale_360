@@ -372,15 +372,8 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                         </button>
                       )}
 
-                      {/* Step 5: Out for Delivery -> POD Verification Drop Update */}
                       {(order.status === 'OUT_FOR_DELIVERY' || order.status === 'DISPATCHED') && (
-                        <button 
-                          className="btn btn-success"
-                          onClick={() => onOpenPODModal ? onOpenPODModal(order) : undefined}
-                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-                        >
-                          <CheckCircle size={14} /> Stage 6: Verify POD & Delivery Drop
-                        </button>
+                        <span style={{ fontSize: '0.725rem', color: '#38bdf8', fontWeight: 800 }}>Sent to Sales Admin for POD verification</span>
                       )}
 
                       {/* Step 6: Completed */}

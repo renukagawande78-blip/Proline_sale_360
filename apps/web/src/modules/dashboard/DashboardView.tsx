@@ -25,6 +25,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectOrder
 }) => {
   const { currentUser } = useAuth();
+  const role = currentUser?.role_name || 'SALES_PERSON';
+  const roleDashboard = role === 'SUPER_ADMIN' ? {
+    title: 'Super Admin Control Dashboard', focus: 'Approvals, holds, exceptions, company-wide order flow'
+  } : role === 'BILLING' || role === 'ACCOUNTS' ? {
+    title: 'Billing Dashboard', focus: 'Stock-verified orders, invoice readiness, issued value and credit terms'
+  } : role === 'DISPATCH_MANAGER' ? {
+    title: 'Dispatch Dashboard', focus: 'Invoice-ready loads, vehicle allocation, delivery and POD hand-off'
+  } : {
+    title: 'Sales Admin Dashboard', focus: 'New orders, Super Admin approvals, stock checks and POD exceptions'
+  };
 
   // Filter orders matching user's Brand Handle Scope (including cross-brand item read-only match)
   const scopeOrders = orders.filter(o => {
@@ -33,7 +43,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   });
 
   const totalOrdersCount = scopeOrders.length;
-  const totalGrossAmount = scopeOrders.reduce((sum, o) => sum + o.total_amount, 0);
   const totalVolumePcs = scopeOrders.reduce((sum, o) => sum + o.total_qty_pcs, 0);
 
   const approvedOrders = scopeOrders.filter(o => o.status === 'APPROVED');
@@ -46,10 +55,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc' }}>
-            Multi-Tenant Sales Operations Executive Dashboard
+            {roleDashboard.title}
           </h1>
           <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-            Real-time B2B Order Flow, Hold Reason Tracking & Operational Control Center | Data Scope: <strong style={{ color: '#34d399' }}>{currentUser?.company_handle === 'All' ? 'All 13 Brands' : currentUser?.company_handle}</strong>
+            {roleDashboard.focus} | Data Scope: <strong style={{ color: '#34d399' }}>{currentUser?.company_handle === 'All' ? 'All Companies' : currentUser?.company_handle}</strong>
           </p>
         </div>
 
@@ -60,12 +69,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* KPI Cards */}
       <div className="kpi-grid">
-        {/* KPI 1: Gross Sales */}
+        {/* KPI 1: Order Quantity */}
         <div className="kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div className="kpi-title">TOTAL ORDER VALUE (GROSS)</div>
-              <div className="kpi-value">₹{totalGrossAmount.toLocaleString()}</div>
+              <div className="kpi-title">TOTAL ORDER QUANTITY</div>
+              <div className="kpi-value">{totalVolumePcs.toLocaleString()} PCS</div>
             </div>
             <div style={{ background: 'rgba(56, 189, 248, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#38bdf8' }}>
               <TrendingUp size={20} />
@@ -88,7 +97,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="kpi-subtext">
-            ₹{approvedOrders.reduce((sum, o) => sum + o.total_amount, 0).toLocaleString()} ready for billing
+            {approvedOrders.reduce((sum, o) => sum + o.total_qty_pcs, 0).toLocaleString()} PCS ready for billing
           </div>
         </div>
 

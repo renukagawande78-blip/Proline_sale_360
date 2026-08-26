@@ -1,0 +1,2 @@
+ALTER TABLE public.order_items
+  ADD COLUMN IF NOT EXISTS issued_qty_pcs INTEGER NOT NULL DEFAULT 0;

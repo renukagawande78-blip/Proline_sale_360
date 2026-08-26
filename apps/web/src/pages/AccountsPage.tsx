@@ -4,7 +4,7 @@ import { Order } from '../types';
 
 interface AccountsPageProps {
   orders: Order[];
-  onGenerateInvoice?: (orderId: string, invoiceNumber: string, invoiceAmount: number) => void;
+  onGenerateInvoice?: (order: Order, invoiceNumber: string, invoiceAmount: number, creditDays: number, remark: string, issuedQtyByItem: Record<string, number>) => void;
 }
 
 export const AccountsPage: React.FC<AccountsPageProps> = (props) => {

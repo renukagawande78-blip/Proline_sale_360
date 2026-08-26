@@ -34,7 +34,11 @@ import {
   getOrderAccessPermission,
   saveOrderToSupabase,
   deleteOrderFromSupabase,
-  updateOrderStatusInSupabase
+  updateOrderStatusInSupabase,
+  updateOrderAccountsApprovalInSupabase,
+  saveOrderItemToSupabase,
+  generateUuid,
+  supabase
 } from './lib/supabase';
 import { Order, GlobalFilterState, Agency, Product, User, Company } from './types';
 
@@ -84,21 +88,70 @@ const MainLayout: React.FC = () => {
   }
 
   const [currentTab, setCurrentTab] = useState('dashboard');
-  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+  const [orders, setOrders] = useState<Order[]>(() => {
+    try {
+      const cached = localStorage.getItem('proline_oms_orders_v3');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_ORDERS;
+  });
+
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
   const [liveCompanies, setLiveCompanies] = useState<Company[]>([]);
 
+  // Automatically persist local copy
+  React.useEffect(() => {
+    if (orders && orders.length > 0) {
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(orders));
+      } catch (err) {
+        console.warn('LocalStorage save error:', err);
+      }
+    }
+  }, [orders]);
+
+  // Initial fetch + Realtime Database Synchronization with Supabase
   React.useEffect(() => {
     fetchOrdersFromSupabase().then(({ orders: liveOrders, error }) => {
       if (liveOrders && liveOrders.length > 0 && !error) {
         setOrders(liveOrders);
+        try {
+          localStorage.setItem('proline_oms_orders_v3', JSON.stringify(liveOrders));
+        } catch {}
       }
     });
+
     fetchCompaniesFromSupabase().then(comps => {
       if (comps && comps.length > 0) setLiveCompanies(comps);
     });
+
+    // Use a unique Realtime topic. Supabase reuses channels with the same topic;
+    // during React Strict Mode / hot reload an old channel can still be joining,
+    // which makes `.on()` throw "cannot add callbacks after subscribe".
+    const realtimeTopic = `orders_realtime_${generateUuid()}`;
+
+    // Real-time listener for database updates across any Super Admin / Sales session
+    const channel = supabase
+      .channel(realtimeTopic)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        fetchOrdersFromSupabase().then(({ orders: liveOrders, error }) => {
+          if (liveOrders && liveOrders.length > 0 && !error) {
+            setOrders(liveOrders);
+            try {
+              localStorage.setItem('proline_oms_orders_v3', JSON.stringify(liveOrders));
+            } catch {}
+          }
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const companiesPool = liveCompanies.length > 0 ? liveCompanies : MOCK_COMPANIES;
@@ -108,13 +161,7 @@ const MainLayout: React.FC = () => {
     const isChiragOrHarshad = (currentUser.full_name || '').toLowerCase().includes('chirag') || (currentUser.full_name || '').toLowerCase().includes('harshad');
     if (isChiragOrHarshad || currentUser.role_name === 'SUPER_ADMIN') return;
 
-    if (currentUser.role_name === 'DISPATCH_MANAGER') {
-      setCurrentTab('dispatch');
-    } else if (currentUser.role_name === 'BILLING' || currentUser.role_name === 'ACCOUNTS') {
-      setCurrentTab('accounts');
-    } else if (currentUser.role_name === 'SALES_ADMIN' || currentUser.role_name === 'SALES_PERSON' || currentUser.role_name === 'AREA_SALES_MANAGER') {
-      setCurrentTab('orders');
-    }
+    setCurrentTab('dashboard');
   }, [currentUser?.id, currentUser?.role_name]);
 
   // Modals state
@@ -148,6 +195,9 @@ const MainLayout: React.FC = () => {
     agencyId: 'ALL',
     areaId: 'ALL',
     city: 'ALL',
+    zoneId: 'ALL',
+    dispatchManagerId: 'ALL',
+    vehicleNumber: '',
     productId: 'ALL',
     mrpRange: 'ALL',
     dateRangeType: 'ALL_DATES',
@@ -202,6 +252,8 @@ const MainLayout: React.FC = () => {
       const agency = MOCK_AGENCIES.find(a => a.id === o.agency_id || a.agency_name === o.agency_name);
       if (agency?.city !== globalFilterState.city) return false;
     }
+
+    if (globalFilterState.vehicleNumber && !(o.vehicle_number || '').toLowerCase().includes(globalFilterState.vehicleNumber.toLowerCase())) return false;
 
     // 8. Product SKU Filter
     if (globalFilterState.productId !== 'ALL') {
@@ -329,7 +381,9 @@ const MainLayout: React.FC = () => {
             sales_admin_approved: true,
             sales_admin_approved_by: approverName,
             sales_admin_approved_at: timestamp,
-            superadmin_approved: true,
+            // No Super Admin approval was requested for this order. Do not
+            // fabricate a Super Admin sign-off when Sales Admin proceeds.
+            superadmin_approved: o.superadmin_approved || false,
             approved_by_name: approverName,
             approved_at: timestamp,
             sales_admin_remarks: remarks || 'Directly approved by Sales Admin',
@@ -461,14 +515,32 @@ const MainLayout: React.FC = () => {
   };
 
   const handleConfirmPOD = (orderId: string, podStatus: 'CLEAN' | 'ISSUE_RAISED', issueType?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN', details?: string) => {
+    const timestamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const verifier = currentUser?.full_name || 'Sales Admin';
     setOrders(prev => prev.map(o => o.id === orderId ? {
       ...o,
       status: podStatus === 'CLEAN' ? 'DELIVERED' : 'POD_ISSUE_RAISED',
       pod_status: podStatus,
       pod_issue_type: issueType,
-      pod_issue_details: details
+      pod_issue_details: details,
+      need_accounts_approval: podStatus === 'ISSUE_RAISED',
+      accounts_approval_status: podStatus === 'ISSUE_RAISED' ? 'PENDING' : o.accounts_approval_status,
+      accounts_approval_message: podStatus === 'ISSUE_RAISED' ? `POD ${issueType || 'ISSUE'}: ${details || 'Sales Admin requests a decision.'}` : o.accounts_approval_message,
+      accounts_approval_requested_by: podStatus === 'ISSUE_RAISED' ? verifier : o.accounts_approval_requested_by,
+      accounts_approval_requested_at: podStatus === 'ISSUE_RAISED' ? timestamp : o.accounts_approval_requested_at
     } : o));
-    updateOrderStatusInSupabase(orderId, podStatus === 'CLEAN' ? 'DELIVERED' : 'POD_ISSUE_RAISED');
+    if (podStatus === 'CLEAN') {
+      updateOrderStatusInSupabase(orderId, 'DELIVERED');
+    } else {
+      updateOrderAccountsApprovalInSupabase(orderId, {
+        status: 'POD_ISSUE_RAISED',
+        need_accounts_approval: true,
+        accounts_approval_status: 'PENDING',
+        accounts_approval_message: `POD ${issueType || 'ISSUE'}: ${details || 'Sales Admin requests a decision.'}`,
+        accounts_approval_requested_by: verifier,
+        accounts_approval_requested_at: timestamp
+      });
+    }
   };
 
   const handleResolveException = (orderId: string, action: 'CREATE_GRN' | 'REATTEMPT_DELIVERY', grnNumber?: string, grnValue?: number) => {
@@ -535,7 +607,7 @@ const MainLayout: React.FC = () => {
 
         const totalOrdered = o.total_qty_pcs;
         const totalDispatched = updatedItems?.reduce((acc, i) => acc + i.dispatched_qty_pcs, 0) || 0;
-        const newStatus = totalDispatched >= totalOrdered ? 'DISPATCHED' : 'PARTIALLY_DISPATCHED';
+        const newStatus = totalDispatched >= totalOrdered ? 'OUT_FOR_DELIVERY' : 'PARTIALLY_DISPATCHED';
 
         updateOrderStatusInSupabase(orderId, newStatus);
 
@@ -552,22 +624,39 @@ const MainLayout: React.FC = () => {
     if (target) {
       addNotification({
         title: `Dispatch Confirmed & Pushed to Accounts: ${target.order_number}`,
-        message: `Stock verified & allocated. Dispatched via ${dispatchData.vehicle_number}. Pushed to Accounts Console for Invoice Generation.`,
+        message: `Invoice-ready goods dispatched via ${dispatchData.vehicle_number}. Sales Admin can now verify POD.`,
         event_type: 'DISPATCH_CONFIRMED',
         order_id: target.id
       });
     }
   };
 
-  const handleGenerateInvoice = (orderId: string, invoiceNumber: string, invoiceAmount: number) => {
+  const handleGenerateInvoice = (order: Order, invoiceNumber: string, invoiceAmount: number, creditDays: number, remark: string, issuedQtyByItem: Record<string, number>) => {
+    const orderId = order.id;
+    const invoiceDate = new Date().toISOString().substring(0, 10);
+    const updatedItems = (order.items || []).map(item => {
+      const issued = Math.max(0, Math.min(item.total_qty_pcs || 0, issuedQtyByItem[item.id] || 0));
+      return { ...item, issued_qty_pcs: issued };
+    });
     setOrders(prev => prev.map(o => o.id === orderId ? {
       ...o,
       status: 'BILLED',
       invoice_number: invoiceNumber,
-      invoice_date: new Date().toISOString().substring(0, 10),
-      invoice_amount: invoiceAmount
+      invoice_date: invoiceDate,
+      invoice_amount: invoiceAmount,
+      credit_days: creditDays,
+      remarks: remark,
+      items: updatedItems
     } : o));
-    updateOrderStatusInSupabase(orderId, 'BILLED');
+    updateOrderAccountsApprovalInSupabase(orderId, {
+      status: 'BILLED',
+      invoice_number: invoiceNumber,
+      invoice_date: invoiceDate,
+      invoice_amount: invoiceAmount,
+      credit_days: creditDays,
+      remarks: remark
+    });
+    updatedItems.forEach(item => { void saveOrderItemToSupabase(item); });
   };
 
   const handleUpdateOrderStatus = (orderId: string, newStatus: any) => {
@@ -575,8 +664,156 @@ const MainLayout: React.FC = () => {
     updateOrderStatusInSupabase(orderId, newStatus);
   };
 
+  const handleRequestAccountsApproval = (orderId: string, message: string) => {
+    const timestamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const requesterName = currentUser?.full_name || 'Sales Admin';
+
+    const historyEntry: any = {
+      id: generateUuid(),
+      order_id: orderId,
+      action: 'ACCOUNTS_APPROVAL_REQUESTED',
+      performed_by: requesterName,
+      performed_at: timestamp,
+      remarks: message
+    };
+
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        // Legacy `accounts_*` fields are retained for database compatibility;
+        // in Stage 2 this is a Super Admin approval request.
+        status: 'SALES_ADMIN_APPROVED',
+        sales_admin_approved: true,
+        sales_admin_approved_by: requesterName,
+        sales_admin_approved_at: timestamp,
+        sales_admin_remarks: message,
+        need_accounts_approval: true,
+        accounts_approval_status: 'PENDING',
+        accounts_approval_message: message,
+        accounts_approval_requested_by: requesterName,
+        accounts_approval_requested_at: timestamp,
+        order_history: [...(o.order_history || []), historyEntry]
+      };
+    }));
+
+    updateOrderAccountsApprovalInSupabase(orderId, {
+      status: 'SALES_ADMIN_APPROVED',
+      sales_admin_approved: true,
+      sales_admin_approved_by: requesterName,
+      sales_admin_approved_at: timestamp,
+      sales_admin_remarks: message,
+      need_accounts_approval: true,
+      accounts_approval_status: 'PENDING',
+      accounts_approval_message: message,
+      accounts_approval_requested_by: requesterName,
+      accounts_approval_requested_at: timestamp
+    });
+
+    const target = orders.find(o => o.id === orderId);
+    if (target) {
+      addNotification({
+        title: `Super Admin Approval Requested: ${target.order_number}`,
+        message: `${requesterName} requested Super Admin approval: "${message}"`,
+        event_type: 'ACCOUNTS_APPROVAL_REQUESTED',
+        order_id: target.id
+      });
+    }
+  };
+
+  const handleAccountsApprovalResponse = (orderId: string, responseStatus: 'APPROVED' | 'HOLD' | 'REJECTED', remark: string) => {
+    const timestamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const responderName = currentUser?.full_name || 'Super Admin';
+
+    const historyEntry: any = {
+      id: generateUuid(),
+      order_id: orderId,
+      action: `ACCOUNTS_${responseStatus}`,
+      performed_by: responderName,
+      performed_at: timestamp,
+      remarks: remark
+    };
+
+    let targetStatus: any = undefined;
+
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+
+      let newStatus = o.status;
+      const isPodException = o.status === 'POD_ISSUE_RAISED';
+      if (isPodException && responseStatus === 'APPROVED') {
+        // Super Admin chose RESEND for a Stage 6 POD exception.
+        newStatus = 'APPROVED';
+      } else if (isPodException && responseStatus === 'REJECTED') {
+        // Super Admin chose GRN settlement for the POD exception.
+        newStatus = 'COMPLETED';
+      } else if (responseStatus === 'APPROVED') {
+        // Super Admin is the first approval. The Sales Admin must still do
+        // the final review before the order can proceed to stock check.
+        newStatus = o.status === 'POD_ISSUE_RAISED' ? 'POD_ISSUE_RAISED' : 'SALES_ADMIN_APPROVED';
+      } else if (responseStatus === 'HOLD') {
+        newStatus = 'HELD';
+      } else if (responseStatus === 'REJECTED') {
+        newStatus = 'REJECTED';
+      }
+      targetStatus = newStatus;
+
+      return {
+        ...o,
+        status: newStatus,
+        accounts_approval_status: responseStatus,
+        accounts_approval_response_remark: remark,
+        accounts_approval_responded_by: responderName,
+        accounts_approval_responded_at: timestamp,
+        superadmin_approved: responseStatus === 'APPROVED',
+        superadmin_approved_by: responseStatus === 'APPROVED' ? responderName : o.superadmin_approved_by,
+        superadmin_approved_at: responseStatus === 'APPROVED' ? timestamp : o.superadmin_approved_at,
+        superadmin_remarks: responseStatus === 'APPROVED' ? remark : o.superadmin_remarks,
+        priority: isPodException && responseStatus === 'APPROVED' ? 'HIGH' : o.priority,
+        grn_number: isPodException && responseStatus === 'REJECTED' ? `GRN-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}` : o.grn_number,
+        hold_reason: responseStatus === 'HOLD' ? 'Accounts Hold Directive' : o.hold_reason,
+        hold_remarks: responseStatus === 'HOLD' ? remark : o.hold_remarks,
+        order_history: [...(o.order_history || []), historyEntry]
+      };
+    }));
+
+    updateOrderAccountsApprovalInSupabase(orderId, {
+      status: targetStatus,
+      accounts_approval_status: responseStatus,
+      accounts_approval_response_remark: remark,
+      accounts_approval_responded_by: responderName,
+      accounts_approval_responded_at: timestamp,
+      superadmin_approved: responseStatus === 'APPROVED',
+      superadmin_approved_by: responseStatus === 'APPROVED' ? responderName : undefined,
+      superadmin_approved_at: responseStatus === 'APPROVED' ? timestamp : undefined,
+      superadmin_remarks: responseStatus === 'APPROVED' ? remark : undefined
+    });
+
+    const target = orders.find(o => o.id === orderId);
+    if (target) {
+      addNotification({
+        title: `Super Admin Decision [${responseStatus}]: ${target.order_number}`,
+        message: `${responderName} marked Super Admin approval as ${responseStatus}. Remark: "${remark || 'No remark'}"`,
+        event_type: `ACCOUNTS_${responseStatus}`,
+        order_id: target.id
+      });
+    }
+  };
+
   const handleCancelOrder = (orderId: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
+    const cancelHistory: any = {
+      id: generateUuid(),
+      order_id: orderId,
+      action: 'ORDER_CANCELLED',
+      performed_by: currentUser?.full_name || 'Admin',
+      performed_at: new Date().toISOString(),
+      remarks: 'Order cancelled'
+    };
+    setOrders(prev => prev.map(o => o.id === orderId ? {
+      ...o,
+      status: 'CANCELLED',
+      order_history: [...(o.order_history || []), cancelHistory]
+    } : o));
     updateOrderStatusInSupabase(orderId, 'CANCELLED');
     addNotification({
       title: `Order Cancelled`,
@@ -700,6 +937,12 @@ const MainLayout: React.FC = () => {
             onCancelOrder={handleCancelOrder}
             onDeleteOrder={handleDeleteOrder}
             onOpenReturnRequestModal={(o) => setSelectedOrderForReturnRequest(o)}
+            onApprove={handleApproveOrder}
+            onHold={handleHoldOrder}
+            onReject={handleRejectOrder}
+            onRequestAccountsApproval={handleRequestAccountsApproval}
+            onAccountsApprovalResponse={handleAccountsApprovalResponse}
+            onOpenPODModal={(o) => setSelectedOrderForPOD(o)}
           />
         )}
 
@@ -709,7 +952,7 @@ const MainLayout: React.FC = () => {
               o.status === 'SUBMITTED' || 
               o.status === 'SALES_ADMIN_APPROVED' || 
               o.status === 'HELD' ||
-              o.status === 'APPROVED' ||
+              o.status === 'POD_ISSUE_RAISED' ||
               o.status === 'REJECTED'
             )} 
             onOpenCreateOrder={() => { setOrderToEdit(null); setIsCreateOpen(true); }}
@@ -722,6 +965,9 @@ const MainLayout: React.FC = () => {
             onCancelOrder={handleCancelOrder}
             onDeleteOrder={handleDeleteOrder}
             onOpenReturnRequestModal={(o) => setSelectedOrderForReturnRequest(o)}
+            onRequestAccountsApproval={handleRequestAccountsApproval}
+            onAccountsApprovalResponse={handleAccountsApprovalResponse}
+            onOpenPODModal={(o) => setSelectedOrderForPOD(o)}
           />
         )}
 

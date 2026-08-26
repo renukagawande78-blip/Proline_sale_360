@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BarChart3, PieChart, TrendingUp, Calendar, Truck, Download, FileSpreadsheet, PackageCheck, Boxes } from 'lucide-react';
 import { Order } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { isCompanyAllowedForUser } from '../../lib/supabase';
+import { checkIsSuperAdmin, isCompanyAllowedForUser } from '../../lib/supabase';
 
 interface ReportsViewProps {
   orders: Order[];
@@ -12,17 +12,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
   const { currentUser } = useAuth();
   const [lastOrderDays, setLastOrderDays] = useState<'7' | '15' | '21' | '30'>('15');
   const [isExporting, setIsExporting] = useState(false);
+  const [selectedReport, setSelectedReport] = useState('Fill Rate Report');
 
   // Scoped Orders by Brand Scope Handle
-  const scopedOrders = orders.filter(o => 
-    isCompanyAllowedForUser(o.company_name, currentUser?.company_handle)
-  );
+  const scopedOrders = orders.filter(o => checkIsSuperAdmin(currentUser) || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle));
+  const reportCatalog = [
+    'Fill Rate Report', 'Order Daily Report', 'Outstanding Report', 'POD Remarks Report',
+    'Monthly Dispatch Report', 'Daywise / Weekwise Dispatch Report',
+    `Last Order Days Report (${lastOrderDays} days)`, 'Vehicle-wise Dispatch Report'
+  ];
 
   // Fill Rate & Volume Calculations
   const totalOrdered = scopedOrders.reduce((sum, o) => sum + o.total_qty_pcs, 0);
   const totalBoxesOrdered = scopedOrders.reduce((sum, o) => sum + o.total_box_qty, 0);
-  const totalDispatched = scopedOrders.reduce((sum, o) => sum + (o.items?.reduce((acc, i) => acc + i.dispatched_qty_pcs, 0) || 0), 0);
-  const fillRatePercent = totalOrdered > 0 ? ((totalDispatched / totalOrdered) * 100).toFixed(1) : '94.5';
+  // Fill rate is the quantity Billing actually issued against the quantity
+  // ordered. Example: 6 refrigerators ordered / 4 issued = 66.7% fill rate.
+  const totalIssued = scopedOrders.reduce((sum, o) => sum + (o.items?.reduce((acc, i) => acc + (i.issued_qty_pcs ?? i.dispatched_qty_pcs ?? 0), 0) || 0), 0);
+  const unfulfilledQty = Math.max(0, totalOrdered - totalIssued);
+  const fillRatePercent = totalOrdered > 0 ? ((totalIssued / totalOrdered) * 100).toFixed(1) : '0.0';
 
   // Excel / CSV Export Handler (Quantity-focused, No Rupee Values)
   const handleExportExcel = (reportType: 'FULL' | 'AGENCY' | 'DISPATCH') => {
@@ -120,6 +127,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
         >
           <FileSpreadsheet size={16} /> {isExporting ? 'Generating Quantity Report...' : 'Download Full Quantity Excel (CSV)'}
         </button>
+        <select value={lastOrderDays} onChange={event => setLastOrderDays(event.target.value as '7' | '15' | '21' | '30')} style={{ padding: '0.55rem', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: 7, fontWeight: 700 }}>
+          <option value="7">Last Order: 7 days</option><option value="15">Last Order: 15 days</option><option value="21">Last Order: 21 days</option><option value="30">Last Order: 30 days</option>
+        </select>
       </div>
 
       {/* Analytics KPI Row (Quantity Focused) */}
@@ -130,7 +140,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
             <PieChart size={20} color="#34d399" />
           </div>
           <div className="kpi-value" style={{ color: '#34d399' }}>{fillRatePercent}%</div>
-          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Actual vs Dispatched Qty</span>
+          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Issued Qty ÷ Ordered Qty</span>
         </div>
 
         <div className="kpi-card">
@@ -144,24 +154,38 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
 
         <div className="kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="kpi-title">TOTAL DISPATCHED VOLUME</span>
+            <span className="kpi-title">TOTAL ISSUED VOLUME</span>
             <PackageCheck size={20} color="#fbbf24" />
           </div>
-          <div className="kpi-value" style={{ color: '#fbbf24' }}>{totalDispatched.toLocaleString()} PCS</div>
-          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Warehouse Fulfillments</span>
+          <div className="kpi-value" style={{ color: '#fbbf24' }}>{totalIssued.toLocaleString()} PCS</div>
+          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Qty issued by Billing</span>
         </div>
 
         <div className="kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="kpi-title">ACTIVE VEHICLES</span>
-            <Truck size={20} color="#c084fc" />
+            <span className="kpi-title">UNFULFILLED / LOST QTY</span>
+            <Truck size={20} color="#fb7185" />
           </div>
-          <div className="kpi-value" style={{ color: '#c084fc' }}>12 Vehicles</div>
-          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Transporter dispatches</span>
+          <div className="kpi-value" style={{ color: '#fb7185' }}>{unfulfilledQty.toLocaleString()} PCS</div>
+          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Ordered but not issued</span>
         </div>
       </div>
 
       {/* Report Summary Cards with Excel Export Triggers */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '0.75rem' }}>Company All Reports Dashboard</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.7rem' }}>
+          {reportCatalog.map(report => (
+            <button key={report} type="button" onClick={() => setSelectedReport(report)} style={{ textAlign: 'left', padding: '0.8rem', borderRadius: 8, cursor: 'pointer', border: selectedReport === report ? '1px solid #38bdf8' : '1px solid #334155', background: selectedReport === report ? 'rgba(56,189,248,0.12)' : '#0f172a', color: '#f8fafc', fontWeight: 800, fontSize: '0.8rem' }}>
+              <BarChart3 size={15} color="#38bdf8" style={{ verticalAlign: 'middle', marginRight: 7 }} />{report}
+            </button>
+          ))}
+        </div>
+        <div style={{ marginTop: '0.75rem', padding: '0.75rem', border: '1px solid #334155', borderRadius: 8, color: '#94a3b8', fontSize: '0.8rem' }}>
+          <strong style={{ color: '#38bdf8' }}>{selectedReport}</strong> is scoped to {checkIsSuperAdmin(currentUser) ? 'all companies' : (currentUser?.company_handle || 'your mapped company')}. Use the export buttons below to download the filtered operational data.
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
         <div className="data-table-container">
           <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -213,7 +237,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
                 <th>Product Line Item ID</th>
                 <th>Product Description</th>
                 <th>Total Ordered Qty</th>
-                <th>Dispatched Qty (PCS / Boxes)</th>
+                <th>Issued / Unfulfilled Qty (PCS)</th>
               </tr>
             </thead>
             <tbody>
@@ -222,7 +246,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
                   <td><span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 700 }}>{item.id}</span></td>
                   <td><strong style={{ color: '#f8fafc' }}>{item.product_name}</strong></td>
                   <td><span style={{ fontWeight: 800, color: '#e2e8f0' }}>{item.total_qty_pcs} PCS ({item.box_qty} Boxes)</span></td>
-                  <td><span style={{ fontWeight: 800, color: '#34d399' }}>{item.dispatched_qty_pcs} PCS ({Math.floor(item.dispatched_qty_pcs / (item.pcs_per_box || 24))} Boxes)</span></td>
+                  <td><span style={{ fontWeight: 800, color: '#34d399' }}>{item.issued_qty_pcs ?? item.dispatched_qty_pcs} issued</span><br /><span style={{ color: '#fb7185', fontSize: '0.72rem' }}>{Math.max(0, item.total_qty_pcs - (item.issued_qty_pcs ?? item.dispatched_qty_pcs ?? 0))} unfulfilled</span></td>
                 </tr>
               ))}
             </tbody>

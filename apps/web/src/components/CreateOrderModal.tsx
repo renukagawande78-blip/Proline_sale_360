@@ -12,7 +12,8 @@ import {
   fetchUsersFromSupabase,
   deduplicateCompanies,
   deduplicateAgencies,
-  deduplicateProducts 
+  deduplicateProducts,
+  generateUuid
 } from '../lib/supabase';
 
 import { Order, OrderItem, Agency, Product, User } from '../types';
@@ -1029,19 +1030,48 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       ? (activeSalesperson?.id || currentUser?.id || 'u12')
       : (currentUser?.id || 'u12');
 
+    const isFinancialChanged = !!orderToEdit && (
+      orderToEdit.agency_id !== agencyId ||
+      orderToEdit.total_amount !== totalAmount ||
+      orderToEdit.total_qty_pcs !== totalQtyPcs
+    );
+
+    const accountsApprovalStatus = (orderToEdit?.need_accounts_approval && orderToEdit.accounts_approval_status === 'APPROVED' && isFinancialChanged)
+      ? 'PENDING'
+      : (orderToEdit?.accounts_approval_status || (orderToEdit?.need_accounts_approval ? 'PENDING' : 'NOT_REQUIRED'));
+
+    const editHistoryEntry: any = orderToEdit ? {
+      id: generateUuid(),
+      order_id: finalOrderId,
+      action: 'ORDER_EDITED',
+      performed_by: currentUser?.full_name || 'Sales Admin',
+      performed_at: new Date().toISOString(),
+      remarks: (isFinancialChanged && orderToEdit.accounts_approval_status === 'APPROVED')
+        ? 'Order modified (financial / items changed) — Accounts approval reset to PENDING'
+        : 'Order details modified'
+    } : {
+      id: generateUuid(),
+      order_id: finalOrderId,
+      action: 'ORDER_CREATED',
+      performed_by: currentUser?.full_name || 'Salesperson',
+      performed_at: new Date().toISOString(),
+      remarks: 'Order created'
+    };
+
     const newOrder: Order = {
+      ...(orderToEdit || {}),
       id: finalOrderId,
       order_number: finalOrderNumber,
       order_date: orderToEdit ? orderToEdit.order_date : new Date().toISOString().replace('T', ' ').substring(0, 16),
-      company_id: selectedCompanyIds.length === 1 ? selectedCompanyIds[0] : 'c01',
-      company_name: selectedCompany?.company_name,
+      company_id: selectedCompanyIds.length === 1 ? selectedCompanyIds[0] : (orderToEdit?.company_id || 'c01'),
+      company_name: selectedCompany?.company_name || orderToEdit?.company_name,
       agency_id: agencyId,
-      agency_name: selectedAgency?.agency_name,
-      area_id: selectedAgency?.area_id || '',
-      area_name: selectedAgency?.area_name || 'Delhi NCR Territory',
+      agency_name: selectedAgency?.agency_name || orderToEdit?.agency_name,
+      area_id: selectedAgency?.area_id || orderToEdit?.area_id || '',
+      area_name: selectedAgency?.area_name || orderToEdit?.area_name || 'Delhi NCR Territory',
       salesperson_id: finalSalespersonId,
       salesperson_name: finalSalespersonName,
-      asm_id: 'e6666666-6666-6666-6666-666666666666',
+      asm_id: orderToEdit?.asm_id || 'e6666666-6666-6666-6666-666666666666',
       status: status,
       total_box_qty: totalBoxQty,
       total_loose_pcs: totalLoosePcs,
@@ -1049,7 +1079,10 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       total_amount: totalAmount,
       remarks: remarks,
       delivery_type: deliveryType,
-      items: itemsWithFormattedIds
+      items: itemsWithFormattedIds,
+      need_accounts_approval: orderToEdit?.need_accounts_approval ?? false,
+      accounts_approval_status: accountsApprovalStatus,
+      order_history: [...(orderToEdit?.order_history || []), editHistoryEntry]
     };
 
     onSubmitOrder(newOrder);

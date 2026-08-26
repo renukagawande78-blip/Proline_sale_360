@@ -337,8 +337,26 @@ export interface OrderItem {
   unit_price: number;
   total_price: number;
   dispatched_qty_pcs: number;
+  issued_qty_pcs?: number;
   pending_qty_pcs: number;
   remark?: string;
+}
+
+export type AccountsApprovalStatus =
+  | 'NOT_REQUIRED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'HOLD'
+  | 'REJECTED';
+
+export interface OrderHistoryEntry {
+  id: string;
+  order_id: string;
+  action: string;
+  performed_by: string;
+  performed_at: string;
+  remarks?: string;
+  details?: any;
 }
 
 export interface Order {
@@ -403,6 +421,19 @@ export interface Order {
   superadmin_approved_by?: string;
   superadmin_approved_at?: string;
   superadmin_remarks?: string;
+
+  // Accounts Approval Workflow Fields
+  need_accounts_approval?: boolean;
+  accounts_approval_status?: AccountsApprovalStatus;
+  accounts_approval_message?: string;
+  accounts_approval_requested_by?: string;
+  accounts_approval_requested_at?: string;
+  accounts_approval_responded_by?: string;
+  accounts_approval_responded_at?: string;
+  accounts_approval_response_remark?: string;
+
+  // Audit & Transaction History
+  order_history?: OrderHistoryEntry[];
 }
 
 export type ReturnType = 'REPLACEMENT' | 'DAMAGED_RETURN';
@@ -473,6 +504,8 @@ export interface GlobalFilterState {
   areaId: string;
   city: string;
   zoneId?: string;
+  dispatchManagerId?: string;
+  vehicleNumber?: string;
   productId: string;
   mrpRange: 'ALL' | 'UNDER_50' | '50_500' | '500_5000' | 'ABOVE_5000';
   dateRangeType: DateRangeType;

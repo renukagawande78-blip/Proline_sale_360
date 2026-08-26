@@ -21,6 +21,7 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
 }) => {
   const { users } = useAuth();
   const salesTeamMembers = users.filter(u => u.role_name === 'SALES_PERSON' || u.role_name === 'AREA_SALES_MANAGER');
+  const dispatchManagers = users.filter(u => u.role_name === 'DISPATCH_MANAGER');
 
   // Distinct Areas & Cities from Agencies
   const uniqueAreas = Array.from(new Set(MOCK_AGENCIES.map(a => a.area_name).filter(Boolean))) as string[];
@@ -34,6 +35,9 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
   const [agencyId, setAgencyId] = useState(filterState.agencyId);
   const [areaId, setAreaId] = useState(filterState.areaId);
   const [city, setCity] = useState(filterState.city);
+  const [zoneId, setZoneId] = useState(filterState.zoneId || 'ALL');
+  const [dispatchManagerId, setDispatchManagerId] = useState(filterState.dispatchManagerId || 'ALL');
+  const [vehicleNumber, setVehicleNumber] = useState(filterState.vehicleNumber || '');
   const [productId, setProductId] = useState(filterState.productId);
   const [mrpRange, setMrpRange] = useState<'ALL' | 'UNDER_50' | '50_500' | '500_5000' | 'ABOVE_5000'>(filterState.mrpRange);
   const [dateRangeType, setDateRangeType] = useState<DateRangeType>(filterState.dateRangeType);
@@ -62,6 +66,9 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
       agencyId,
       areaId,
       city,
+      zoneId,
+      dispatchManagerId,
+      vehicleNumber,
       productId,
       mrpRange,
       dateRangeType,
@@ -80,6 +87,7 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
     setAgencyId('ALL');
     setAreaId('ALL');
     setCity('ALL');
+    setZoneId('ALL'); setDispatchManagerId('ALL'); setVehicleNumber('');
     setProductId('ALL');
     setMrpRange('ALL');
     setDateRangeType('ALL_DATES');
@@ -158,6 +166,12 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
                 ))}
               </select>
             </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem', marginTop: '0.85rem' }}>
+            <div><label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ZONE</label><select value={zoneId} onChange={e => setZoneId(e.target.value)} style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }}><option value="ALL">All Zones</option>{uniqueAreas.map(zone => <option key={zone} value={zone}>{zone} Zone</option>)}</select></div>
+            <div><label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DISPATCH MANAGER</label><select value={dispatchManagerId} onChange={e => setDispatchManagerId(e.target.value)} style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }}><option value="ALL">All Dispatch Managers</option>{dispatchManagers.map(user => <option key={user.id} value={user.id}>{user.full_name}</option>)}</select></div>
+            <div><label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>VEHICLE NUMBER</label><input value={vehicleNumber} onChange={e => setVehicleNumber(e.target.value)} placeholder="Search vehicle no." style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} /></div>
           </div>
         </div>
 

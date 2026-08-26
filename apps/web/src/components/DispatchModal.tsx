@@ -56,9 +56,9 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       booking_id: bookingId,
       freight_amount: freightAmount,
       lr_number: lrNumber,
-      items: Object.entries(dispatchItems).map(([itemId, qty]) => ({
-        order_item_id: itemId,
-        dispatch_qty: qty
+      items: (order.items || []).map(item => ({
+        order_item_id: item.id,
+        dispatch_qty: dispatchItems[item.id] ?? item.issued_qty_pcs ?? item.pending_qty_pcs
       }))
     };
     onConfirmDispatch(order.id, payload);
@@ -167,12 +167,12 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>BOOKING ID / CHALLAN*</label>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>RENTAL AGENCY NAME / BOOKING ID*</label>
                       <input 
                         type="text" 
                         value={bookingId}
                         onChange={e => setBookingId(e.target.value)}
-                        placeholder="e.g. PORTER-88221"
+                        placeholder="e.g. Porter / Patel Transport — Booking ID"
                         style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
                       />
                     </div>
@@ -185,6 +185,14 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                         placeholder="Freight INR"
                         style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 700 }}
                       />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER NAME*</label>
+                      <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="Driver name" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER MOBILE NO.*</label>
+                      <input type="text" value={driverMobile} onChange={e => setDriverMobile(e.target.value)} placeholder="+91 Mobile No." style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
                     </div>
                   </>
                 )}
@@ -218,7 +226,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               </thead>
               <tbody>
                 {order.items?.map(item => {
-                  const pending = item.pending_qty_pcs;
+                  const pending = item.issued_qty_pcs ?? item.pending_qty_pcs;
                   const { stockAvailable, status } = getWarehouseStock(item.product_id || item.id, pending);
                   
                   // Pre-fill input value

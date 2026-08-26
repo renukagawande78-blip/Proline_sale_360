@@ -198,17 +198,6 @@ export const getOrderAccessPermission = (
       };
     }
 
-    // Once forwarded to Super Admin (Harshad Sir), the order leaves Sales Admin's queue
-    if (order.status === 'SALES_ADMIN_APPROVED') {
-      return {
-        canView: false,
-        canExecuteActions: false,
-        isDirectBrandOwner: false,
-        isItemBrandOwner: false,
-        accessReason: 'Order forwarded to Super Admin — no longer in Sales Admin scope'
-      };
-    }
-
     if (userHandle === 'All' || userHandle === '*') {
       return {
         canView: true,
@@ -259,14 +248,26 @@ export const getOrderAccessPermission = (
     };
   }
 
-  // ── 5. BILLING / ACCOUNTS — sees only mapped company orders ────────
-  if (role === 'BILLING' || role === 'ACCOUNTS') {
+  // ── 5. BILLING / ACCOUNTS — sees mapped company orders + orders needing accounts approval
+  if (role === 'ACCOUNTS') {
+    const needsAccounts = order.need_accounts_approval === true;
+    const canSee = isBrandAllowed || userHandle === 'All' || userHandle === '*' || needsAccounts;
+    return {
+      canView: canSee,
+      canExecuteActions: canSee,
+      isDirectBrandOwner: isBrandAllowed,
+      isItemBrandOwner: isBrandAllowed,
+      accessReason: needsAccounts ? 'Accounts Review Scope (Approval Needed)' : (canSee ? 'Accounts — Global/Brand Scope' : 'Order outside accounts scope')
+    };
+  }
+
+  if (role === 'BILLING') {
     return {
       canView: isBrandAllowed,
       canExecuteActions: isBrandAllowed,
       isDirectBrandOwner: isBrandAllowed,
       isItemBrandOwner: isBrandAllowed,
-      accessReason: isBrandAllowed ? 'Billing/Accounts — Company Scope' : 'Order outside billing scope'
+      accessReason: isBrandAllowed ? 'Billing — Company Scope' : 'Order outside billing scope'
     };
   }
 
@@ -287,11 +288,43 @@ export const getOrderAccessPermission = (
     canExecuteActions: false,
     isDirectBrandOwner: false,
     isItemBrandOwner: false,
-    accessReason: 'No matching role or brand mapping'
+    accessReason: 'No matching role permission'
   };
 };
 
+/**
+ * Section 5: Order Proceed Logic
+ * Evaluates whether an order can proceed to Stage 3: Stock Check / Ready for Billing.
+ */
+export const checkCanOrderProceed = (order: Order): { canProceed: boolean; reason: string } => {
+  const accountsConditionPassed =
+    order.need_accounts_approval === false ||
+    order.need_accounts_approval === undefined ||
+    order.accounts_approval_status === 'NOT_REQUIRED' ||
+    !order.accounts_approval_status ||
+    (order.need_accounts_approval === true && order.accounts_approval_status === 'APPROVED');
 
+  if (order.need_accounts_approval === true) {
+    if (order.accounts_approval_status === 'PENDING') {
+      return { canProceed: false, reason: 'Waiting for Accounts approval' };
+    }
+    if (order.accounts_approval_status === 'HOLD') {
+      return { canProceed: false, reason: 'Order placed on hold by Accounts' };
+    }
+    if (order.accounts_approval_status === 'REJECTED') {
+      return { canProceed: false, reason: 'Order rejected by Accounts' };
+    }
+  }
+
+  const saleAdminApproved = !!order.sales_admin_approved || (order.status !== 'SUBMITTED' && order.status !== 'DRAFT');
+  const salesPersonApproved = true; // Order entry completed
+
+  const canProceed = saleAdminApproved && salesPersonApproved && accountsConditionPassed;
+  return {
+    canProceed,
+    reason: canProceed ? 'Ready for Stage 3 (Stock Check & Billing Queue)' : 'Waiting for required approvals'
+  };
+};
 
 export const DYNAMIC_AGENCY_FINANCIALS: Record<string, AgencyFinancials> = {};
 
@@ -1668,6 +1701,7 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         mrp_price: Number(prod?.mrp_price || prod?.unit_price || row.unit_price || 0),
         total_price: Number(row.total_price || 0),
         dispatched_qty_pcs: Number(row.dispatched_qty_pcs || 0),
+        issued_qty_pcs: Number(row.issued_qty_pcs || 0),
         pending_qty_pcs: Number(row.pending_qty_pcs || 0),
         remark: ''
       });
@@ -1699,7 +1733,24 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         total_amount: Number(o.total_amount || 0),
         remarks: o.remarks || '',
         delivery_type: 'F.O.R',
-        items: itemsMap[o.id] || itemsMap[o.order_number] || []
+        items: itemsMap[o.id] || itemsMap[o.order_number] || [],
+        sales_admin_approved: o.sales_admin_approved ?? (o.status === 'SALES_ADMIN_APPROVED' || o.status === 'APPROVED'),
+        sales_admin_approved_by: o.sales_admin_approved_by,
+        sales_admin_approved_at: o.sales_admin_approved_at,
+        sales_admin_remarks: o.sales_admin_remarks,
+        superadmin_approved: o.superadmin_approved ?? (o.status === 'APPROVED'),
+        superadmin_approved_by: o.superadmin_approved_by,
+        superadmin_approved_at: o.superadmin_approved_at,
+        superadmin_remarks: o.superadmin_remarks,
+        need_accounts_approval: o.need_accounts_approval ?? false,
+        accounts_approval_status: o.accounts_approval_status || (o.need_accounts_approval ? 'PENDING' : 'NOT_REQUIRED'),
+        accounts_approval_message: o.accounts_approval_message,
+        accounts_approval_requested_by: o.accounts_approval_requested_by,
+        accounts_approval_requested_at: o.accounts_approval_requested_at,
+        accounts_approval_responded_by: o.accounts_approval_responded_by,
+        accounts_approval_responded_at: o.accounts_approval_responded_at,
+        accounts_approval_response_remark: o.accounts_approval_response_remark,
+        order_history: o.order_history || []
       };
     });
 
@@ -1725,6 +1776,15 @@ export const saveOrderToSupabase = async (order: Order): Promise<{ success: bool
       total_qty_pcs: Number(order.total_qty_pcs || 0),
       total_amount: Number(order.total_amount || 0),
       remarks: order.remarks || null,
+      need_accounts_approval: order.need_accounts_approval ?? false,
+      accounts_approval_status: order.accounts_approval_status || (order.need_accounts_approval ? 'PENDING' : 'NOT_REQUIRED'),
+      accounts_approval_message: order.accounts_approval_message || null,
+      accounts_approval_requested_by: order.accounts_approval_requested_by || null,
+      accounts_approval_requested_at: order.accounts_approval_requested_at || null,
+      accounts_approval_responded_by: order.accounts_approval_responded_by || null,
+      accounts_approval_responded_at: order.accounts_approval_responded_at || null,
+      accounts_approval_response_remark: order.accounts_approval_response_remark || null,
+      order_history: order.order_history || [],
       updated_at: nowIso
     };
 
@@ -1753,6 +1813,7 @@ export const saveOrderToSupabase = async (order: Order): Promise<{ success: bool
           unit_price: Number(item.unit_price || 0),
           total_price: Number(item.total_price || 0),
           dispatched_qty_pcs: Number(item.dispatched_qty_pcs || 0),
+          issued_qty_pcs: Number(item.issued_qty_pcs || 0),
           pending_qty_pcs: Number(item.pending_qty_pcs || 0)
         };
         if (isValidUuid(item.product_id)) payloadItem.product_id = item.product_id;
@@ -1789,6 +1850,52 @@ export const updateOrderStatusInSupabase = async (orderId: string, status: strin
   } catch (err: any) {
     console.error('Error updating order status in Supabase:', err?.message || err);
     return { success: false, error: err?.message || 'Failed to update order status' };
+  }
+};
+
+export const updateOrderAccountsApprovalInSupabase = async (
+  orderId: string,
+  accountsData: Partial<Order>
+): Promise<{ success: boolean; error: string | null }> => {
+  try {
+    const payload: Record<string, any> = {
+      updated_at: new Date().toISOString()
+    };
+    if (accountsData.status !== undefined) payload.status = accountsData.status;
+    if (accountsData.sales_admin_approved !== undefined) payload.sales_admin_approved = accountsData.sales_admin_approved;
+    if (accountsData.sales_admin_approved_by !== undefined) payload.sales_admin_approved_by = accountsData.sales_admin_approved_by;
+    if (accountsData.sales_admin_approved_at !== undefined) payload.sales_admin_approved_at = accountsData.sales_admin_approved_at;
+    if (accountsData.sales_admin_remarks !== undefined) payload.sales_admin_remarks = accountsData.sales_admin_remarks;
+    if (accountsData.superadmin_approved !== undefined) payload.superadmin_approved = accountsData.superadmin_approved;
+    if (accountsData.superadmin_approved_by !== undefined) payload.superadmin_approved_by = accountsData.superadmin_approved_by;
+    if (accountsData.superadmin_approved_at !== undefined) payload.superadmin_approved_at = accountsData.superadmin_approved_at;
+    if (accountsData.superadmin_remarks !== undefined) payload.superadmin_remarks = accountsData.superadmin_remarks;
+    if (accountsData.need_accounts_approval !== undefined) payload.need_accounts_approval = accountsData.need_accounts_approval;
+    if (accountsData.accounts_approval_status !== undefined) payload.accounts_approval_status = accountsData.accounts_approval_status;
+    if (accountsData.accounts_approval_message !== undefined) payload.accounts_approval_message = accountsData.accounts_approval_message;
+    if (accountsData.accounts_approval_requested_by !== undefined) payload.accounts_approval_requested_by = accountsData.accounts_approval_requested_by;
+    if (accountsData.accounts_approval_requested_at !== undefined) payload.accounts_approval_requested_at = accountsData.accounts_approval_requested_at;
+    if (accountsData.accounts_approval_responded_by !== undefined) payload.accounts_approval_responded_by = accountsData.accounts_approval_responded_by;
+    if (accountsData.accounts_approval_responded_at !== undefined) payload.accounts_approval_responded_at = accountsData.accounts_approval_responded_at;
+    if (accountsData.accounts_approval_response_remark !== undefined) payload.accounts_approval_response_remark = accountsData.accounts_approval_response_remark;
+    if (accountsData.inventory_status !== undefined) payload.inventory_status = accountsData.inventory_status;
+    if (accountsData.priority !== undefined) payload.priority = accountsData.priority;
+    if (accountsData.invoice_number !== undefined) payload.invoice_number = accountsData.invoice_number;
+    if (accountsData.invoice_date !== undefined) payload.invoice_date = accountsData.invoice_date;
+    if (accountsData.invoice_amount !== undefined) payload.invoice_amount = accountsData.invoice_amount;
+    if (accountsData.credit_days !== undefined) payload.credit_days = accountsData.credit_days;
+    if (accountsData.remarks !== undefined) payload.remarks = accountsData.remarks;
+    if (accountsData.order_history !== undefined) payload.order_history = accountsData.order_history;
+
+    const { error } = await supabase.from('orders').update(payload).eq('id', orderId);
+    if (error) {
+      console.error('Supabase updateOrderAccountsApproval error:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error('Error updating accounts approval in Supabase:', err?.message || err);
+    return { success: false, error: err?.message || 'Failed to update accounts approval' };
   }
 };
 
@@ -1839,6 +1946,7 @@ export const saveOrderItemToSupabase = async (item: OrderItem): Promise<{ succes
       mrp_price: Number(item.mrp_price || 0),
       total_price: Number(item.total_price || 0),
       dispatched_qty_pcs: Number(item.dispatched_qty_pcs || 0),
+      issued_qty_pcs: Number(item.issued_qty_pcs || 0),
       pending_qty_pcs: Number(item.pending_qty_pcs || 0),
       remark: item.remark || null,
       updated_at: new Date().toISOString()
