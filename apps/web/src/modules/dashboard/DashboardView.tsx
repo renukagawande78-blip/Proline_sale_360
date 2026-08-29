@@ -149,8 +149,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <th>Order No</th>
                 <th>Company</th>
                 <th>Agency / Party</th>
-                <th>Total Volume</th>
-                <th>Total PCS</th>
+                <th>Billing Status</th>
+                <th>Billing Qty</th>
                 <th>Status</th>
                 <th>Action</th>
               </tr>
@@ -161,8 +161,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <td><strong style={{ color: '#38bdf8' }}>{order.order_number}</strong></td>
                   <td>{order.company_name}</td>
                   <td>{order.agency_name}</td>
-                  <td>{order.total_box_qty} Boxes</td>
-                  <td><strong style={{ color: '#38bdf8' }}>{order.total_qty_pcs} Pcs</strong></td>
+                  <td>
+                    {order.invoice_number ? (
+                      <div>
+                        <span style={{ color: '#34d399', fontWeight: 800 }}>✅ BILLING DONE</span>
+                        <div style={{ color: '#fbbf24', fontSize: '0.7rem', marginTop: 2 }}>{order.invoice_number}</div>
+                      </div>
+                    ) : (
+                      <span style={{ color: '#94a3b8', fontWeight: 700 }}>⏳ BILLING PENDING</span>
+                    )}
+                  </td>
+                  <td><strong style={{ color: '#38bdf8' }}>{order.invoice_number ? `${(order.billing_total_qty || 0).toLocaleString()} PCS` : '—'}</strong></td>
                   <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
                   <td>
                     <button 

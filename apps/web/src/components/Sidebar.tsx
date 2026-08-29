@@ -12,7 +12,8 @@ import {
   ChevronRight,
   ShoppingBag,
   PackageX,
-  ScanSearch
+  ScanSearch,
+  FileCheck2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PermissionControl } from '../types';
@@ -58,6 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'accounts', label: 'Accounts & Billing', icon: Receipt, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'ACCOUNTS', 'BILLING'] },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, fallbackRoles: ['ALL'] },
     { id: 'returns', label: 'Returns & Damage', icon: PackageX, fallbackRoles: ['ALL'] },
+    { id: 'pod', label: 'POD Queue', icon: FileCheck2, fallbackRoles: ['SUPER_ADMIN', 'SALES_ADMIN'] },
     { id: 'tracker', label: 'Order Tracker', icon: ScanSearch, fallbackRoles: ['ALL'] },
     { id: 'masters', label: 'Master Data', icon: Building2, permissionKey: 'party_view', fallbackRoles: ['ALL'] }
   ];
@@ -83,7 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     // 3. Dispatch Manager operational dashboard and logistics tools
     if (role === 'DISPATCH_MANAGER') {
-      if (item.id === 'orders' || item.id === 'approvals' || item.id === 'accounts' || item.id === 'zones' || item.id === 'masters') {
+      if (item.id === 'orders' || item.id === 'approvals' || item.id === 'accounts' || item.id === 'pod' || item.id === 'zones' || item.id === 'masters') {
         return false;
       }
       return true;
@@ -91,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     // 4. Billing & Accounts dashboard and invoicing tools
     if (role === 'BILLING' || role === 'ACCOUNTS') {
-      if (item.id === 'orders' || item.id === 'dispatch' || item.id === 'zones' || item.id === 'masters') {
+      if (item.id === 'orders' || item.id === 'dispatch' || item.id === 'pod' || item.id === 'zones' || item.id === 'masters') {
         return false;
       }
       return true;

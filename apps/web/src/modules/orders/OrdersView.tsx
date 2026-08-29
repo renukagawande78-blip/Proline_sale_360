@@ -266,8 +266,11 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     const isWaiting = stockCheckResult === 'WAIT_FOR_STOCK';
     onApprove(stockCheckOrder.id, isWaiting
       ? 'Physical stock check: stock unavailable. Salesperson has been alerted.'
-      : 'Physical stock verified. Approved for billing.', {
+      : stockCheckOrder.reattempt_delivery
+        ? 'Physical stock verified for delivery reattempt. Existing invoice retained; billing skipped.'
+        : 'Physical stock verified. Approved for billing.', {
       directApprove: true,
+      reattemptBilling: !!stockCheckOrder.reattempt_delivery,
       payment_type: stockCheckOrder.payment_type || 'CREDIT',
       priority: stockCheckPriority,
       inventory_status: stockCheckResult
@@ -682,11 +685,6 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               ⚡ View {countApprovalNeeded} Pending Orders
             </button>
 
-            {isSalesAdmin && selectedOrder && (selectedOrder.status === 'OUT_FOR_DELIVERY' || selectedOrder.status === 'DISPATCHED') && onOpenPODModal && (
-              <button type="button" onClick={() => onOpenPODModal(selectedOrder)} style={{ width: '100%', padding: '0.55rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, color: '#34d399', cursor: 'pointer', fontWeight: 800, fontSize: '0.8rem' }}>
-                Verify POD &amp; Delivery
-              </button>
-            )}
           </div>
         )}
 
@@ -845,6 +843,18 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         >
                           <FileText size={13} /> Details
                         </button>
+                        {isSalesAdmin && onOpenPODModal && ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) && !order.pod_status && (
+                          <button
+                            onClick={event => {
+                              event.stopPropagation();
+                              onOpenPODModal(order);
+                            }}
+                            style={{ background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', color: '#ffffff', padding: '0.3rem 0.55rem', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', fontWeight: 900, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(16,185,129,0.35)' }}
+                            title="Verify proof of delivery"
+                          >
+                            <CheckCircle2 size={12} /> Verify POD
+                          </button>
+                        )}
                         {/* Super Admin Quick Response Button */}
                         {isSuperAdmin && order.need_accounts_approval && order.accounts_approval_status === 'PENDING' && (
                           <button
@@ -1156,6 +1166,28 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
           {/* Section 1: Sales Admin 4 Required Action Buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.75rem' }}>
+            {isSalesAdmin && (selectedOrder.status === 'OUT_FOR_DELIVERY' || selectedOrder.status === 'DISPATCHED') && onOpenPODModal && (
+              <button
+                type="button"
+                onClick={() => onOpenPODModal(selectedOrder)}
+                style={{ width: '100%', padding: '0.65rem', background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', borderRadius: 8, color: '#ffffff', cursor: 'pointer', fontWeight: 900, fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', boxShadow: '0 4px 12px rgba(16,185,129,0.25)' }}
+              >
+                <CheckCircle2 size={15} /> Verify POD After Delivery
+              </button>
+            )}
+
+            {selectedOrder.pod_status === 'CLEAN' && (
+              <div style={{ width: '100%', padding: '0.55rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, color: '#34d399', fontWeight: 800, fontSize: '0.78rem', textAlign: 'center' }}>
+                ✅ POD Verified — No Issue
+              </div>
+            )}
+
+            {selectedOrder.pod_status === 'ISSUE_RAISED' && (
+              <div style={{ width: '100%', padding: '0.55rem', background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: 8, color: '#fb7185', fontWeight: 800, fontSize: '0.78rem', textAlign: 'center' }}>
+                ⚠️ POD Issue Raised — {selectedOrder.pod_issue_type || 'Exception'}
+              </div>
+            )}
+
             <button
               type="button"
               onClick={(event) => {
@@ -1586,12 +1618,14 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             </div>
 
             <p style={{ color: '#94a3b8', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1rem' }}>
-              Verify physical stock before routing this order. A wait-for-stock decision alerts the salesperson; an in-stock decision routes the order to Billing.
+              {stockCheckOrder.reattempt_delivery
+                ? 'Verify replacement stock for this delivery reattempt. If stock is ready, send it to Billing for any required invoice modification before Dispatch.'
+                : 'Verify physical stock before routing this order. A wait-for-stock decision alerts the salesperson; an in-stock decision routes the order to Billing.'}
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
               {[
-                { value: 'IN_STOCK' as const, title: 'In Stock', note: 'Approve for Billing', color: '#10b981', icon: '✅' },
+                { value: 'IN_STOCK' as const, title: 'In Stock', note: stockCheckOrder.reattempt_delivery ? 'Send to Billing Review' : 'Approve for Billing', color: '#10b981', icon: '✅' },
                 { value: 'WAIT_FOR_STOCK' as const, title: 'Wait for Stock', note: 'Alert salesperson', color: '#f59e0b', icon: '⏳' }
               ].map(option => (
                 <button key={option.value} type="button" onClick={() => setStockCheckResult(option.value)} style={{ padding: '0.9rem', textAlign: 'left', borderRadius: 10, cursor: 'pointer', border: `2px solid ${stockCheckResult === option.value ? option.color : '#334155'}`, background: stockCheckResult === option.value ? `${option.color}20` : '#0b1120', color: '#f8fafc' }}>

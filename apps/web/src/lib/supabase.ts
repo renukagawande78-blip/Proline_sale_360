@@ -1711,6 +1711,14 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
       const comp = compMap.get(o.company_id);
       const ag = agencyMap.get(o.agency_id);
       const usr = userMap.get(o.salesperson_id);
+      const latestDispatchDetails = [...(o.order_history || [])]
+        .reverse()
+        .find((entry: any) => entry.action === 'DISPATCH_TRANSPORT_ASSIGNED')?.details || {};
+      const hasReattemptHistory = (o.order_history || []).some((entry: any) => entry.action === 'REATTEMPT_DELIVERY');
+      const latestGrnEntry = [...(o.order_history || [])].reverse().find((entry: any) =>
+        ['GRN_REQUESTED_BY_ADMIN', 'GRN_FORWARDED_TO_BILLING', 'GRN_CREATED', 'ORDER_COMPLETED_AFTER_GRN'].includes(entry.action)
+      );
+      const latestPodQuery = [...(o.order_history || [])].reverse().find((entry: any) => entry.action === 'POD_QUERY_RAISED');
 
       return {
         id: o.id,
@@ -1731,6 +1739,39 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         total_loose_pcs: Number(o.total_loose_pcs || 0),
         total_qty_pcs: Number(o.total_qty_pcs || 0),
         total_amount: Number(o.total_amount || 0),
+        invoice_number: o.invoice_number || undefined,
+        invoice_date: o.invoice_date || undefined,
+        invoice_amount: o.invoice_amount == null ? undefined : Number(o.invoice_amount),
+        billing_total_qty: o.billing_total_qty == null
+          ? (itemsMap[o.id] || []).reduce((sum, item) => sum + Number(item.issued_qty_pcs || 0), 0)
+          : Number(o.billing_total_qty),
+        credit_days: o.credit_days == null ? undefined : Number(o.credit_days),
+        vehicle_number: o.vehicle_number || latestDispatchDetails.vehicle_number || undefined,
+        is_company_vehicle: o.is_company_vehicle == null ? latestDispatchDetails.is_company_vehicle : Boolean(o.is_company_vehicle),
+        driver_name: o.driver_name || latestDispatchDetails.driver_name || undefined,
+        driver_mobile: o.driver_mobile || latestDispatchDetails.driver_mobile || undefined,
+        tempo_number: o.tempo_number || latestDispatchDetails.tempo_number || undefined,
+        booking_id: o.booking_id || latestDispatchDetails.booking_id || undefined,
+        rental_agency_name: o.rental_agency_name || latestDispatchDetails.rental_agency_name || undefined,
+        freight_amount: o.freight_amount == null ? latestDispatchDetails.freight_amount : Number(o.freight_amount),
+        dispatch_remark: o.dispatch_remark || latestDispatchDetails.dispatch_remark || undefined,
+        reattempt_delivery: hasReattemptHistory && (o.status === 'SALES_ADMIN_APPROVED' || o.status === 'WAIT_FOR_STOCK' || o.status === 'APPROVED'),
+        grn_workflow_status: latestGrnEntry?.action === 'GRN_REQUESTED_BY_ADMIN'
+          ? 'PENDING_SALES_ADMIN'
+          : latestGrnEntry?.action === 'GRN_FORWARDED_TO_BILLING'
+            ? 'PENDING_BILLING'
+            : latestGrnEntry?.action === 'GRN_CREATED'
+              ? 'PENDING_SALES_ADMIN_COMPLETION'
+              : latestGrnEntry?.action === 'ORDER_COMPLETED_AFTER_GRN' ? 'COMPLETED' : undefined,
+        grn_number: o.grn_number || latestGrnEntry?.details?.grn_number || undefined,
+        grn_date: o.grn_date || latestGrnEntry?.details?.grn_date || undefined,
+        grn_value: o.grn_value == null ? latestGrnEntry?.details?.grn_value : Number(o.grn_value),
+        grn_remark: o.grn_remark || latestGrnEntry?.details?.grn_remark || undefined,
+        pod_status: o.pod_status || (o.status === 'POD_ISSUE_RAISED' ? 'ISSUE_RAISED' : undefined),
+        pod_issue_type: o.pod_issue_type || latestPodQuery?.details?.issue_type,
+        pod_issue_details: o.pod_issue_details || latestPodQuery?.details?.message,
+        pod_query_raised_by: o.pod_query_raised_by || latestPodQuery?.details?.raised_by,
+        pod_query_raised_at: o.pod_query_raised_at || latestPodQuery?.details?.raised_at,
         remarks: o.remarks || '',
         delivery_type: 'F.O.R',
         items: itemsMap[o.id] || itemsMap[o.order_number] || [],
@@ -1883,11 +1924,35 @@ export const updateOrderAccountsApprovalInSupabase = async (
     if (accountsData.invoice_number !== undefined) payload.invoice_number = accountsData.invoice_number;
     if (accountsData.invoice_date !== undefined) payload.invoice_date = accountsData.invoice_date;
     if (accountsData.invoice_amount !== undefined) payload.invoice_amount = accountsData.invoice_amount;
+    if (accountsData.billing_total_qty !== undefined) payload.billing_total_qty = accountsData.billing_total_qty;
     if (accountsData.credit_days !== undefined) payload.credit_days = accountsData.credit_days;
+    if (accountsData.vehicle_number !== undefined) payload.vehicle_number = accountsData.vehicle_number;
+    if (accountsData.is_company_vehicle !== undefined) payload.is_company_vehicle = accountsData.is_company_vehicle;
+    if (accountsData.driver_name !== undefined) payload.driver_name = accountsData.driver_name;
+    if (accountsData.driver_mobile !== undefined) payload.driver_mobile = accountsData.driver_mobile;
+    if (accountsData.tempo_number !== undefined) payload.tempo_number = accountsData.tempo_number;
+    if (accountsData.booking_id !== undefined) payload.booking_id = accountsData.booking_id;
+    if (accountsData.rental_agency_name !== undefined) payload.rental_agency_name = accountsData.rental_agency_name;
+    if (accountsData.freight_amount !== undefined) payload.freight_amount = accountsData.freight_amount;
+    if (accountsData.dispatch_remark !== undefined) payload.dispatch_remark = accountsData.dispatch_remark;
     if (accountsData.remarks !== undefined) payload.remarks = accountsData.remarks;
     if (accountsData.order_history !== undefined) payload.order_history = accountsData.order_history;
 
-    const { error } = await supabase.from('orders').update(payload).eq('id', orderId);
+    let { error } = await supabase.from('orders').update(payload).eq('id', orderId);
+    if (error?.message?.includes('billing_total_qty') || error?.message?.includes('column orders.')) {
+      delete payload.billing_total_qty;
+      delete payload.vehicle_number;
+      delete payload.is_company_vehicle;
+      delete payload.driver_name;
+      delete payload.driver_mobile;
+      delete payload.tempo_number;
+      delete payload.booking_id;
+      delete payload.rental_agency_name;
+      delete payload.freight_amount;
+      delete payload.dispatch_remark;
+      const retryResult = await supabase.from('orders').update(payload).eq('id', orderId);
+      error = retryResult.error;
+    }
     if (error) {
       console.error('Supabase updateOrderAccountsApproval error:', error.message);
       return { success: false, error: error.message };

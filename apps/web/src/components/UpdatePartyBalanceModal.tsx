@@ -18,7 +18,7 @@ import {
   Layers
 } from 'lucide-react';
 import { Agency, AgencyFinancials } from '../types';
-import { getAgencyFinancialsByAgencyId, updateAgencyFinancials, MOCK_AGENCIES } from '../lib/supabase';
+import { fetchAgenciesFromSupabaseTable, getAgencyFinancialsByAgencyId, updateAgencyFinancials, MOCK_AGENCIES } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { downloadSampleCSV, parseCSVContent } from '../lib/masterImportExport';
 
@@ -38,6 +38,8 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
   const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'SINGLE' | 'BULK_CSV'>('SINGLE');
   const [selectedAgencyId, setSelectedAgencyId] = useState<string>('');
+  const [agencyOptions, setAgencyOptions] = useState<Agency[]>(MOCK_AGENCIES);
+  const [isLoadingAgencies, setIsLoadingAgencies] = useState(false);
   
   // Form fields
   const [creditLimit, setCreditLimit] = useState<number>(250000);
@@ -58,9 +60,23 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
 
   useEffect(() => {
     if (isOpen) {
-      const defaultId = initialAgencyId || MOCK_AGENCIES[0]?.id || '';
-      setSelectedAgencyId(defaultId);
-      loadAgencyFinancials(defaultId);
+      setIsLoadingAgencies(true);
+      fetchAgenciesFromSupabaseTable()
+        .then(({ agencies }) => {
+          const availableAgencies = agencies.length > 0 ? agencies : MOCK_AGENCIES;
+          setAgencyOptions(availableAgencies);
+          const requestedAgencyExists = availableAgencies.some(agency => agency.id === initialAgencyId);
+          const defaultId = requestedAgencyExists ? initialAgencyId! : (availableAgencies[0]?.id || '');
+          setSelectedAgencyId(defaultId);
+          loadAgencyFinancials(defaultId);
+        })
+        .catch(() => {
+          setAgencyOptions(MOCK_AGENCIES);
+          const defaultId = initialAgencyId || MOCK_AGENCIES[0]?.id || '';
+          setSelectedAgencyId(defaultId);
+          loadAgencyFinancials(defaultId);
+        })
+        .finally(() => setIsLoadingAgencies(false));
     }
   }, [isOpen, initialAgencyId]);
 
@@ -105,7 +121,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
     let updatedCount = 0;
     let notFoundCount = 0;
 
-    const rowsToProcess = parsedRows.length > 0 ? parsedRows : MOCK_AGENCIES.map(a => ({
+    const rowsToProcess = parsedRows.length > 0 ? parsedRows : agencyOptions.map(a => ({
       agency_code: a.agency_code || a.id,
       agency_name: a.agency_name,
       credit_limit: a.credit_limit || 300000,
@@ -118,7 +134,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
       const lookupName = (row.agency_name || row['Agency / Party Name'] || row.name || '').toString().trim().toLowerCase();
 
       // Strict Party Match by Party ID / Agency Code or Name
-      const existingAgency = MOCK_AGENCIES.find(a => 
+      const existingAgency = agencyOptions.find(a =>
         (a.id || '').toLowerCase() === lookupCode ||
         (a.agency_code || '').toLowerCase() === lookupCode ||
         (lookupName && (a.agency_name || '').toLowerCase() === lookupName)
@@ -156,7 +172,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
 
   if (!isOpen) return null;
 
-  const selectedAgency = MOCK_AGENCIES.find(a => a.id === selectedAgencyId);
+  const selectedAgency = agencyOptions.find(a => a.id === selectedAgencyId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -433,7 +449,9 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
                 outline: 'none'
               }}
             >
-              {MOCK_AGENCIES.map(agency => (
+              {isLoadingAgencies && <option value="">Loading agencies...</option>}
+              {!isLoadingAgencies && agencyOptions.length === 0 && <option value="">No active agencies found</option>}
+              {agencyOptions.map(agency => (
                 <option key={agency.id} value={agency.id}>
                   {agency.agency_name} ({agency.agency_code}) - {agency.city} [{agency.zone_name || 'City-D'}]
                 </option>

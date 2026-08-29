@@ -7,7 +7,7 @@ interface PODVerificationModalProps {
   order: Order | null;
   isOpen: boolean;
   onClose: () => void;
-  onConfirmPOD: (orderId: string, podStatus: 'CLEAN' | 'ISSUE_RAISED', issueType?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN', details?: string) => void;
+  onConfirmPOD: (orderId: string, podStatus: 'CLEAN' | 'ISSUE_RAISED', issueType?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN' | 'OTHER', details?: string) => void;
 }
 
 export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
@@ -18,7 +18,7 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
 }) => {
   const { addNotification } = useNotifications();
   const [verificationType, setVerificationType] = useState<'CLEAN' | 'ISSUE_RAISED'>('CLEAN');
-  const [issueType, setIssueType] = useState<'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN'>('SHORTAGE');
+  const [issueType, setIssueType] = useState<'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN' | 'OTHER'>('SHORTAGE');
   const [details, setDetails] = useState('');
 
   if (!isOpen || !order) return null;
@@ -28,11 +28,12 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
       onConfirmPOD(order.id, 'CLEAN');
       addNotification({
         title: `✅ POD Verified Clean: ${order.order_number}`,
-        message: `Delivery confirmed with no issues for ${order.agency_name}. Status marked DELIVERED.`,
+        message: `Delivery confirmed with no issues for ${order.agency_name}. Order marked COMPLETED.`,
         event_type: 'POD_CLEAN',
         order_id: order.id
       });
     } else {
+      if (!details.trim()) return;
       onConfirmPOD(order.id, 'ISSUE_RAISED', issueType, details);
       addNotification({
         title: `⚠️ Delivery Exception Raised: ${order.order_number}`,
@@ -133,15 +134,17 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
               <option value="SHORTAGE">🚨 Shortage — Discrepancy in Delivered Quantity</option>
               <option value="DAMAGED">📦 Damaged Goods — Physical Goods Damaged in Transport</option>
               <option value="GOOD_RETURN">🔄 Good Return — Intact Goods Returned by Customer</option>
+              <option value="OTHER">📝 Other — Any Other Delivery Query</option>
             </select>
 
             <textarea
               rows={3}
               value={details}
               onChange={e => setDetails(e.target.value)}
-              placeholder="Enter specific discrepancy details, damaged item count, or return notes..."
+              placeholder="Enter the message received from the salesperson or driver..."
               style={{ width: '100%', padding: '0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.8rem' }}
             />
+            {!details.trim() && <span style={{ fontSize: '0.7rem', color: '#fbbf24', fontWeight: 700, display: 'block', marginTop: 4 }}>Salesperson / driver message is mandatory.</span>}
             <span style={{ fontSize: '0.7rem', color: '#fb7185', fontWeight: 700, display: 'block', marginTop: 4 }}>
               ⚠️ Exception alert will be automatically routed to Chirag Sir (Super Admin) & Sales Admin Exception Desk.
             </span>
@@ -154,6 +157,7 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
           <button
             className={verificationType === 'CLEAN' ? 'btn btn-success' : 'btn btn-danger'}
             onClick={handleConfirm}
+            disabled={verificationType === 'ISSUE_RAISED' && !details.trim()}
             style={{ fontWeight: 800 }}
           >
             {verificationType === 'CLEAN' ? 'Confirm Delivery (Clean POD)' : 'Raise Delivery Exception to Chirag Sir'}

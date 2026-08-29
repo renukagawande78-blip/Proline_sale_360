@@ -26,6 +26,8 @@ interface ReturnsRegisterViewProps {
   onOpenProcessReturnModal?: (order: Order) => void;
   onSelectOrder?: (order: Order) => void;
   onResolveException?: (orderId: string, action: 'CREATE_GRN' | 'REATTEMPT_DELIVERY', grnNumber?: string, grnValue?: number) => void;
+  onForwardGrnToBilling?: (orderId: string) => void;
+  onCompleteOrderAfterGrn?: (orderId: string) => void;
 }
 
 type ReturnStatusFilter = 'ALL' | 'PENDING_ADMIN_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DISPATCH_PROCESSED';
@@ -50,7 +52,9 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
   orders,
   onOpenProcessReturnModal,
   onSelectOrder,
-  onResolveException
+  onResolveException,
+  onForwardGrnToBilling,
+  onCompleteOrderAfterGrn
 }) => {
   const { currentUser } = useAuth();
   const role = currentUser?.role_name || '';
@@ -167,7 +171,12 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
               {podExceptionOrders.map(ex => (
                 <button
                   key={ex.id}
-                  onClick={() => setSelectedExceptionOrder(ex)}
+                  onClick={() => {
+                    setSelectedExceptionOrder(ex);
+                    setExceptionAction('CREATE_GRN');
+                    setGrnNumberInput('');
+                    setGrnValueInput(ex.invoice_amount || ex.total_amount || 0);
+                  }}
                   style={{
                     padding: '0.45rem 0.85rem',
                     background: '#f43f5e',
@@ -574,6 +583,15 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                 SELECT RESOLUTION OPTION
               </label>
 
+              {selectedExceptionOrder.grn_workflow_status === 'PENDING_SALES_ADMIN_COMPLETION' && role === 'SALES_ADMIN' ? (
+                <div style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid #34d399', borderRadius: 8, padding: '1rem', color: '#34d399', fontSize: '0.8rem', fontWeight: 700 }}>
+                  Billing created GRN <strong>{selectedExceptionOrder.grn_number}</strong> dated {selectedExceptionOrder.grn_date || '—'} for ₹{Number(selectedExceptionOrder.grn_value || 0).toLocaleString('en-IN')}. Remark: {selectedExceptionOrder.grn_remark || '—'}. Verify the GRN to mark this order completed.
+                </div>
+              ) : selectedExceptionOrder.grn_workflow_status === 'PENDING_SALES_ADMIN' && role === 'SALES_ADMIN' ? (
+                <div style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid #38bdf8', borderRadius: 8, padding: '1rem', color: '#38bdf8', fontSize: '0.8rem', fontWeight: 700 }}>
+                  Admin has forwarded this GRN request. Review the exception and forward it to Billing for GRN creation.
+                </div>
+              ) : <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
                 <button
                   type="button"
@@ -589,7 +607,7 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                     cursor: 'pointer'
                   }}
                 >
-                  Option A: Create GRN & Complete Order
+                  Option A: Forward GRN Request to Sales Admin
                 </button>
 
                 <button
@@ -611,34 +629,14 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
               </div>
 
               {exceptionAction === 'CREATE_GRN' ? (
-                <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.85rem' }}>
-                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>
-                    GRN NUMBER (Mandatory)*
-                  </label>
-                  <input
-                    type="text"
-                    value={grnNumberInput}
-                    onChange={e => setGrnNumberInput(e.target.value)}
-                    placeholder="e.g. GRN-2026-8811"
-                    style={{ width: '100%', padding: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 700, marginBottom: '0.65rem' }}
-                  />
-
-                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>
-                    GRN SETTLEMENT VALUE (₹)*
-                  </label>
-                  <input
-                    type="number"
-                    value={grnValueInput || selectedExceptionOrder.total_amount}
-                    onChange={e => setGrnValueInput(Number(e.target.value))}
-                    placeholder="GRN Amount"
-                    style={{ width: '100%', padding: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 700 }}
-                  />
+                <div style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid #34d399', borderRadius: 8, padding: '0.85rem', color: '#34d399', fontSize: '0.775rem' }}>
+                  The GRN request will be sent to Sales Admin for review. Billing will enter the GRN number and value after Sales Admin forwards it.
                 </div>
               ) : (
                 <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid #f59e0b', borderRadius: 8, padding: '0.85rem', color: '#fbbf24', fontSize: '0.775rem' }}>
                   🚨 <strong>High Priority Reattempt:</strong> Order will be re-routed back to <strong>Stage 5 (Dispatch Team)</strong> with a High Priority alert flag for re-dispatch.
                 </div>
-              )}
+              )}</>}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
@@ -646,6 +644,16 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
               <button
                 className={exceptionAction === 'CREATE_GRN' ? 'btn btn-success' : 'btn btn-warning'}
                 onClick={() => {
+                  if (selectedExceptionOrder.grn_workflow_status === 'PENDING_SALES_ADMIN_COMPLETION' && role === 'SALES_ADMIN') {
+                    onCompleteOrderAfterGrn?.(selectedExceptionOrder.id);
+                    setSelectedExceptionOrder(null);
+                    return;
+                  }
+                  if (selectedExceptionOrder.grn_workflow_status === 'PENDING_SALES_ADMIN' && role === 'SALES_ADMIN') {
+                    onForwardGrnToBilling?.(selectedExceptionOrder.id);
+                    setSelectedExceptionOrder(null);
+                    return;
+                  }
                   if (onResolveException) {
                     onResolveException(selectedExceptionOrder.id, exceptionAction, grnNumberInput, grnValueInput);
                   }
@@ -653,7 +661,11 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                 }}
                 style={{ fontWeight: 800 }}
               >
-                {exceptionAction === 'CREATE_GRN' ? 'Create GRN & Mark Order Completed' : 'Re-route to Stage 5 Dispatch Team'}
+                {selectedExceptionOrder.grn_workflow_status === 'PENDING_SALES_ADMIN_COMPLETION' && role === 'SALES_ADMIN'
+                  ? 'Mark Order Completed'
+                  : selectedExceptionOrder.grn_workflow_status === 'PENDING_SALES_ADMIN' && role === 'SALES_ADMIN'
+                  ? 'Forward GRN Request to Billing'
+                  : exceptionAction === 'CREATE_GRN' ? 'Forward GRN Request to Sales Admin' : 'Re-route to Stage 3 Stock Check'}
               </button>
             </div>
           </div>

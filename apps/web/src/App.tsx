@@ -9,6 +9,7 @@ import { AccountsPage } from './pages/AccountsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { ReturnsRegisterView } from './modules/returns/ReturnsRegisterView';
 import { OrderTrackerView } from './modules/tracker/OrderTrackerView';
+import { PODQueueView } from './modules/pod/PODQueueView';
 import { CreateOrderModal } from './components/CreateOrderModal';
 import { OrderApprovalModal } from './components/OrderApprovalModal';
 import { DispatchModal } from './components/DispatchModal';
@@ -337,6 +338,68 @@ const MainLayout: React.FC = () => {
     const approverRole = currentUser?.role_name || 'SALES_ADMIN';
     const timestamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+    if (approvalDetails?.reattemptBilling) {
+      const target = orders.find(order => order.id === orderId);
+      const isWaiting = approvalDetails.inventory_status === 'WAIT_FOR_STOCK';
+      const nextStatus = isWaiting ? 'WAIT_FOR_STOCK' : 'APPROVED';
+      setOrders(prev => prev.map(order => order.id === orderId ? {
+        ...order,
+        status: nextStatus,
+        inventory_status: approvalDetails.inventory_status,
+        priority: 'HIGH',
+        reattempt_delivery: true,
+        pod_status: undefined,
+        pod_issue_type: undefined,
+        pod_issue_details: undefined,
+        remarks
+      } : order));
+      updateOrderAccountsApprovalInSupabase(orderId, {
+        status: nextStatus,
+        inventory_status: approvalDetails.inventory_status,
+        priority: 'HIGH',
+        remarks
+      });
+      if (target) {
+        addNotification({
+          title: isWaiting ? `⏳ Reattempt Waiting for Stock: ${target.order_number}` : `🚚 Reattempt Ready for Dispatch: ${target.order_number}`,
+          message: isWaiting
+            ? 'Replacement stock is unavailable. Order remains at Stage 3.'
+            : 'Replacement stock verified. Order sent to Billing for invoice review or modification before Stage 5 Dispatch.',
+          event_type: isWaiting ? 'WAIT_FOR_STOCK' : 'REATTEMPT_DELIVERY',
+          order_id: target.id
+        });
+      }
+      setSelectedOrderForApproval(null);
+      return;
+    }
+
+    if (approvalDetails?.stockReady) {
+      const target = orders.find(order => order.id === orderId);
+      setOrders(prev => prev.map(order => order.id === orderId ? {
+        ...order,
+        status: 'APPROVED',
+        inventory_status: 'IN_STOCK',
+        priority: approvalDetails.priority || order.priority || 'MEDIUM',
+        remarks: remarks || 'Stock received and marked ready for billing'
+      } : order));
+      updateOrderAccountsApprovalInSupabase(orderId, {
+        status: 'APPROVED',
+        inventory_status: 'IN_STOCK',
+        priority: approvalDetails.priority || target?.priority || 'MEDIUM',
+        remarks: remarks || 'Stock received and marked ready for billing'
+      });
+      if (target) {
+        addNotification({
+          title: `✅ Stock Ready: ${target.order_number}`,
+          message: `${approverName} marked stock ready. Order moved to the Stage 4 billing queue.`,
+          event_type: 'ORDER_APPROVED',
+          order_id: target.id
+        });
+      }
+      setSelectedOrderForApproval(null);
+      return;
+    }
+
     const isSuperAdminUser = approverRole === 'SUPER_ADMIN' ||
       (currentUser?.full_name || '').toLowerCase().includes('chirag') ||
       (currentUser?.full_name || '').toLowerCase().includes('harshad');
@@ -514,23 +577,32 @@ const MainLayout: React.FC = () => {
     });
   };
 
-  const handleConfirmPOD = (orderId: string, podStatus: 'CLEAN' | 'ISSUE_RAISED', issueType?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN', details?: string) => {
+  const handleConfirmPOD = (orderId: string, podStatus: 'CLEAN' | 'ISSUE_RAISED', issueType?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN' | 'OTHER', details?: string) => {
     const timestamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const verifier = currentUser?.full_name || 'Sales Admin';
+    const target = orders.find(order => order.id === orderId);
+    const podHistoryEntry = podStatus === 'ISSUE_RAISED' ? {
+      id: generateUuid(), order_id: orderId, action: 'POD_QUERY_RAISED', performed_by: verifier,
+      performed_at: new Date().toISOString(), remarks: details,
+      details: { issue_type: issueType, message: details, raised_by: verifier, raised_at: timestamp }
+    } : undefined;
     setOrders(prev => prev.map(o => o.id === orderId ? {
       ...o,
-      status: podStatus === 'CLEAN' ? 'DELIVERED' : 'POD_ISSUE_RAISED',
+      status: podStatus === 'CLEAN' ? 'COMPLETED' : 'POD_ISSUE_RAISED',
       pod_status: podStatus,
       pod_issue_type: issueType,
       pod_issue_details: details,
+      pod_query_raised_by: podStatus === 'ISSUE_RAISED' ? verifier : o.pod_query_raised_by,
+      pod_query_raised_at: podStatus === 'ISSUE_RAISED' ? timestamp : o.pod_query_raised_at,
       need_accounts_approval: podStatus === 'ISSUE_RAISED',
       accounts_approval_status: podStatus === 'ISSUE_RAISED' ? 'PENDING' : o.accounts_approval_status,
       accounts_approval_message: podStatus === 'ISSUE_RAISED' ? `POD ${issueType || 'ISSUE'}: ${details || 'Sales Admin requests a decision.'}` : o.accounts_approval_message,
       accounts_approval_requested_by: podStatus === 'ISSUE_RAISED' ? verifier : o.accounts_approval_requested_by,
-      accounts_approval_requested_at: podStatus === 'ISSUE_RAISED' ? timestamp : o.accounts_approval_requested_at
+      accounts_approval_requested_at: podStatus === 'ISSUE_RAISED' ? timestamp : o.accounts_approval_requested_at,
+      order_history: podHistoryEntry ? [...(o.order_history || []), podHistoryEntry] : o.order_history
     } : o));
     if (podStatus === 'CLEAN') {
-      updateOrderStatusInSupabase(orderId, 'DELIVERED');
+      updateOrderStatusInSupabase(orderId, 'COMPLETED', 'POD verified with no issue');
     } else {
       updateOrderAccountsApprovalInSupabase(orderId, {
         status: 'POD_ISSUE_RAISED',
@@ -538,7 +610,8 @@ const MainLayout: React.FC = () => {
         accounts_approval_status: 'PENDING',
         accounts_approval_message: `POD ${issueType || 'ISSUE'}: ${details || 'Sales Admin requests a decision.'}`,
         accounts_approval_requested_by: verifier,
-        accounts_approval_requested_at: timestamp
+        accounts_approval_requested_at: timestamp,
+        order_history: podHistoryEntry ? [...(target?.order_history || []), podHistoryEntry] : target?.order_history
       });
     }
   };
@@ -548,33 +621,49 @@ const MainLayout: React.FC = () => {
     if (!target) return;
 
     if (action === 'CREATE_GRN') {
-      const autoGrn = grnNumber || `GRN-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      const historyEntry = { id: generateUuid(), order_id: orderId, action: 'GRN_REQUESTED_BY_ADMIN', performed_by: currentUser?.full_name || 'Admin', performed_at: new Date().toISOString(), remarks: 'GRN request forwarded to Sales Admin' };
       setOrders(prev => prev.map(o => o.id === orderId ? {
         ...o,
-        status: 'COMPLETED',
-        grn_number: autoGrn,
-        grn_value: grnValue || o.total_amount
+        grn_workflow_status: 'PENDING_SALES_ADMIN',
+        order_history: [...(o.order_history || []), historyEntry]
       } : o));
-
-      updateOrderStatusInSupabase(orderId, 'COMPLETED', `GRN ${autoGrn}`);
+      updateOrderAccountsApprovalInSupabase(orderId, { order_history: [...(target.order_history || []), historyEntry], remarks: 'GRN request forwarded to Sales Admin' });
 
       addNotification({
-        title: `✅ Admin Exception Resolved (GRN Created): ${target.order_number}`,
-        message: `Sales Admin / Chirag Sir generated GRN ${autoGrn} for ₹${(grnValue || target.total_amount).toLocaleString()}. Order marked COMPLETED.`,
-        event_type: 'GRN_CREATED',
+        title: `📋 GRN Request Sent to Sales Admin: ${target.order_number}`,
+        message: 'Admin forwarded the delivery exception to Sales Admin for GRN review.',
+        event_type: 'GRN_REQUESTED',
         order_id: target.id
       });
     } else {
+      const historyEntry = {
+        id: generateUuid(),
+        order_id: orderId,
+        action: 'REATTEMPT_DELIVERY',
+        performed_by: currentUser?.full_name || 'Sales Admin',
+        performed_at: new Date().toISOString(),
+        remarks: 'Reattempt delivery routed to Stage 3 stock check'
+      };
       setOrders(prev => prev.map(o => o.id === orderId ? {
         ...o,
-        status: 'APPROVED',
+        status: 'SALES_ADMIN_APPROVED',
         priority: 'HIGH',
-        pod_status: undefined,
-        pod_issue_type: undefined,
-        pod_issue_details: undefined
+        inventory_status: 'IN_STOCK',
+        reattempt_delivery: true,
+        need_accounts_approval: false,
+        accounts_approval_status: 'NOT_REQUIRED',
+        order_history: [...(o.order_history || []), historyEntry]
       } : o));
 
-      updateOrderStatusInSupabase(orderId, 'APPROVED', 'Reattempt delivery');
+      updateOrderAccountsApprovalInSupabase(orderId, {
+        status: 'SALES_ADMIN_APPROVED',
+        priority: 'HIGH',
+        inventory_status: 'IN_STOCK',
+        need_accounts_approval: false,
+        accounts_approval_status: 'NOT_REQUIRED',
+        order_history: [...(target.order_history || []), historyEntry],
+        remarks: 'Reattempt delivery — route to Stage 3 stock check'
+      });
 
       addNotification({
         title: `🚨 Reattempt Delivery Dispatched: ${target.order_number}`,
@@ -583,6 +672,33 @@ const MainLayout: React.FC = () => {
         order_id: target.id
       });
     }
+  };
+
+  const handleForwardGrnToBilling = (orderId: string) => {
+    const target = orders.find(order => order.id === orderId);
+    if (!target) return;
+    const historyEntry = { id: generateUuid(), order_id: orderId, action: 'GRN_FORWARDED_TO_BILLING', performed_by: currentUser?.full_name || 'Sales Admin', performed_at: new Date().toISOString(), remarks: 'GRN request approved and forwarded to Billing' };
+    setOrders(prev => prev.map(order => order.id === orderId ? { ...order, grn_workflow_status: 'PENDING_BILLING', order_history: [...(order.order_history || []), historyEntry] } : order));
+    updateOrderAccountsApprovalInSupabase(orderId, { order_history: [...(target.order_history || []), historyEntry], remarks: 'GRN request forwarded to Billing' });
+    addNotification({ title: `📨 GRN Forwarded to Billing: ${target.order_number}`, message: 'Sales Admin approved the GRN request. Billing must enter the GRN number and value.', event_type: 'GRN_FORWARDED', order_id: orderId });
+  };
+
+  const handleCompleteGrn = (orderId: string, grnNumber: string, grnDate: string, grnValue: number, grnRemark: string) => {
+    const target = orders.find(order => order.id === orderId);
+    if (!target) return;
+    const historyEntry = { id: generateUuid(), order_id: orderId, action: 'GRN_CREATED', performed_by: currentUser?.full_name || 'Billing', performed_at: new Date().toISOString(), remarks: grnRemark, details: { grn_number: grnNumber, grn_date: grnDate, grn_value: grnValue, grn_remark: grnRemark } };
+    setOrders(prev => prev.map(order => order.id === orderId ? { ...order, grn_workflow_status: 'PENDING_SALES_ADMIN_COMPLETION', grn_number: grnNumber, grn_date: grnDate, grn_value: grnValue, grn_remark: grnRemark, order_history: [...(order.order_history || []), historyEntry] } : order));
+    updateOrderAccountsApprovalInSupabase(orderId, { order_history: [...(target.order_history || []), historyEntry], remarks: `GRN ${grnNumber} created for ₹${grnValue}; awaiting Sales Admin completion` });
+    addNotification({ title: `✅ GRN Created: ${grnNumber}`, message: `Billing created the GRN for ${target.order_number}. Sales Admin must mark the order completed.`, event_type: 'GRN_CREATED', order_id: orderId });
+  };
+
+  const handleCompleteOrderAfterGrn = (orderId: string) => {
+    const target = orders.find(order => order.id === orderId);
+    if (!target) return;
+    const historyEntry = { id: generateUuid(), order_id: orderId, action: 'ORDER_COMPLETED_AFTER_GRN', performed_by: currentUser?.full_name || 'Sales Admin', performed_at: new Date().toISOString(), remarks: `Order completed after GRN ${target.grn_number}` };
+    setOrders(prev => prev.map(order => order.id === orderId ? { ...order, status: 'COMPLETED', grn_workflow_status: 'COMPLETED', order_history: [...(order.order_history || []), historyEntry] } : order));
+    updateOrderAccountsApprovalInSupabase(orderId, { status: 'COMPLETED', order_history: [...(target.order_history || []), historyEntry], remarks: `Completed by Sales Admin after GRN ${target.grn_number}` });
+    addNotification({ title: `✅ Order Completed: ${target.order_number}`, message: `Sales Admin confirmed completion after GRN ${target.grn_number}.`, event_type: 'ORDER_COMPLETED', order_id: orderId });
   };
 
   const handleRejectOrder = (orderId: string, remarks: string) => {
@@ -594,7 +710,8 @@ const MainLayout: React.FC = () => {
   const handleConfirmDispatch = (orderId: string, dispatchData: any) => {
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
-        const updatedItems = o.items?.map(item => {
+        const isDeliveryDetailsUpdate = o.status === 'BILLED' || o.status === 'OUT_FOR_DELIVERY' || o.status === 'READY_FOR_PICKUP';
+        const updatedItems = isDeliveryDetailsUpdate ? o.items : o.items?.map(item => {
           const match = dispatchData.items.find((di: any) => di.order_item_id === item.id);
           const dispatchQty = match ? match.dispatch_qty : item.pending_qty_pcs;
           const newDispatched = item.dispatched_qty_pcs + dispatchQty;
@@ -605,15 +722,62 @@ const MainLayout: React.FC = () => {
           };
         });
 
-        const totalOrdered = o.total_qty_pcs;
+        const totalOrdered = o.status === 'BILLED' ? (o.billing_total_qty || o.total_qty_pcs) : o.total_qty_pcs;
         const totalDispatched = updatedItems?.reduce((acc, i) => acc + i.dispatched_qty_pcs, 0) || 0;
-        const newStatus = totalDispatched >= totalOrdered ? 'OUT_FOR_DELIVERY' : 'PARTIALLY_DISPATCHED';
+        const newStatus = isDeliveryDetailsUpdate
+          ? (dispatchData.dispatch_type === 'Self Pickup' ? 'READY_FOR_PICKUP' : 'OUT_FOR_DELIVERY')
+          : (totalDispatched >= totalOrdered ? 'OUT_FOR_DELIVERY' : 'PARTIALLY_DISPATCHED');
 
-        updateOrderStatusInSupabase(orderId, newStatus);
+        updateOrderAccountsApprovalInSupabase(orderId, {
+          status: newStatus,
+          vehicle_number: dispatchData.vehicle_number,
+          is_company_vehicle: dispatchData.dispatch_type === 'Self Pickup' ? undefined : dispatchData.is_company_vehicle,
+          driver_name: dispatchData.driver_name,
+          driver_mobile: dispatchData.driver_mobile,
+          tempo_number: dispatchData.tempo_number,
+          booking_id: dispatchData.booking_id,
+          rental_agency_name: dispatchData.rental_agency_name,
+          freight_amount: dispatchData.freight_amount,
+          dispatch_remark: dispatchData.dispatch_remark,
+          order_history: [
+            ...(o.order_history || []),
+            {
+              id: generateUuid(),
+              order_id: orderId,
+              action: 'DISPATCH_TRANSPORT_ASSIGNED',
+              performed_by: currentUser?.full_name || 'Dispatch Manager',
+              performed_at: new Date().toISOString(),
+              remarks: dispatchData.dispatch_remark,
+              details: {
+                dispatch_type: dispatchData.dispatch_type,
+                vehicle_number: dispatchData.vehicle_number,
+                is_company_vehicle: dispatchData.is_company_vehicle,
+                driver_name: dispatchData.driver_name,
+                driver_mobile: dispatchData.driver_mobile,
+                tempo_number: dispatchData.tempo_number,
+                booking_id: dispatchData.booking_id,
+                rental_agency_name: dispatchData.rental_agency_name,
+                freight_amount: dispatchData.freight_amount,
+                dispatch_remark: dispatchData.dispatch_remark
+              }
+            }
+          ]
+        });
+        updatedItems?.forEach(item => { void saveOrderItemToSupabase(item); });
 
         return {
           ...o,
           status: newStatus,
+          delivery_type: dispatchData.dispatch_type,
+          vehicle_number: dispatchData.vehicle_number,
+          is_company_vehicle: dispatchData.dispatch_type === 'Self Pickup' ? undefined : dispatchData.is_company_vehicle,
+          driver_name: dispatchData.driver_name,
+          driver_mobile: dispatchData.driver_mobile,
+          tempo_number: dispatchData.tempo_number,
+          booking_id: dispatchData.booking_id,
+          rental_agency_name: dispatchData.rental_agency_name,
+          freight_amount: dispatchData.freight_amount,
+          dispatch_remark: dispatchData.dispatch_remark,
           items: updatedItems
         };
       }
@@ -631,19 +795,21 @@ const MainLayout: React.FC = () => {
     }
   };
 
-  const handleGenerateInvoice = (order: Order, invoiceNumber: string, invoiceAmount: number, creditDays: number, remark: string, issuedQtyByItem: Record<string, number>) => {
+  const handleGenerateInvoice = (order: Order, invoiceNumber: string, billingTotalQty: number, invoiceAmount: number, creditDays: number, remark: string, billedQtyByItem: Record<string, number>) => {
     const orderId = order.id;
     const invoiceDate = new Date().toISOString().substring(0, 10);
-    const updatedItems = (order.items || []).map(item => {
-      const issued = Math.max(0, Math.min(item.total_qty_pcs || 0, issuedQtyByItem[item.id] || 0));
-      return { ...item, issued_qty_pcs: issued };
-    });
+    const updatedItems = (order.items || []).map(item => ({
+      ...item,
+      issued_qty_pcs: Math.max(0, Math.min(item.total_qty_pcs || 0, billedQtyByItem[item.id] || 0))
+    }));
     setOrders(prev => prev.map(o => o.id === orderId ? {
       ...o,
       status: 'BILLED',
       invoice_number: invoiceNumber,
       invoice_date: invoiceDate,
       invoice_amount: invoiceAmount,
+      billing_total_qty: billingTotalQty,
+      reattempt_delivery: false,
       credit_days: creditDays,
       remarks: remark,
       items: updatedItems
@@ -653,8 +819,10 @@ const MainLayout: React.FC = () => {
       invoice_number: invoiceNumber,
       invoice_date: invoiceDate,
       invoice_amount: invoiceAmount,
+      billing_total_qty: billingTotalQty,
       credit_days: creditDays,
-      remarks: remark
+      remarks: remark,
+      order_history: order.reattempt_delivery ? [...(order.order_history || []), { id: generateUuid(), order_id: orderId, action: 'REATTEMPT_INVOICE_REVIEWED', performed_by: currentUser?.full_name || 'Billing', performed_at: new Date().toISOString(), remarks: remark || 'Invoice reviewed for delivery reattempt', details: { invoice_number: invoiceNumber, invoice_amount: invoiceAmount } }] : order.order_history
     });
     updatedItems.forEach(item => { void saveOrderItemToSupabase(item); });
   };
@@ -1003,6 +1171,7 @@ const MainLayout: React.FC = () => {
           <AccountsPage 
             orders={globallyFilteredOrders} 
             onGenerateInvoice={handleGenerateInvoice}
+            onCompleteGrn={handleCompleteGrn}
           />
         )}
 
@@ -1018,6 +1187,16 @@ const MainLayout: React.FC = () => {
             onOpenProcessReturnModal={(o) => setSelectedOrderForProcessReturn(o)}
             onSelectOrder={(o) => setSelectedOrderForApproval(o)}
             onResolveException={handleResolveException}
+            onForwardGrnToBilling={handleForwardGrnToBilling}
+            onCompleteOrderAfterGrn={handleCompleteOrderAfterGrn}
+          />
+        )}
+
+        {currentTab === 'pod' && (
+          <PODQueueView
+            orders={orders}
+            onVerifyPOD={(order) => setSelectedOrderForPOD(order)}
+            onResolveQuery={handleResolveException}
           />
         )}
 

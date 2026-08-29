@@ -377,6 +377,21 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
+            {order.status === 'WAIT_FOR_STOCK' && bothApproved && (isSalesAdmin || isSuperAdmin) && (
+              <button
+                className="btn btn-success"
+                onClick={function() {
+                  onApprove(order.id, 'Stock received and marked ready for billing', {
+                    stockReady: true,
+                    inventory_status: 'IN_STOCK',
+                    priority: order.priority || priority
+                  });
+                }}
+                style={{ background: 'linear-gradient(135deg,#10b981,#059669)', fontSize: '0.8rem', fontWeight: 800 }}
+              >
+                <RefreshCw size={14} /> Mark Stock Ready &amp; Send to Billing
+              </button>
+            )}
             {(isSalesAdmin || isSuperAdmin) && order.status !== 'APPROVED' && order.status !== 'COMPLETED' && (
               <button className="btn btn-danger" onClick={function() { onReject(order.id, superAdminRemarks || salesAdminRemarks); }} style={{ fontSize: '0.8rem' }}>
                 <XCircle size={14} /> Reject Order

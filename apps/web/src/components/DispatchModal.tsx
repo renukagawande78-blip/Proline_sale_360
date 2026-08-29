@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Truck, Check, PackageCheck, AlertTriangle, Layers, Send } from 'lucide-react';
 import { Order } from '../types';
 
@@ -17,16 +17,34 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 }) => {
   const [dispatchType, setDispatchType] = useState<'F.O.R' | 'Self Pickup'>(order?.delivery_type || 'F.O.R');
   const [isCompanyVehicle, setIsCompanyVehicle] = useState<boolean>(true);
-  const [vehicleNumber, setVehicleNumber] = useState('MH-04-AB-1234');
-  const [driverName, setDriverName] = useState('Mahesh Verma');
-  const [driverMobile, setDriverMobile] = useState('+91 97777 22222');
-  const [tempoNumber, setTempoNumber] = useState('MH-12-TR-9090');
-  const [bookingId, setBookingId] = useState('PORTER-88221');
-  const [freightAmount, setFreightAmount] = useState<number>(1850);
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [driverName, setDriverName] = useState('');
+  const [driverMobile, setDriverMobile] = useState('');
+  const [tempoNumber, setTempoNumber] = useState('');
+  const [rentalAgencyName, setRentalAgencyName] = useState('');
+  const [bookingId, setBookingId] = useState('');
+  const [freightAmount, setFreightAmount] = useState<number>(0);
   const [lrNumber, setLrNumber] = useState('LR-99887766');
+  const [dispatchRemark, setDispatchRemark] = useState('');
+  const [validationError, setValidationError] = useState('');
   
   // Item-wise dispatch quantity state
   const [dispatchItems, setDispatchItems] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!order || !isOpen) return;
+    setDispatchType(order.delivery_type || 'F.O.R');
+    setIsCompanyVehicle(order.is_company_vehicle ?? true);
+    setVehicleNumber(order.vehicle_number || '');
+    setTempoNumber(order.tempo_number || '');
+    setDriverName(order.driver_name || '');
+    setDriverMobile(order.driver_mobile || '');
+    setRentalAgencyName(order.rental_agency_name || '');
+    setBookingId(order.booking_id || '');
+    setFreightAmount(order.freight_amount || 0);
+    setDispatchRemark(order.dispatch_remark || '');
+    setValidationError('');
+  }, [order, isOpen]);
 
   if (!isOpen || !order) return null;
 
@@ -46,15 +64,26 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   };
 
   const handleConfirm = () => {
+    const finalVehicleNumber = dispatchType === 'Self Pickup' || isCompanyVehicle ? vehicleNumber.trim() : tempoNumber.trim();
+    if (!finalVehicleNumber || !driverName.trim() || !driverMobile.trim()) {
+      setValidationError('Vehicle number, driver name, and driver mobile number are mandatory.');
+      return;
+    }
+    if (dispatchType === 'F.O.R' && !isCompanyVehicle && (!rentalAgencyName.trim() || freightAmount <= 0)) {
+      setValidationError('Rental agency name and rental price are mandatory for rented vehicles.');
+      return;
+    }
     const payload = {
       dispatch_type: dispatchType,
       is_company_vehicle: isCompanyVehicle,
-      vehicle_number: isCompanyVehicle ? vehicleNumber : tempoNumber,
-      driver_name: driverName,
-      driver_mobile: driverMobile,
+      vehicle_number: finalVehicleNumber,
+      driver_name: driverName.trim(),
+      driver_mobile: driverMobile.trim(),
       tempo_number: tempoNumber,
       booking_id: bookingId,
+      rental_agency_name: dispatchType === 'F.O.R' && !isCompanyVehicle ? rentalAgencyName.trim() : '',
       freight_amount: freightAmount,
+      dispatch_remark: dispatchRemark.trim(),
       lr_number: lrNumber,
       items: (order.items || []).map(item => ({
         order_item_id: item.id,
@@ -109,6 +138,10 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             {dispatchType === 'Self Pickup' ? (
               <>
                 <div>
+                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>VEHICLE NUMBER*</label>
+                  <input type="text" value={vehicleNumber} onChange={e => setVehicleNumber(e.target.value.toUpperCase())} placeholder="e.g. GJ-05-AB-1234" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
+                </div>
+                <div>
                   <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>PICKUP DRIVER NAME*</label>
                   <input 
                     type="text" 
@@ -144,16 +177,20 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                 </div>
 
                 {isCompanyVehicle ? (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>COMPANY VEHICLE NO.</label>
-                    <input 
-                      type="text" 
-                      value={vehicleNumber}
-                      onChange={e => setVehicleNumber(e.target.value)}
-                      placeholder="e.g. MH-04-AB-1234"
-                      style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>COMPANY VEHICLE NO.*</label>
+                      <input type="text" value={vehicleNumber} onChange={e => setVehicleNumber(e.target.value.toUpperCase())} placeholder="e.g. GJ-05-AB-1234" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER NAME*</label>
+                      <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="Driver name" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER MOBILE NO.*</label>
+                      <input type="tel" value={driverMobile} onChange={e => setDriverMobile(e.target.value)} placeholder="Mobile number" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
+                    </div>
+                  </>
                 ) : (
                   <>
                     <div>
@@ -167,12 +204,12 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>RENTAL AGENCY NAME / BOOKING ID*</label>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>RENTAL AGENCY NAME*</label>
                       <input 
                         type="text" 
-                        value={bookingId}
-                        onChange={e => setBookingId(e.target.value)}
-                        placeholder="e.g. Porter / Patel Transport — Booking ID"
+                        value={rentalAgencyName}
+                        onChange={e => setRentalAgencyName(e.target.value)}
+                        placeholder="e.g. Porter, Bluestock"
                         style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }}
                       />
                     </div>
@@ -199,6 +236,11 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               </>
             )}
           </div>
+          <div style={{ marginTop: '0.85rem' }}>
+            <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DISPATCH REMARK</label>
+            <textarea rows={2} value={dispatchRemark} onChange={e => setDispatchRemark(e.target.value)} placeholder="Transport or delivery instructions" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', resize: 'vertical' }} />
+          </div>
+          {validationError && <div style={{ marginTop: '0.75rem', color: '#fb7185', fontSize: '0.75rem', fontWeight: 800 }}>{validationError}</div>}
         </div>
 
         {/* Item-level Warehouse Stock & Allocation Table */}
@@ -217,7 +259,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               <thead>
                 <tr>
                   <th>Product SKU</th>
-                  <th style={{ textAlign: 'center' }}>Ordered (PCS)</th>
+                  <th style={{ textAlign: 'center' }}>Billing Qty (PCS)</th>
                   <th style={{ textAlign: 'center' }}>Warehouse Live Stock</th>
                   <th style={{ textAlign: 'center' }}>Stock Availability</th>
                   <th style={{ textAlign: 'center' }}>Pending (PCS)</th>
@@ -236,7 +278,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   return (
                     <tr key={item.id}>
                       <td><strong style={{ color: '#f8fafc' }}>{item?.product_name || 'Product SKU'}</strong></td>
-                      <td style={{ textAlign: 'center' }}>{item.total_qty_pcs}</td>
+                      <td style={{ textAlign: 'center' }}>{item.issued_qty_pcs || 0}</td>
                       <td style={{ textAlign: 'center' }}>
                         <span style={{ fontWeight: 800, color: stockAvailable > 0 ? '#34d399' : '#f43f5e' }}>
                           {stockAvailable} PCS

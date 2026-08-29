@@ -389,6 +389,7 @@ export interface Order {
   invoice_number?: string;
   invoice_date?: string;
   invoice_amount?: number;
+  billing_total_qty?: number;
   return_request?: ReturnRequest;
   
   // Operational Workflow Diagram Fields
@@ -404,12 +405,20 @@ export interface Order {
   driver_mobile?: string;
   tempo_number?: string;
   booking_id?: string;
+  rental_agency_name?: string;
   freight_amount?: number;
+  dispatch_remark?: string;
+  reattempt_delivery?: boolean;
   pod_status?: 'CLEAN' | 'ISSUE_RAISED';
-  pod_issue_type?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN';
+  pod_issue_type?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN' | 'OTHER';
   pod_issue_details?: string;
+  pod_query_raised_by?: string;
+  pod_query_raised_at?: string;
   grn_number?: string;
+  grn_date?: string;
   grn_value?: number;
+  grn_remark?: string;
+  grn_workflow_status?: 'PENDING_SALES_ADMIN' | 'PENDING_BILLING' | 'PENDING_SALES_ADMIN_COMPLETION' | 'COMPLETED';
   previous_status_before_hold?: OrderStatus;
 
   // Dual-Approval Gate (Stage 2: Sales Admin + Super Admin)

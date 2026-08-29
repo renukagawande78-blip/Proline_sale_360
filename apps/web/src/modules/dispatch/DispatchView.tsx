@@ -248,6 +248,7 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
               <th>Mode</th>
               <th>System Approver</th>
               <th>Tax Invoice</th>
+              <th>Billing Items &amp; Qty</th>
               <th>Delivery Status</th>
               <th style={{ textAlign: 'center' }}>Action</th>
             </tr>
@@ -255,13 +256,12 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
           <tbody>
             {dispatchQueueOrders.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                   No active orders in dispatch or delivery pipeline for your brand scope.
                 </td>
               </tr>
             ) : (
               dispatchQueueOrders.map(order => {
-                const totalQty = order.total_qty_pcs;
                 const dispatchedQty = order.items?.reduce((sum, item) => sum + (item.dispatched_qty_pcs || 0), 0) || 0;
                 const isSelfPickup = order.delivery_type === 'Self Pickup';
 
@@ -313,6 +313,24 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                       )}
                     </td>
                     <td>
+                      {order.invoice_number ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 150 }}>
+                          {(order.items || []).filter(item => (item.issued_qty_pcs || 0) > 0).map(item => (
+                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: '0.72rem' }}>
+                              <span style={{ color: '#cbd5e1' }}>{item.product_name || item.product_code || 'Product'}</span>
+                              <strong style={{ color: '#38bdf8', whiteSpace: 'nowrap' }}>{item.issued_qty_pcs || 0} PCS</strong>
+                            </div>
+                          ))}
+                          <div style={{ borderTop: '1px solid #334155', paddingTop: 4, display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
+                            <strong style={{ color: '#94a3b8' }}>Total Billing Qty</strong>
+                            <strong style={{ color: '#34d399', whiteSpace: 'nowrap' }}>{(order.billing_total_qty || 0).toLocaleString()} PCS</strong>
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Not billed</span>
+                      )}
+                    </td>
+                    <td>
                       <span className={`status-badge status-${order.status}`}>
                         {order.status === 'BILLED' && '🧾 BILL READY FOR DELIVERY'}
                         {order.status === 'READY_FOR_PICKUP' && '📦 READY FOR PICKUP'}
@@ -345,7 +363,7 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                         isSelfPickup ? (
                           <button 
                             className="btn btn-outline"
-                            onClick={() => handleMarkReadyForPickup(order)}
+                            onClick={() => onOpenDispatchModal(order)}
                             style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                           >
                             <PackageCheck size={14} /> Mark Ready for Self Pickup
@@ -353,7 +371,7 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                         ) : (
                           <button 
                             className="btn btn-success"
-                            onClick={() => handleMarkOutForDelivery(order)}
+                            onClick={() => onOpenDispatchModal(order)}
                             style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                           >
                             <Truck size={14} /> Load & Mark Out for Delivery
@@ -372,7 +390,20 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                         </button>
                       )}
 
-                      {(order.status === 'OUT_FOR_DELIVERY' || order.status === 'DISPATCHED') && (
+                      {order.status === 'OUT_FOR_DELIVERY' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                          <button
+                            className="btn btn-outline"
+                            onClick={() => onOpenDispatchModal(order)}
+                            style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: 800 }}
+                          >
+                            <Truck size={13} /> {order.driver_name ? 'Edit Driver Details' : 'Add Driver Details'}
+                          </button>
+                          <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700 }}>Sent to Sales Admin for POD verification</span>
+                        </div>
+                      )}
+
+                      {order.status === 'DISPATCHED' && (
                         <span style={{ fontSize: '0.725rem', color: '#38bdf8', fontWeight: 800 }}>Sent to Sales Admin for POD verification</span>
                       )}
 
