@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { DashboardPage } from './pages/DashboardPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { MastersPage } from './pages/MastersPage';
@@ -209,6 +210,7 @@ const MainLayout: React.FC = () => {
 
   const [globalFilterState, setGlobalFilterState] = useState<GlobalFilterState>(DEFAULT_GLOBAL_FILTER);
   const [isGlobalFilterOpen, setIsGlobalFilterOpen] = useState(false);
+  const [selectedReportName, setSelectedReportName] = useState<string>('Completed Orders Report');
 
   // App-Wide Globally Filtered Orders List across all 10 dimensions + Role/Brand Access Scoping
   const globallyFilteredOrders = orders.filter(o => {
@@ -1079,8 +1081,11 @@ const MainLayout: React.FC = () => {
       <div className="main-content">
         <Header 
           onToggleSidebarCollapse={() => {
-            setIsMobileSidebarOpen(!isMobileSidebarOpen);
-            setIsSidebarCollapsed(!isSidebarCollapsed);
+            if (window.innerWidth <= 992) {
+              setIsMobileSidebarOpen(prev => !prev);
+            } else {
+              setIsSidebarCollapsed(prev => !prev);
+            }
           }}
           onOpenUserManagement={() => setIsUserMgmtOpen(true)}
           onOpenGlobalFilter={() => setIsGlobalFilterOpen(true)}
@@ -1092,6 +1097,10 @@ const MainLayout: React.FC = () => {
             orders={globallyFilteredOrders} 
             onOpenCreateOrder={() => setIsCreateOpen(true)}
             onSelectOrder={(o) => setSelectedOrderForApproval(o)}
+            onNavigateToReports={(reportName) => {
+              setSelectedReportName(reportName || 'Completed Orders Report');
+              setCurrentTab('reports');
+            }}
           />
         )}
 
@@ -1177,7 +1186,8 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'reports' && (
           <ReportsPage 
-            orders={globallyFilteredOrders} 
+            orders={globallyFilteredOrders.length > 0 ? globallyFilteredOrders : orders} 
+            initialReport={selectedReportName}
           />
         )}
 
@@ -1207,6 +1217,15 @@ const MainLayout: React.FC = () => {
           />
         )}
       </div>
+
+      <MobileBottomNav 
+        currentTab={currentTab}
+        onTabChange={(tab) => {
+          setCurrentTab(tab);
+          setIsMobileSidebarOpen(false);
+        }}
+        onOpenMenu={() => setIsMobileSidebarOpen(true)}
+      />
 
       {/* Global Modals */}
       <CreateOrderModal 

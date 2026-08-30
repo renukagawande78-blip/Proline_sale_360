@@ -7,22 +7,27 @@ import {
   AlertTriangle, 
   Plus, 
   ArrowUpRight,
-  ShieldCheck
+  ShieldCheck,
+  PackageCheck,
+  Truck,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { isCompanyAllowedForUser, getOrderAccessPermission } from '../../lib/supabase';
+import { getOrderAccessPermission } from '../../lib/supabase';
 import { Order } from '../../types';
 
 interface DashboardViewProps {
   orders: Order[];
   onOpenCreateOrder: () => void;
   onSelectOrder: (order: Order) => void;
+  onNavigateToReports?: (reportName?: string) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   orders,
   onOpenCreateOrder,
-  onSelectOrder
+  onSelectOrder,
+  onNavigateToReports
 }) => {
   const { currentUser } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
@@ -36,23 +41,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     title: 'Sales Admin Dashboard', focus: 'New orders, Super Admin approvals, stock checks and POD exceptions'
   };
 
-  // Filter orders matching user's Brand Handle Scope (including cross-brand item read-only match)
+  // Filter orders matching user's Brand Handle Scope
   const scopeOrders = orders.filter(o => {
     const accessPerm = getOrderAccessPermission(o, currentUser);
     return accessPerm.canView;
   });
 
   const totalOrdersCount = scopeOrders.length;
-  const totalVolumePcs = scopeOrders.reduce((sum, o) => sum + o.total_qty_pcs, 0);
+  const totalVolumePcs = scopeOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
 
-  const approvedOrders = scopeOrders.filter(o => o.status === 'APPROVED');
+  const completedOrders = scopeOrders.filter(o => o.status === 'COMPLETED');
+  const completedVolumePcs = completedOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
+  const approvedOrders = scopeOrders.filter(o => o.status === 'APPROVED' || o.status === 'SALES_ADMIN_APPROVED');
   const heldOrders = scopeOrders.filter(o => o.status === 'HELD');
-  const pendingOrders = scopeOrders.filter(o => o.status === 'SUBMITTED' || o.status === 'DRAFT');
+  const pendingOrders = scopeOrders.filter(o => o.status === 'SUBMITTED' || o.status === 'WAIT_FOR_STOCK' || o.status === 'DRAFT');
 
   return (
     <div className="page-body">
       {/* Header Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div className="page-header-row">
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc' }}>
             {roleDashboard.title}
@@ -62,9 +69,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        <button className="btn btn-primary" onClick={onOpenCreateOrder}>
-          <Plus size={16} /> Create Agency Order
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {onNavigateToReports && (
+            <button 
+              className="btn btn-outline" 
+              onClick={() => onNavigateToReports('Completed Orders Report')}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              <BarChart3 size={16} /> All Reports
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={onOpenCreateOrder}>
+            <Plus size={16} /> Create Agency Order
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -81,11 +99,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="kpi-subtext" style={{ color: '#34d399' }}>
-            <ArrowUpRight size={14} /> +12.4% vs last period ({totalOrdersCount} Total Orders)
+            <ArrowUpRight size={14} /> {totalOrdersCount} Total Orders
           </div>
         </div>
 
-        {/* KPI 2: Approved Orders */}
+        {/* KPI 2: Completed Orders */}
+        <div 
+          className="kpi-card" 
+          onClick={() => onNavigateToReports?.('Completed Orders Report')}
+          style={{ border: '1px solid rgba(16, 185, 129, 0.4)', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(15, 23, 42, 0.6))', cursor: onNavigateToReports ? 'pointer' : 'default', transition: 'all 0.15s ease' }}
+          title="Click to view Completed Orders Report"
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div className="kpi-title" style={{ color: '#34d399' }}>ORDERS COMPLETED</div>
+              <div className="kpi-value" style={{ color: '#34d399' }}>{completedOrders.length}</div>
+            </div>
+            <div style={{ background: 'rgba(16, 185, 129, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#10b981' }}>
+              <PackageCheck size={20} />
+            </div>
+          </div>
+          <div className="kpi-subtext" style={{ color: '#34d399', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{completedVolumePcs.toLocaleString()} PCS delivered</span>
+            {onNavigateToReports && <span style={{ fontSize: '0.7rem', fontWeight: 700 }}>Open Report ↗</span>}
+          </div>
+        </div>
+
+        {/* KPI 3: Approved Orders */}
         <div className="kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
@@ -135,7 +175,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Main Operations Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
+      <div className="dashboard-ops-grid">
         {/* Recent Orders Stream */}
         <div className="data-table-container">
           <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

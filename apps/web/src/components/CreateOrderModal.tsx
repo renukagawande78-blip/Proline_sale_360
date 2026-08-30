@@ -1113,7 +1113,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Form Fields Grid: Segment (Multi-Select), Salesperson, Company/Brand (Multi-Select), Agency (Single Select), Delivery */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr 1.6fr 1.6fr 1fr', gap: '0.85rem', marginBottom: '1.25rem' }}>
+        <div className="create-order-grid">
           
           {/* 1. SEGMENTS (MULTI-SELECT TOGGLE PILLS) */}
           <div>
@@ -1256,7 +1256,8 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             </button>
           </div>
 
-          <table className="data-table" style={{ fontSize: '0.825rem' }}>
+          <div className="data-table-container">
+            <table className="data-table" style={{ fontSize: '0.825rem' }}>
             <thead>
               <tr>
                 <th style={{ width: 300 }}>Product / SKU Selection</th>
@@ -1332,6 +1333,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Order Remarks */}
@@ -1347,7 +1349,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Order Total Volume Summary & Action Buttons (Showing MRP, Hiding Total Cost) */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', padding: '1rem 1.25rem', borderRadius: 8, border: '1px solid #334155' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', padding: '1rem 1.25rem', borderRadius: 8, border: '1px solid #334155', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 700 }}>
               Total Order Volume: <strong style={{ color: '#38bdf8' }}>{totalBoxQty} Boxes / {totalFreePcs} Free ({totalQtyPcs} Total PCS)</strong>

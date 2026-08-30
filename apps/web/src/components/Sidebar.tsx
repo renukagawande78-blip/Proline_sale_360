@@ -41,7 +41,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const userSegment = resolveSegmentForUser(currentUser);
   
   const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const isCollapsed = externalIsCollapsed !== undefined ? externalIsCollapsed : internalCollapsed;
+  const rawCollapsed = externalIsCollapsed !== undefined ? externalIsCollapsed : internalCollapsed;
+  const isCollapsed = isOpen ? false : rawCollapsed;
   
   const handleToggleCollapse = () => {
     if (externalOnToggleCollapse) {

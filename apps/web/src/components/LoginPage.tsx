@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, UserCheck, ArrowRight, Eye, EyeOff, KeyRound, Sparkles } from 'lucide-react';
+import { Lock, UserCheck, ArrowRight, Eye, EyeOff, KeyRound, Sparkles, Smartphone, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage: React.FC = () => {
@@ -284,6 +284,70 @@ export const LoginPage: React.FC = () => {
             {isLoading ? 'Signing In...' : 'Sign In'} <ArrowRight size={18} />
           </button>
         </form>
+
+        {/* Android App Download Banner */}
+        <div 
+          style={{ 
+            marginTop: '1.25rem', 
+            padding: '0.85rem 1rem', 
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(56, 189, 248, 0.1))', 
+            border: '1px solid rgba(52, 211, 153, 0.35)', 
+            borderRadius: 14, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            gap: '0.75rem',
+            boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <div 
+              style={{ 
+                width: 38, 
+                height: 38, 
+                borderRadius: 10, 
+                background: 'linear-gradient(135deg, #10b981, #059669)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                color: 'white', 
+                flexShrink: 0, 
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' 
+              }}
+            >
+              <Smartphone size={20} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.825rem', fontWeight: 800, color: '#f8fafc' }}>
+                Android Mobile App
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                Native APK for field staff & managers
+              </div>
+            </div>
+          </div>
+          <a
+            href="/proline-oms-app.apk"
+            download="proline-oms-app.apk"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.5rem 0.85rem',
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              color: 'white',
+              borderRadius: 8,
+              fontSize: '0.775rem',
+              fontWeight: 800,
+              textDecoration: 'none',
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Download size={14} /> Download APK
+          </a>
+        </div>
 
         {/* 1-Click Team Member Quick Login */}
         {users && users.length > 0 && (

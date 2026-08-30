@@ -4,6 +4,7 @@ import { Order } from '../types';
 
 interface ReportsPageProps {
   orders: Order[];
+  initialReport?: string;
 }
 
 export const ReportsPage: React.FC<ReportsPageProps> = (props) => {

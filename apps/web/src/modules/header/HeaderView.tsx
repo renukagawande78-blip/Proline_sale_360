@@ -125,16 +125,16 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
           display: 'flex',
           alignItems: 'center',
           gap: '0.35rem',
-          padding: '0.4rem 0.75rem',
+          padding: '0.35rem 0.65rem',
           borderRadius: 8,
-          fontSize: '0.75rem',
+          fontSize: '0.725rem',
           fontWeight: 800,
           background: isFmcg ? 'rgba(16, 185, 129, 0.15)' : (isFmcd ? 'rgba(251, 191, 36, 0.15)' : 'rgba(56, 189, 248, 0.15)'),
           color: isFmcg ? '#34d399' : (isFmcd ? '#fbbf24' : '#38bdf8'),
           border: isFmcg ? '1px solid rgba(16, 185, 129, 0.35)' : (isFmcd ? '1px solid rgba(251, 191, 36, 0.35)' : '1px solid rgba(56, 189, 248, 0.35)')
         }} title={`Salesperson Segment Scope: ${userSegment}`}>
           {isFmcg ? <ShoppingBag size={13} /> : <Zap size={13} />}
-          <span>Segment: {userSegment === 'ALL' ? 'ALL (FMCG & FMCD)' : userSegment}</span>
+          <span>{userSegment === 'ALL' ? 'ALL' : userSegment}</span>
         </div>
 
         {/* 1. Global Filter Button */}
@@ -217,7 +217,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
               position: 'absolute', 
               right: 0, 
               top: 'calc(100% + 10px)', 
-              width: 340, 
+              width: 'min(340px, calc(100vw - 1.5rem))', 
               background: '#1e293b', 
               border: '1px solid rgba(255, 255, 255, 0.12)', 
               borderRadius: 12, 
@@ -298,7 +298,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
               position: 'absolute', 
               right: 0, 
               top: 'calc(100% + 10px)', 
-              width: 300, 
+              width: 'min(300px, calc(100vw - 1.5rem))', 
               background: '#1e293b', 
               border: '1px solid rgba(255, 255, 255, 0.12)', 
               borderRadius: 14, 

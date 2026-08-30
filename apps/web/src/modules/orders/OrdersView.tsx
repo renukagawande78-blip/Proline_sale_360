@@ -58,7 +58,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const canAddOrder = hasPermission('add_order') || hasPermission('order_entry');
 
   // Active tab for filtering
-  type Stage2Tab = 'ALL' | 'NEW' | 'REVIEW_REQUIRED' | 'APPROVAL_NEEDED' | 'HARSHAD_APPROVED' | 'ON_HOLD' | 'REJECTED';
+  type Stage2Tab = 'ALL' | 'NEW' | 'REVIEW_REQUIRED' | 'APPROVAL_NEEDED' | 'HARSHAD_APPROVED' | 'ON_HOLD' | 'REJECTED' | 'COMPLETED';
   const [activeTab, setActiveTab] = useState<Stage2Tab>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('ALL');
@@ -122,6 +122,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const countHarshadApproved = scopedOrders.filter(o => o.status === 'APPROVED').length;
   const countOnHold = scopedOrders.filter(o => o.status === 'HELD' || o.accounts_approval_status === 'HOLD').length;
   const countRejected = scopedOrders.filter(o => o.status === 'REJECTED' || o.accounts_approval_status === 'REJECTED').length;
+  const countCompleted = scopedOrders.filter(o => o.status === 'COMPLETED').length;
 
   const qtyNew = scopedOrders.filter(o => o.status === 'SUBMITTED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyReview = scopedOrders.filter(o => o.status === 'SUBMITTED' && !o.sales_admin_approved).reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
@@ -129,6 +130,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const qtyHarshadApproved = scopedOrders.filter(o => o.status === 'APPROVED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyOnHold = scopedOrders.filter(o => o.status === 'HELD' || o.accounts_approval_status === 'HOLD').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyRejected = scopedOrders.filter(o => o.status === 'REJECTED' || o.accounts_approval_status === 'REJECTED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
+  const qtyCompleted = scopedOrders.filter(o => o.status === 'COMPLETED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
 
   // Tab filters
   const filteredOrders = scopedOrders.filter(o => {
@@ -138,6 +140,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     if (activeTab === 'HARSHAD_APPROVED' && o.status !== 'APPROVED') return false;
     if (activeTab === 'ON_HOLD' && o.status !== 'HELD' && o.accounts_approval_status !== 'HOLD') return false;
     if (activeTab === 'REJECTED' && o.status !== 'REJECTED' && o.accounts_approval_status !== 'REJECTED') return false;
+    if (activeTab === 'COMPLETED' && o.status !== 'COMPLETED') return false;
 
     const q = searchQuery.toLowerCase().trim();
     const matchSearch = !q
@@ -501,11 +504,24 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
       icon: '❌',
       sub: 'By Chirag Sir'
     },
+    {
+      id: 'COMPLETED' as Stage2Tab,
+      label: 'COMPLETED ORDERS',
+      count: countCompleted,
+      quantity: qtyCompleted,
+      color: '#10b981',
+      bg: 'rgba(16,185,129,0.12)',
+      activeBg: 'rgba(16,185,129,0.2)',
+      border: 'rgba(16,185,129,0.3)',
+      icon: '📦',
+      sub: 'Delivered & Settled'
+    },
   ];
 
   // Tab labels
   const tabDefs: { id: Stage2Tab; label: string; count: number }[] = [
     { id: 'ALL', label: 'All Orders', count: scopedOrders.length },
+    { id: 'COMPLETED', label: 'Completed', count: countCompleted },
     { id: 'NEW', label: 'New', count: countNew },
     { id: 'REVIEW_REQUIRED', label: 'Review Required', count: countReviewRequired },
     { id: 'APPROVAL_NEEDED', label: 'Super Admin Pending', count: countApprovalNeeded },
@@ -546,7 +562,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
         </div>
 
         {/* KPI Cards Row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        <div className="orders-kpi-grid">
           {kpiCards.map(card => {
             const isActive = activeTab === card.id;
             return (
@@ -617,7 +633,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
         </div>
 
         {/* Search + Filter Bar */}
-        <div style={{ display: 'flex', gap: '0.65rem', marginBottom: '1rem', alignItems: 'center' }}>
+        <div className="orders-filter-bar">
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 7, padding: '0.45rem 0.75rem', gap: '0.5rem' }}>
             <Search size={14} color="#64748b" />
             <input
@@ -950,16 +966,14 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
         </div>
       </div>
 
-      {/* ── RIGHT PANEL: Order Details ──────────────────────────────── */}
+      {/* ── RIGHT PANEL: Order Details (Drawer on Mobile) ─────────── */}
       {selectedOrder && (
-        <div style={{
-          width: 340,
-          flexShrink: 0,
-          background: '#0b1120',
-          borderLeft: '1px solid #1e293b',
-          overflowY: 'auto',
-          padding: '1.25rem'
-        }}>
+        <>
+          <div 
+            className="order-details-overlay open" 
+            onClick={() => setSelectedOrder(null)} 
+          />
+          <div className="order-details-panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>Order Details</h3>
             <button onClick={() => setSelectedOrder(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>
@@ -1245,6 +1259,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             )}
           </div>
         </div>
+        </>
       )}
 
       {/* ── SECTION 2 & 3: SALES ADMIN ACCOUNTS APPROVAL CONFIRMATION / MESSAGE WINDOW ── */}
