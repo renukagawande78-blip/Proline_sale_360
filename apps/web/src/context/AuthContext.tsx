@@ -278,19 +278,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Please enter a Person Name, User ID, or Email.' };
     }
 
-    let targetUser = users.find(u => {
-      const email = (u.email || '').toLowerCase().trim();
-      const name = (u.full_name || '').toLowerCase().trim();
-      const id = (u.id || '').toLowerCase().trim();
+    const matchUser = (userList: User[], input: string): User | undefined => {
+      const clean = (input || '').trim().toLowerCase();
+      if (!clean) return undefined;
 
-      return (
-        email === cleanInput ||
-        name === cleanInput ||
-        name.includes(cleanInput) ||
-        cleanInput.includes(name) ||
-        id === cleanInput
-      );
-    });
+      // 1. Priority 1: Exact match on email, full_name, email prefix (before @), or user id
+      const exact = userList.find(u => {
+        const email = (u.email || '').toLowerCase().trim();
+        const name = (u.full_name || '').toLowerCase().trim();
+        const id = (u.id || '').toLowerCase().trim();
+        const emailPrefix = email.split('@')[0];
+
+        return (
+          email === clean ||
+          name === clean ||
+          emailPrefix === clean ||
+          id === clean
+        );
+      });
+      if (exact) return exact;
+
+      // 2. Priority 2: Normalized exact match (ignoring dots, spaces, dashes)
+      const cleanNorm = clean.replace(/[^a-z0-9]/g, '');
+      if (cleanNorm) {
+        const normExact = userList.find(u => {
+          const nameNorm = (u.full_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const emailPrefixNorm = (u.email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+          return nameNorm === cleanNorm || emailPrefixNorm === cleanNorm;
+        });
+        if (normExact) return normExact;
+      }
+
+      // 3. Priority 3: Exact word / token match
+      const tokenMatch = userList.find(u => {
+        const nameTokens = (u.full_name || '').toLowerCase().split(/[\s._-]+/);
+        return nameTokens.includes(clean);
+      });
+      if (tokenMatch) return tokenMatch;
+
+      // 4. Priority 4: Prefix match on full_name or email
+      const prefixMatch = userList.find(u => {
+        const email = (u.email || '').toLowerCase().trim();
+        const name = (u.full_name || '').toLowerCase().trim();
+        const emailPrefix = email.split('@')[0];
+        return name.startsWith(clean) || emailPrefix.startsWith(clean) || email.startsWith(clean);
+      });
+      if (prefixMatch) return prefixMatch;
+
+      // 5. Priority 5: Substring match (ONLY if user name or email contains input; never input contains name)
+      if (clean.length >= 3) {
+        const containsMatch = userList.find(u => {
+          const email = (u.email || '').toLowerCase().trim();
+          const name = (u.full_name || '').toLowerCase().trim();
+          return name.includes(clean) || email.includes(clean);
+        });
+        if (containsMatch) return containsMatch;
+      }
+
+      return undefined;
+    };
+
+    let targetUser = matchUser(users, cleanInput);
 
     // Fallback: Direct query to Supabase database if not in memory
     if (!targetUser) {
@@ -324,19 +372,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           setUsers(prev => deduplicateUsers([...prev, ...dbUsers]));
 
-          targetUser = dbUsers.find(u => {
-            const email = (u.email || '').toLowerCase().trim();
-            const name = (u.full_name || '').toLowerCase().trim();
-            const id = (u.id || '').toLowerCase().trim();
-
-            return (
-              email === cleanInput ||
-              name === cleanInput ||
-              name.includes(cleanInput) ||
-              cleanInput.includes(name) ||
-              id === cleanInput
-            );
-          });
+          targetUser = matchUser(dbUsers, cleanInput);
         }
       } catch (err) {
         console.warn('Live Supabase user lookup notice:', err);

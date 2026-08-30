@@ -307,7 +307,7 @@ const MainLayout: React.FC = () => {
     setIsCreateOpen(true);
   };
 
-  const handleCreateOrder = (orderData: Order) => {
+  const handleCreateOrder = async (orderData: Order) => {
     setOrders(prev => {
       const exists = prev.some(o => o.id === orderData.id);
       if (exists) {
@@ -320,7 +320,29 @@ const MainLayout: React.FC = () => {
     setOrderToEdit(null);
 
     // Persist to Supabase
-    saveOrderToSupabase(orderData);
+    try {
+      const res = await saveOrderToSupabase(orderData);
+      if (!res.success) {
+        console.error('Failed to persist order to Supabase:', res.error);
+        addNotification({
+          title: `Database Sync Notice: ${orderData.order_number}`,
+          message: `Order saved in session. Supabase notice: ${res.error}`,
+          event_type: 'ORDER_HELD',
+          order_id: orderData.id
+        });
+      } else {
+        console.log('Order successfully persisted to Supabase:', orderData.order_number);
+        const { orders: refreshedOrders } = await fetchOrdersFromSupabase();
+        if (refreshedOrders && refreshedOrders.length > 0) {
+          setOrders(refreshedOrders);
+          try {
+            localStorage.setItem('proline_oms_orders_v3', JSON.stringify(refreshedOrders));
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      console.error('Error saving order to Supabase:', err);
+    }
 
     // Automatically open Sales Order Invoice / Dispatch Slip for the newly created order
     setSelectedOrderForInvoice(orderData);

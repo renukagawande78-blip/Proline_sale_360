@@ -13,7 +13,8 @@ import {
   deduplicateCompanies,
   deduplicateAgencies,
   deduplicateProducts,
-  generateUuid
+  generateUuid,
+  isValidUuid
 } from '../lib/supabase';
 
 import { Order, OrderItem, Agency, Product, User } from '../types';
@@ -398,11 +399,25 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 360 });
 
   const activeProducts = (products && products.length > 0) ? products : MOCK_PRODUCTS;
   const activeCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES;
 
   const selectedProduct = activeProducts.find(p => p.id === selectedProductId) || activeProducts[0];
+
+  const updatePosition = () => {
+    if (dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpwards = spaceBelow < 290 && rect.top > 290;
+      setDropdownPos({
+        top: openUpwards ? Math.max(10, rect.top - 290) : rect.bottom + 4,
+        left: Math.max(10, Math.min(rect.left, window.innerWidth - 380)),
+        width: Math.max(360, rect.width)
+      });
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -413,6 +428,18 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+      return () => {
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+      };
+    }
+  }, [isOpen]);
 
   const filteredProducts = activeProducts.filter(p => {
     // 1. Multi-Brand Filter: if specific companies selected, match any in selectedCompanyIds. If empty or 'ALL', match userCompanyHandle scope!
@@ -440,12 +467,14 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
     return matchesCompany && matchesSegment && (nameMatch || codeMatch);
   });
 
-
   return (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
       {/* Selected Box Trigger */}
       <div 
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          setIsOpen(!isOpen);
+          updatePosition();
+        }}
         style={{
           padding: '0.55rem 0.75rem',
           background: '#0f172a',
@@ -470,21 +499,23 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
       {isOpen && (
         <div 
           style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 999,
-            marginTop: 4,
+            position: 'fixed',
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+            zIndex: 999999,
             background: '#1e293b',
             border: '1px solid #38bdf8',
-            borderRadius: 8,
-            boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-            padding: '0.5rem',
-            width: 340
+            borderRadius: 10,
+            boxShadow: '0 20px 45px rgba(0,0,0,0.85)',
+            padding: '0.6rem',
+            maxHeight: 320,
+            display: 'flex',
+            flexDirection: 'column'
           }}
+          onClick={e => e.stopPropagation()}
         >
-          <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.6rem', marginBottom: '0.5rem', gap: '0.4rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.45rem 0.65rem', marginBottom: '0.5rem', gap: '0.4rem', flexShrink: 0 }}>
             <Search size={14} color="#38bdf8" />
             <input 
               type="text" 
@@ -494,9 +525,18 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
               autoFocus
               style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%', fontSize: '0.8rem' }}
             />
+            {searchQuery && (
+              <button 
+                type="button" 
+                onClick={() => setSearchQuery('')}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
 
-          <div style={{ maxHeight: 210, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 240, overflowY: 'auto', flex: 1 }}>
             {filteredProducts.length === 0 ? (
               <div style={{ padding: '0.75rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>No matching products for this brand & segment</div>
             ) : (
@@ -992,14 +1032,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   };
 
   const handleSubmit = (status: 'DRAFT' | 'SUBMITTED') => {
-    const selectedCompany = selectedCompanyIds.length === 1 
-      ? activeCompaniesPool.find(c => c.id === selectedCompanyIds[0]) || MOCK_COMPANIES.find(c => c.id === selectedCompanyIds[0])
-      : { id: 'ALL', company_name: `${selectedSegments.join(' & ')} Multi-Brand`, company_code: 'PRG' };
+    const resolvedCompany = selectedCompanyIds.length === 1 
+      ? (activeCompaniesPool.find(c => c.id === selectedCompanyIds[0]) || MOCK_COMPANIES.find(c => c.id === selectedCompanyIds[0]))
+      : (allowedBrandsForActiveSalesperson.length === 1
+          ? allowedBrandsForActiveSalesperson[0]
+          : { id: allowedBrandsForActiveSalesperson[0]?.id || 'ee1d810b-aa74-4dd8-bf1a-de5f31212ebd', company_name: `${selectedSegments.join(' & ')} Multi-Brand`, company_code: allowedBrandsForActiveSalesperson[0]?.company_code || 'PRG' });
     
     const selectedAgency = activeAgenciesPool.find(a => a.id === agencyId) || MOCK_AGENCIES.find(a => a.id === agencyId);
 
-    // Format Order Number: BrandCode-DDMMYYYY-Seq (e.g., PRG-08082026-001 or FMCG-08082026-001)
-    const brandCode = selectedCompany?.company_code || 'PRG';
+    // Format Order Number: BrandCode-DDMMYYYY-Seq (e.g., WI-30082026-001)
+    const brandCode = resolvedCompany?.company_code || 'PRG';
     const now = new Date();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -1009,16 +1051,15 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
     const generatedOrderNumber = `${brandCode}-${dateStr}-${seqStr}`;
     const finalOrderNumber = orderToEdit ? orderToEdit.order_number : generatedOrderNumber;
-    const finalOrderId = orderToEdit ? orderToEdit.id : generatedOrderNumber;
+    const finalOrderId = (orderToEdit && isValidUuid(orderToEdit.id)) ? orderToEdit.id : generateUuid();
 
-    // Format Product Item ID: OrderID/Product3Letters-Index (e.g., PRG-08082026-001/PRY-1)
+    // Format Product Item ID
     const itemsWithFormattedIds: OrderItem[] = processedItems.map((item, idx) => {
-      const p3 = getProduct3LetterPrefix(item.product_name || 'PRD');
-      const itemId = `${finalOrderNumber}/${p3}-${idx + 1}`;
+      const itemUuid = (item.id && isValidUuid(item.id)) ? item.id : generateUuid();
       return {
         ...item,
-        id: itemId,
-        order_id: finalOrderNumber
+        id: itemUuid,
+        order_id: finalOrderId
       };
     });
 
@@ -1063,8 +1104,8 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       id: finalOrderId,
       order_number: finalOrderNumber,
       order_date: orderToEdit ? orderToEdit.order_date : new Date().toISOString().replace('T', ' ').substring(0, 16),
-      company_id: selectedCompanyIds.length === 1 ? selectedCompanyIds[0] : (orderToEdit?.company_id || 'c01'),
-      company_name: selectedCompany?.company_name || orderToEdit?.company_name,
+      company_id: resolvedCompany?.id || selectedCompanyIds[0] || orderToEdit?.company_id || 'ee1d810b-aa74-4dd8-bf1a-de5f31212ebd',
+      company_name: resolvedCompany?.company_name || orderToEdit?.company_name,
       agency_id: agencyId,
       agency_name: selectedAgency?.agency_name || orderToEdit?.agency_name,
       area_id: selectedAgency?.area_id || orderToEdit?.area_id || '',
@@ -1091,7 +1132,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
   return (
     <div className="modal-overlay">
-      <div className="modal-card" style={{ maxWidth: 1150, width: '95vw' }}>
+      <div className="modal-card" style={{ maxWidth: 1150, width: '95vw', paddingBottom: '5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
@@ -1256,7 +1297,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             </button>
           </div>
 
-          <div className="data-table-container">
+          <div className="data-table-container" style={{ overflow: 'visible', minHeight: 120 }}>
             <table className="data-table" style={{ fontSize: '0.825rem' }}>
             <thead>
               <tr>

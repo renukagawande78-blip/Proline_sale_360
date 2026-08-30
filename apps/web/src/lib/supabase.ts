@@ -1825,7 +1825,6 @@ export const saveOrderToSupabase = async (order: Order): Promise<{ success: bool
       accounts_approval_responded_by: order.accounts_approval_responded_by || null,
       accounts_approval_responded_at: order.accounts_approval_responded_at || null,
       accounts_approval_response_remark: order.accounts_approval_response_remark || null,
-      order_history: order.order_history || [],
       updated_at: nowIso
     };
 
