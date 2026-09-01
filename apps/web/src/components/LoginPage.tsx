@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { APP_VERSION, APP_BUILD_DATETIME } from '../config/version';
 
 export const LoginPage: React.FC = () => {
   const { login, users } = useAuth();
@@ -516,6 +517,16 @@ export const LoginPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* System Version & Creation Date/Time Badge */}
+        <div style={{ textAlign: 'center', marginTop: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', letterSpacing: '0.04em' }}>
+            PROKAP OMS 360 • {APP_VERSION}
+          </div>
+          <div style={{ fontSize: '0.675rem', color: '#64748b' }}>
+            Build Created: {APP_BUILD_DATETIME}
+          </div>
+        </div>
       </div>
     </div>
   );

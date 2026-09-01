@@ -15,11 +15,14 @@ import {
   ScanSearch,
   FileCheck2,
   User as UserIcon,
-  LogOut
+  LogOut,
+  Clock,
+  Tag
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PermissionControl } from '../types';
 import { resolveSegmentForUser } from '../lib/supabase';
+import { APP_VERSION, APP_BUILD_DATETIME } from '../config/version';
 
 interface SidebarProps {
   currentTab: string;
@@ -327,9 +330,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }}></div>
                 <span>Supabase Live DB</span>
               </div>
+
+              {/* Version & Build Creation Date/Time */}
+              <div style={{ marginTop: '0.65rem', paddingTop: '0.5rem', borderTop: '1px solid #1e293b' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <Tag size={11} color="#38bdf8" /> Version:
+                  </span>
+                  <span style={{ color: '#38bdf8', fontWeight: 800, fontFamily: 'monospace' }}>
+                    {APP_VERSION}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.64rem', color: '#64748b', marginTop: '0.25rem' }} title={`Build Creation Timestamp: ${APP_BUILD_DATETIME}`}>
+                  <Clock size={10} color="#64748b" />
+                  <span>Created: {APP_BUILD_DATETIME}</span>
+                </div>
+              </div>
             </>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.55rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.55rem' }} title={`App Version ${APP_VERSION} • Built: ${APP_BUILD_DATETIME}`}>
               <div style={{
                 width: 26,
                 height: 26,
@@ -345,6 +364,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {(currentUser?.full_name || 'U').charAt(0).toUpperCase()}
               </div>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: userSegment === 'FMCG' ? '#10b981' : (userSegment === 'FMCD' ? '#fbbf24' : '#38bdf8'), boxShadow: '0 0 8px currentColor' }} title={`Segment: ${userSegment}`}></div>
+              <span style={{ fontSize: '0.55rem', color: '#38bdf8', fontWeight: 800, fontFamily: 'monospace' }}>{APP_VERSION}</span>
               <button
                 onClick={() => logout()}
                 title="Sign Out"

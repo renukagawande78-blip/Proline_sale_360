@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap, X } from 'lucide-react';
+import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap, X, Clock, Tag } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications, getRoleBadge, getCategoryBadge } from '../../context/NotificationContext';
 import { RoleName, GlobalFilterState, NotificationCategory } from '../../types';
 import { resolveSegmentForUser } from '../../lib/supabase';
+import { APP_VERSION, APP_BUILD_DATETIME } from '../../config/version';
 
 interface HeaderViewProps {
   onToggleSidebarCollapse?: () => void;
@@ -635,6 +636,22 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
                 >
                   <LogOut size={15} /> Exit Account / Sign Out
                 </button>
+              </div>
+
+              {/* Version & Build Creation Timestamp Info */}
+              <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '0.6rem', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <Tag size={12} color="#38bdf8" /> App Version:
+                  </span>
+                  <span style={{ color: '#38bdf8', fontWeight: 800, fontFamily: 'monospace' }}>
+                    {APP_VERSION}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.66rem', color: '#64748b' }}>
+                  <Clock size={11} color="#64748b" />
+                  <span>Created: {APP_BUILD_DATETIME}</span>
+                </div>
               </div>
             </div>
           )}
