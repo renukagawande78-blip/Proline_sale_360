@@ -22,6 +22,7 @@ import { Order, OrderStatus, Agency } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { isCompanyAllowedForUser, checkIsSuperAdmin, fetchAgenciesFromSupabaseTable } from '../../lib/supabase';
+import { resolveOfficialZone } from '../../data/officialAreasData';
 
 interface DispatchViewProps {
   orders: Order[];
@@ -91,41 +92,28 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
     (canViewAll || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle))
   );
 
-  // Helper to resolve an order's zone reliably
+  // Helper to resolve an order's zone reliably using official 9 zones
   const getOrderZoneInfo = (order: Order) => {
-    if (order.zone_name) {
-      return {
-        zoneName: order.zone_name,
-        zoneRegion: order.zone_region || 'Surat Region'
-      };
-    }
-
     const matchedAgency = agenciesList.find(a => a.id === order.agency_id) || 
                           agenciesList.find(a => (a.agency_name || '').toLowerCase().trim() === (order.agency_name || '').toLowerCase().trim());
-    if (matchedAgency && matchedAgency.zone_name) {
+
+    // 1. Direct match if order or agency has an official zone name
+    const rawZone = order.zone_name || matchedAgency?.zone_name;
+    const officialZoneNames = ['City-A', 'City-B', 'City-C', 'City-D', 'City-E', 'Upper South', 'South', 'East', 'North'];
+    if (rawZone && officialZoneNames.includes(rawZone)) {
+      const isRural = ['Upper South', 'South', 'East', 'North'].includes(rawZone);
       return {
-        zoneName: matchedAgency.zone_name,
-        zoneRegion: matchedAgency.zone_region || matchedAgency.city || 'Surat Region'
+        zoneName: rawZone,
+        zoneRegion: order.zone_region || matchedAgency?.zone_region || (isRural ? 'Rural' : 'City')
       };
     }
 
-    if (order.area_name) {
-      const areaAgency = agenciesList.find(a => (a.area_name || '').toLowerCase().trim() === (order.area_name || '').toLowerCase().trim());
-      if (areaAgency?.zone_name) {
-        return {
-          zoneName: areaAgency.zone_name,
-          zoneRegion: areaAgency.zone_region || 'Surat Region'
-        };
-      }
-      return {
-        zoneName: order.area_name,
-        zoneRegion: 'Surat City Zone'
-      };
-    }
-
+    // 2. Resolve using official 75 areas & 9 zones mapping
+    const lookupText = `${order.area_name || ''} ${matchedAgency?.area_name || ''} ${matchedAgency?.city || ''} ${order.agency_name || ''}`;
+    const resolved = resolveOfficialZone(lookupText, matchedAgency?.city);
     return {
-      zoneName: 'Central / General Zone',
-      zoneRegion: 'Surat City Zone'
+      zoneName: resolved.zoneName,
+      zoneRegion: resolved.region
     };
   };
 

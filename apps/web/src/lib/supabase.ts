@@ -11,6 +11,11 @@ import {
   AreaMaster, 
   getGroupCode 
 } from '../types';
+import { 
+  OFFICIAL_AREAS_MASTER, 
+  OFFICIAL_ZONE_MASTERS, 
+  resolveOfficialZone 
+} from '../data/officialAreasData';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://psaguppgoigpxumzgvjx.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBzYWd1cHBnb2lncHh1bXpndmp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjYyNjcsImV4cCI6MjEwMTcwMjI2N30.fJbplLizPdrvvxWlZ2L-Nh32RCaAnpJhXVPP4cWqj68';
@@ -445,13 +450,13 @@ export const resolveSegmentForUser = (
   return 'ALL';
 };
 
-export const MOCK_ZONES: ZoneMaster[] = [];
+export const MOCK_ZONES: ZoneMaster[] = OFFICIAL_ZONE_MASTERS;
 
-const DEFAULT_ZONE: ZoneMaster = {
-  id: 'zn_00',
-  zone_code: 'ZN-GEN',
-  zone_name: 'South',
-  region: 'South Gujarat Rural Zone',
+const DEFAULT_ZONE: ZoneMaster = OFFICIAL_ZONE_MASTERS[0] || {
+  id: 'zn_cta',
+  zone_code: 'ZN-CTA',
+  zone_name: 'City-A',
+  region: 'City',
   major_areas: [],
   description: 'Default Zone'
 };
@@ -712,16 +717,7 @@ export const removeAreaTagFromSupabaseZone = async (zone: ZoneMaster, areaNameTo
   }
 };
 
-export const DEFAULT_AREAS: AreaMaster[] = [
-  { id: 'ar_01', area_code: 'AR-SUR-001', area_name: 'Ring Road Textile Market', city: 'Surat', zone_code: 'ZN-SUR-A', region: 'Surat City Zone', description: 'Major B2B Textile & Wholesale Trade Hub' },
-  { id: 'ar_02', area_code: 'AR-SUR-002', area_name: 'Adajan & Honey Park Road', city: 'Surat', zone_code: 'ZN-SUR-A', region: 'Surat City Zone', description: 'High-Density Residential & FMCG Retail Belt' },
-  { id: 'ar_03', area_code: 'AR-SUR-003', area_name: 'Varachha Main Road', city: 'Surat', zone_code: 'ZN-SUR-A', region: 'Surat City Zone', description: 'Diamond Bourse & Commercial Wholesale Hub' },
-  { id: 'ar_04', area_code: 'AR-SUR-004', area_name: 'Udhna Industry Area & GIDC', city: 'Surat', zone_code: 'ZN-SUR-B', region: 'Surat City Zone', description: 'Industrial & Manufacturing Distribution Center' },
-  { id: 'ar_05', area_code: 'AR-SUR-005', area_name: 'Katargam GIDC', city: 'Surat', zone_code: 'ZN-SUR-B', region: 'Surat City Zone', description: 'Commercial Diamond & FMCG Retail Network' },
-  { id: 'ar_06', area_code: 'AR-SUR-006', area_name: 'Athwa Lines & Ghoddod Road', city: 'Surat', zone_code: 'ZN-SUR-C', region: 'Surat City Zone', description: 'Premium FMCG & FMCD Retail Showroom Corridor' },
-  { id: 'ar_07', area_code: 'AR-SUR-007', area_name: 'Piplod & VIP Road', city: 'Surat', zone_code: 'ZN-SUR-C', region: 'Surat City Zone', description: 'Modern Retail Malls & FMCD Electronics Hub' },
-  { id: 'ar_08', area_code: 'AR-SUR-008', area_name: 'Vesu University Road', city: 'Surat', zone_code: 'ZN-SUR-C', region: 'Surat City Zone', description: 'New Residential & Modern Trade Retail Market' }
-];
+export const DEFAULT_AREAS: AreaMaster[] = OFFICIAL_AREAS_MASTER;
 
 export const deduplicateAreas = (rawAreas: AreaMaster[]): AreaMaster[] => {
   const map: Record<string, AreaMaster> = {};
@@ -832,28 +828,9 @@ export const deleteAreaFromSupabase = async (areaId: string): Promise<{ success:
 };
 
 export const resolveZoneForAreaAndCity = (areaName?: string, cityName?: string): ZoneMaster => {
-  const areaNorm = (areaName || '').toLowerCase().trim();
-  const cityNorm = (cityName || '').toLowerCase().trim();
-  const combined = `${areaNorm} ${cityNorm}`;
-
-  for (const zone of MOCK_ZONES) {
-    for (const area of zone.major_areas) {
-      const target = area.toLowerCase().trim();
-      if (!target) continue;
-
-      if (
-        combined.includes(target) ||
-        (target === 'udhana' && combined.includes('udhna')) ||
-        (target === 'godadara' && combined.includes('godadra')) ||
-        (target === 'umergoan' && combined.includes('umbergaon')) ||
-        (target === 'olpad' && combined.includes('oldpad')) ||
-        (target === 'kosmba' && combined.includes('kosamba'))
-      ) {
-        return zone;
-      }
-    }
-  }
-
+  const res = resolveOfficialZone(areaName, cityName);
+  const matched = MOCK_ZONES.find(z => z.zone_name.toLowerCase() === res.zoneName.toLowerCase());
+  if (matched) return matched;
   return MOCK_ZONES[0] || DEFAULT_ZONE;
 };
 

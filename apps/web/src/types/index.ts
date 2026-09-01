@@ -236,7 +236,7 @@ export interface Area {
   region: string;
 }
 
-export type ZoneRegion = 'Surat City Zone' | 'South Gujarat Rural Zone';
+export type ZoneRegion = 'Surat City Zone' | 'South Gujarat Rural Zone' | 'City' | 'Rural';
 
 export type ZoneName =
   | 'City-A'

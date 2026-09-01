@@ -1,0 +1,208 @@
+import { AreaMaster, ZoneMaster, ZoneName } from '../types';
+
+export interface RawAreaEntry {
+  area_name: string;
+  zone_name: ZoneName;
+  region: 'City' | 'Rural';
+  city: string;
+  zone_code: string;
+}
+
+export const OFFICIAL_ZONE_DEFINITIONS: {
+  zone_name: ZoneName;
+  zone_code: string;
+  region: 'City' | 'Rural';
+  description: string;
+}[] = [
+  { zone_name: 'City-A', zone_code: 'ZN-CTA', region: 'City', description: 'Surat City North-East Diamond & Varachha Corridor' },
+  { zone_name: 'City-B', zone_code: 'ZN-CTB', region: 'City', description: 'Surat City East Textile Market & Puna Belt' },
+  { zone_name: 'City-C', zone_code: 'ZN-CTC', region: 'City', description: 'Surat City Central & West Old City / Adajan Belt' },
+  { zone_name: 'City-D', zone_code: 'ZN-CTD', region: 'City', description: 'Surat City South Industrial & Udhana / Sachin Belt' },
+  { zone_name: 'City-E', zone_code: 'ZN-CTE', region: 'City', description: 'Surat City South-West Modern Retail & Vesu / VIP Road' },
+  { zone_name: 'Upper South', zone_code: 'ZN-UPS', region: 'Rural', description: 'South Gujarat Industrial Belt: Vapi, Valsad, Daman, Silvassa' },
+  { zone_name: 'South', zone_code: 'ZN-SOU', region: 'Rural', description: 'South Highway & Navsari, Bilimora, Chikhli Corridor' },
+  { zone_name: 'East', zone_code: 'ZN-EAS', region: 'Rural', description: 'East Agricultural & Bardoli, Vyara, Mandavi Belt' },
+  { zone_name: 'North', zone_code: 'ZN-NOR', region: 'Rural', description: 'North Chemical & Industrial: Bharuch, Ankleshwar, Kamrej' },
+];
+
+export const RAW_OFFICIAL_AREAS: RawAreaEntry[] = [
+  // --- City-A (City) ---
+  { area_name: 'Mini Bazar', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+  { area_name: 'Hirabaug', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+  { area_name: 'Sarthana', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+  { area_name: 'Nana Varachha', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+  { area_name: 'AK Road', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+  { area_name: 'Katargam', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+  { area_name: 'Amroli', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+  { area_name: 'Ved Road', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+  { area_name: 'Mota Varachha', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+  { area_name: 'LH Road', zone_name: 'City-A', region: 'City', city: 'Surat', zone_code: 'ZN-CTA' },
+
+  // --- City-B (City) ---
+  { area_name: 'Parvat Patiya', zone_name: 'City-B', region: 'City', city: 'Surat', zone_code: 'ZN-CTB' },
+  { area_name: 'Puna', zone_name: 'City-B', region: 'City', city: 'Surat', zone_code: 'ZN-CTB' },
+  { area_name: 'Yogichowk', zone_name: 'City-B', region: 'City', city: 'Surat', zone_code: 'ZN-CTB' },
+  { area_name: 'Vraj Chowk', zone_name: 'City-B', region: 'City', city: 'Surat', zone_code: 'ZN-CTB' },
+  { area_name: 'Saroli', zone_name: 'City-B', region: 'City', city: 'Surat', zone_code: 'ZN-CTB' },
+  { area_name: 'Sahara Darwaja', zone_name: 'City-B', region: 'City', city: 'Surat', zone_code: 'ZN-CTB' },
+  { area_name: 'Textile Market', zone_name: 'City-B', region: 'City', city: 'Surat', zone_code: 'ZN-CTB' },
+  { area_name: 'Bombay Market', zone_name: 'City-B', region: 'City', city: 'Surat', zone_code: 'ZN-CTB' },
+
+  // --- City-C (City) ---
+  { area_name: 'Ring Road', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+  { area_name: 'Majura Gate', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+  { area_name: 'Nanpura', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+  { area_name: 'Bhagal', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+  { area_name: 'Old City', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+  { area_name: 'Adajan', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+  { area_name: 'Rander', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+  { area_name: 'Hazira', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+  { area_name: 'Pal', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+  { area_name: 'Jangirpura', zone_name: 'City-C', region: 'City', city: 'Surat', zone_code: 'ZN-CTC' },
+
+  // --- City-D (City) ---
+  { area_name: 'Udhana', zone_name: 'City-D', region: 'City', city: 'Surat', zone_code: 'ZN-CTD' },
+  { area_name: 'Dindoli', zone_name: 'City-D', region: 'City', city: 'Surat', zone_code: 'ZN-CTD' },
+  { area_name: 'Godadara', zone_name: 'City-D', region: 'City', city: 'Surat', zone_code: 'ZN-CTD' },
+  { area_name: 'Sachin', zone_name: 'City-D', region: 'City', city: 'Surat', zone_code: 'ZN-CTD' },
+  { area_name: 'Pandesara', zone_name: 'City-D', region: 'City', city: 'Surat', zone_code: 'ZN-CTD' },
+  { area_name: 'Unn', zone_name: 'City-D', region: 'City', city: 'Surat', zone_code: 'ZN-CTD' },
+  { area_name: 'Bamroli', zone_name: 'City-D', region: 'City', city: 'Surat', zone_code: 'ZN-CTD' },
+
+  // --- City-E (City) ---
+  { area_name: 'New City', zone_name: 'City-E', region: 'City', city: 'Surat', zone_code: 'ZN-CTE' },
+  { area_name: 'Ghoddod Road', zone_name: 'City-E', region: 'City', city: 'Surat', zone_code: 'ZN-CTE' },
+  { area_name: 'Citylight', zone_name: 'City-E', region: 'City', city: 'Surat', zone_code: 'ZN-CTE' },
+  { area_name: 'Parle Point', zone_name: 'City-E', region: 'City', city: 'Surat', zone_code: 'ZN-CTE' },
+  { area_name: 'Vesu', zone_name: 'City-E', region: 'City', city: 'Surat', zone_code: 'ZN-CTE' },
+  { area_name: 'Althan', zone_name: 'City-E', region: 'City', city: 'Surat', zone_code: 'ZN-CTE' },
+  { area_name: 'Sarsana', zone_name: 'City-E', region: 'City', city: 'Surat', zone_code: 'ZN-CTE' },
+  { area_name: 'VIP Road', zone_name: 'City-E', region: 'City', city: 'Surat', zone_code: 'ZN-CTE' },
+
+  // --- Upper South (Rural) ---
+  { area_name: 'Vapi', zone_name: 'Upper South', region: 'Rural', city: 'Vapi', zone_code: 'ZN-UPS' },
+  { area_name: 'Umbergaon', zone_name: 'Upper South', region: 'Rural', city: 'Umbergaon', zone_code: 'ZN-UPS' },
+  { area_name: 'Daman', zone_name: 'Upper South', region: 'Rural', city: 'Daman', zone_code: 'ZN-UPS' },
+  { area_name: 'Silvassa', zone_name: 'Upper South', region: 'Rural', city: 'Silvassa', zone_code: 'ZN-UPS' },
+  { area_name: 'Valsad', zone_name: 'Upper South', region: 'Rural', city: 'Valsad', zone_code: 'ZN-UPS' },
+  { area_name: 'Pardi', zone_name: 'Upper South', region: 'Rural', city: 'Pardi', zone_code: 'ZN-UPS' },
+  { area_name: 'Sanjan', zone_name: 'Upper South', region: 'Rural', city: 'Sanjan', zone_code: 'ZN-UPS' },
+  { area_name: 'Bhilad', zone_name: 'Upper South', region: 'Rural', city: 'Bhilad', zone_code: 'ZN-UPS' },
+  { area_name: 'Dharampur', zone_name: 'Upper South', region: 'Rural', city: 'Dharampur', zone_code: 'ZN-UPS' },
+
+  // --- South (Rural) ---
+  { area_name: 'Kadodara', zone_name: 'South', region: 'Rural', city: 'Kadodara', zone_code: 'ZN-SOU' },
+  { area_name: 'Navsari', zone_name: 'South', region: 'Rural', city: 'Navsari', zone_code: 'ZN-SOU' },
+  { area_name: 'Bilimora', zone_name: 'South', region: 'Rural', city: 'Bilimora', zone_code: 'ZN-SOU' },
+  { area_name: 'Chikhli', zone_name: 'South', region: 'Rural', city: 'Chikhli', zone_code: 'ZN-SOU' },
+  { area_name: 'Vasda', zone_name: 'South', region: 'Rural', city: 'Vasda', zone_code: 'ZN-SOU' },
+  { area_name: 'Waghai', zone_name: 'South', region: 'Rural', city: 'Waghai', zone_code: 'ZN-SOU' },
+  { area_name: 'Palsana', zone_name: 'South', region: 'Rural', city: 'Palsana', zone_code: 'ZN-SOU' },
+
+  // --- East (Rural) ---
+  { area_name: 'Jolwa', zone_name: 'East', region: 'Rural', city: 'Jolwa', zone_code: 'ZN-EAS' },
+  { area_name: 'Bardoli', zone_name: 'East', region: 'Rural', city: 'Bardoli', zone_code: 'ZN-EAS' },
+  { area_name: 'Mandavi', zone_name: 'East', region: 'Rural', city: 'Mandavi', zone_code: 'ZN-EAS' },
+  { area_name: 'Karcheliya', zone_name: 'East', region: 'Rural', city: 'Karcheliya', zone_code: 'ZN-EAS' },
+  { area_name: 'Madhi', zone_name: 'East', region: 'Rural', city: 'Madhi', zone_code: 'ZN-EAS' },
+  { area_name: 'Vyara', zone_name: 'East', region: 'Rural', city: 'Vyara', zone_code: 'ZN-EAS' },
+  { area_name: 'Songadh', zone_name: 'East', region: 'Rural', city: 'Songadh', zone_code: 'ZN-EAS' },
+  { area_name: 'Navapur', zone_name: 'East', region: 'Rural', city: 'Navapur', zone_code: 'ZN-EAS' },
+
+  // --- North (Rural) ---
+  { area_name: 'Bharuch', zone_name: 'North', region: 'Rural', city: 'Bharuch', zone_code: 'ZN-NOR' },
+  { area_name: 'Ankleshwar', zone_name: 'North', region: 'Rural', city: 'Ankleshwar', zone_code: 'ZN-NOR' },
+  { area_name: 'Kim', zone_name: 'North', region: 'Rural', city: 'Kim', zone_code: 'ZN-NOR' },
+  { area_name: 'Kosamba', zone_name: 'North', region: 'Rural', city: 'Kosamba', zone_code: 'ZN-NOR' },
+  { area_name: 'Pipodra', zone_name: 'North', region: 'Rural', city: 'Pipodra', zone_code: 'ZN-NOR' },
+  { area_name: 'Kamrej', zone_name: 'North', region: 'Rural', city: 'Kamrej', zone_code: 'ZN-NOR' },
+  { area_name: 'Oldpad', zone_name: 'North', region: 'Rural', city: 'Oldpad', zone_code: 'ZN-NOR' },
+  { area_name: 'Sayan', zone_name: 'North', region: 'Rural', city: 'Sayan', zone_code: 'ZN-NOR' }
+];
+
+export const OFFICIAL_AREAS_MASTER: AreaMaster[] = RAW_OFFICIAL_AREAS.map((raw, idx) => ({
+  id: `ar_off_${(idx + 1).toString().padStart(3, '0')}`,
+  area_code: `AR-${(raw.zone_code.replace('ZN-', '') || 'LOC')}-${(idx + 1).toString().padStart(3, '0')}`,
+  area_name: raw.area_name,
+  city: raw.city,
+  zone_code: raw.zone_name, // Store zone name directly e.g. "City-A", "Upper South"
+  region: raw.region,
+  description: `${raw.zone_name} Zone • ${raw.region} Locality Sector`,
+  created_at: new Date('2026-09-01T00:00:00Z').toISOString()
+}));
+
+export const OFFICIAL_ZONE_MASTERS: ZoneMaster[] = OFFICIAL_ZONE_DEFINITIONS.map((def, idx) => {
+  const matchingAreas = RAW_OFFICIAL_AREAS
+    .filter(a => a.zone_name === def.zone_name)
+    .map(a => a.area_name);
+
+  return {
+    id: `zn_${def.zone_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+    zone_code: def.zone_code,
+    zone_name: def.zone_name,
+    region: def.region,
+    major_areas: matchingAreas,
+    description: def.description
+  };
+});
+
+/**
+ * High-speed resolver to find an area's zone and region from any input text (area name, address, agency name)
+ */
+export const resolveOfficialZone = (areaOrText?: string, cityOrText?: string): {
+  zoneName: string;
+  zoneCode: string;
+  region: 'City' | 'Rural';
+  matchedArea: string;
+} => {
+  const normArea = (areaOrText || '').toLowerCase().trim();
+  const normCity = (cityOrText || '').toLowerCase().trim();
+  const combined = `${normArea} ${normCity}`;
+
+  if (!combined.trim()) {
+    return {
+      zoneName: 'City-A',
+      zoneCode: 'ZN-CTA',
+      region: 'City',
+      matchedArea: 'Default'
+    };
+  }
+
+  // 1. Direct match with official area list
+  for (const item of RAW_OFFICIAL_AREAS) {
+    const target = item.area_name.toLowerCase().trim();
+    if (combined.includes(target) || normArea === target) {
+      return {
+        zoneName: item.zone_name,
+        zoneCode: item.zone_code,
+        region: item.region,
+        matchedArea: item.area_name
+      };
+    }
+  }
+
+  // 2. Fuzzy / alternate spellings
+  if (combined.includes('udhna')) {
+    return { zoneName: 'City-D', zoneCode: 'ZN-CTD', region: 'City', matchedArea: 'Udhana' };
+  }
+  if (combined.includes('godadra')) {
+    return { zoneName: 'City-D', zoneCode: 'ZN-CTD', region: 'City', matchedArea: 'Godadara' };
+  }
+  if (combined.includes('olpad')) {
+    return { zoneName: 'North', zoneCode: 'ZN-NOR', region: 'Rural', matchedArea: 'Oldpad' };
+  }
+  if (combined.includes('kosmba')) {
+    return { zoneName: 'North', zoneCode: 'ZN-NOR', region: 'Rural', matchedArea: 'Kosamba' };
+  }
+  if (combined.includes('umergaon') || combined.includes('umergoan')) {
+    return { zoneName: 'Upper South', zoneCode: 'ZN-UPS', region: 'Rural', matchedArea: 'Umbergaon' };
+  }
+
+  // 3. Fallback based on city or default to City-A
+  return {
+    zoneName: 'City-A',
+    zoneCode: 'ZN-CTA',
+    region: 'City',
+    matchedArea: areaOrText || 'General'
+  };
+};
