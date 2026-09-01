@@ -619,10 +619,13 @@ export const fetchZonesFromSupabaseAreasTable = async (): Promise<ZoneMaster[]> 
     }
 
     const fetchedList = Object.values(zoneMap);
+    if (fetchedList.length === 0) {
+      return deduplicateZones(OFFICIAL_ZONE_MASTERS);
+    }
     return deduplicateZones(fetchedList);
   } catch (err: any) {
     console.error('Error fetching zones from Supabase areas table:', err?.message || err);
-    return [];
+    return deduplicateZones(OFFICIAL_ZONE_MASTERS);
   }
 };
 

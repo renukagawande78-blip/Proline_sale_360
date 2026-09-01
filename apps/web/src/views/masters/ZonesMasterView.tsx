@@ -33,6 +33,7 @@ import {
   removeAreaTagFromSupabaseZone,
   deduplicateZones
 } from '../../lib/supabase';
+import { OFFICIAL_ZONE_MASTERS } from '../../data/officialAreasData';
 import { downloadSampleCSV } from '../../lib/masterImportExport';
 import { BulkImportModal } from '../../components/BulkImportModal';
 
@@ -46,7 +47,7 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [activeRegionFilter, setActiveRegionFilter] = useState<'ALL' | ZoneRegion>('ALL');
-  const [zonesList, setZonesList] = useState<ZoneMaster[]>([]);
+  const [zonesList, setZonesList] = useState<ZoneMaster[]>(OFFICIAL_ZONE_MASTERS);
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [newAreaInputs, setNewAreaInputs] = useState<Record<string, string>>({});
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);
