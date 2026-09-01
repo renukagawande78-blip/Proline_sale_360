@@ -57,10 +57,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  const isChiragOrHarshad = (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
+  const isSuperAdminUser = role === 'SUPER_ADMIN' || isChiragOrHarshad;
+  const isManagement = isSuperAdminUser || role === 'SALES_ADMIN';
+
   const navItems: { id: string; label: string; icon: any; permissionKey?: keyof PermissionControl; fallbackRoles: string[] }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, fallbackRoles: ['ALL'] },
-    { id: 'orders', label: 'Sales Orders', icon: ShoppingCart, fallbackRoles: ['ALL'] },
-    { id: 'approvals', label: 'Order Approvals', icon: CheckCircle2, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'SALES_ADMIN'] },
+    { 
+      id: 'orders', 
+      label: isManagement ? 'Orders & Approvals' : 'Sales Orders', 
+      icon: isManagement ? CheckCircle2 : ShoppingCart, 
+      fallbackRoles: ['ALL'] 
+    },
     { id: 'dispatch', label: 'Dispatch Management', icon: Truck, permissionKey: 'order_transfer_to_dispatch', fallbackRoles: ['SUPER_ADMIN', 'DISPATCH_MANAGER', 'BILLING', 'SALES_ADMIN'] },
     { id: 'accounts', label: 'Accounts & Billing', icon: Receipt, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'ACCOUNTS', 'BILLING'] },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, fallbackRoles: ['ALL'] },
@@ -71,9 +79,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const filteredNav = navItems.filter(item => {
-    const isChiragOrHarshad = (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad');
-    const isSuperAdminUser = role === 'SUPER_ADMIN' || isChiragOrHarshad;
-
     if (isSuperAdminUser) return true;
 
     // 1. Field Sales Exec / Area Sales Manager: ONLY sees Sales Orders, Track My Order, and Reports & Analytics

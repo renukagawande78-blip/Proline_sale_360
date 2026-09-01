@@ -49,8 +49,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const isSuperAdmin = role === 'SUPER_ADMIN'
     || (currentUser?.full_name || '').toLowerCase().includes('chirag')
     || (currentUser?.full_name || '').toLowerCase().includes('harshad');
-  const isAccounts = role === 'ACCOUNTS' || isSuperAdmin;
   const isSalesAdmin = role === 'SALES_ADMIN';
+  const isManagement = isSuperAdmin || isSalesAdmin;
+  const isAccounts = role === 'ACCOUNTS' || isSuperAdmin;
   const isSalesPerson = (role as string) === 'SALES_PERSON' || (role as string) === 'SALESPERSON';
   // Stage 2 uses the Details panel as the single Sales Admin table action.
   const showLegacyTableActions = false;
@@ -546,11 +547,19 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 2 }}>
-              <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Home &rsaquo; Orders &rsaquo;</span>
-              <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 700 }}>Review &amp; Approvals (Stage 2)</span>
+              <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Home &rsaquo;</span>
+              <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 700 }}>
+                {isManagement ? 'Orders & Approvals' : 'Sales Orders'}
+              </span>
             </div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>Review &amp; Approvals (Stage 2)</h1>
-            <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 3 }}>Sales Admin Review, Super Admin Approval &amp; On Hold Management</p>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+              {isManagement ? 'Orders & Approvals Management' : 'Sales Orders & Booking'}
+            </h1>
+            <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 3 }}>
+              {isManagement 
+                ? 'Review bookings, authorize commercial approvals, manage holds & track customer fulfillment' 
+                : 'Book agency sales orders, track status, and manage customer fulfillment'}
+            </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#1e293b', border: '1px solid #334155', padding: '0.35rem 0.65rem', borderRadius: 6 }}>
