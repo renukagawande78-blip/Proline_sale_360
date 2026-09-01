@@ -73,14 +73,14 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   const [editAreaName, setEditAreaName] = useState('');
   const [editCity, setEditCity] = useState('Surat');
   const [editZoneCode, setEditZoneCode] = useState('City-A');
-  const [editRegion, setEditRegion] = useState<'City' | 'Rural'>('City');
+  const [editRegion, setEditRegion] = useState<'City' | 'Rural' | 'Other'>('City');
   const [editDesc, setEditDesc] = useState('');
 
   // Add New Area Form state
   const [newAreaName, setNewAreaName] = useState('');
   const [newCity, setNewCity] = useState('Surat');
   const [newZoneCode, setNewZoneCode] = useState('City-A');
-  const [newRegion, setNewRegion] = useState<'City' | 'Rural'>('City');
+  const [newRegion, setNewRegion] = useState<'City' | 'Rural' | 'Other'>('City');
   const [newDesc, setNewDesc] = useState('');
 
   // Mapping Resolution Modal state for unmapped/mismatched agencies
@@ -94,7 +94,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   const [resolveAreaName, setResolveAreaName] = useState('');
   const [resolveCity, setResolveCity] = useState('Surat');
   const [resolveZoneCode, setResolveZoneCode] = useState('City-A');
-  const [resolveRegion, setResolveRegion] = useState<'City' | 'Rural'>('City');
+  const [resolveRegion, setResolveRegion] = useState<'City' | 'Rural' | 'Other'>('City');
 
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);

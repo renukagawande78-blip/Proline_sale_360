@@ -95,6 +95,13 @@ VALUES
     'Rural',
     '["Bharuch", "Ankleshwar", "Kim", "Kosamba", "Pipodra", "Kamrej", "Oldpad", "Sayan"]'::jsonb,
     'North Chemical & Industrial: Bharuch, Ankleshwar, Kamrej'
+  ),
+  (
+    'ZN-OTH',
+    'Other Z',
+    'Other',
+    '["Other / Pan-India"]'::jsonb,
+    'Out-of-state consignments, Pan-India transport, SEZ, or non-standard custom delivery territories'
   )
 ON CONFLICT (zone_code) DO UPDATE SET
     zone_name = EXCLUDED.zone_name,

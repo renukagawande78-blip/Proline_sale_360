@@ -3,7 +3,7 @@ import { AreaMaster, ZoneMaster, ZoneName, AreaTypeMaster } from '../types';
 export interface RawAreaEntry {
   area_name: string;
   zone_name: ZoneName;
-  region: 'City' | 'Rural';
+  region: 'City' | 'Rural' | 'Other';
   city: string;
   zone_code: string;
 }
@@ -11,7 +11,7 @@ export interface RawAreaEntry {
 export const OFFICIAL_ZONE_DEFINITIONS: {
   zone_name: ZoneName;
   zone_code: string;
-  region: 'City' | 'Rural';
+  region: 'City' | 'Rural' | 'Other';
   description: string;
 }[] = [
   { zone_name: 'City-A', zone_code: 'ZN-CTA', region: 'City', description: 'Surat City North-East Diamond & Varachha Corridor' },
@@ -23,6 +23,7 @@ export const OFFICIAL_ZONE_DEFINITIONS: {
   { zone_name: 'South', zone_code: 'ZN-SOU', region: 'Rural', description: 'South Highway & Navsari, Bilimora, Chikhli Corridor' },
   { zone_name: 'East', zone_code: 'ZN-EAS', region: 'Rural', description: 'East Agricultural & Bardoli, Vyara, Mandavi Belt' },
   { zone_name: 'North', zone_code: 'ZN-NOR', region: 'Rural', description: 'North Chemical & Industrial: Bharuch, Ankleshwar, Kamrej' },
+  { zone_name: 'Other Z', zone_code: 'ZN-OTH', region: 'Other', description: 'Out-of-state consignments, Pan-India transport, SEZ, or non-standard custom delivery territories' }
 ];
 
 export const RAW_OFFICIAL_AREAS: RawAreaEntry[] = [
@@ -117,7 +118,10 @@ export const RAW_OFFICIAL_AREAS: RawAreaEntry[] = [
   { area_name: 'Pipodra', zone_name: 'North', region: 'Rural', city: 'Pipodra', zone_code: 'ZN-NOR' },
   { area_name: 'Kamrej', zone_name: 'North', region: 'Rural', city: 'Kamrej', zone_code: 'ZN-NOR' },
   { area_name: 'Oldpad', zone_name: 'North', region: 'Rural', city: 'Oldpad', zone_code: 'ZN-NOR' },
-  { area_name: 'Sayan', zone_name: 'North', region: 'Rural', city: 'Sayan', zone_code: 'ZN-NOR' }
+  { area_name: 'Sayan', zone_name: 'North', region: 'Rural', city: 'Sayan', zone_code: 'ZN-NOR' },
+
+  // --- Other Z (Other) ---
+  { area_name: 'Other / Pan-India', zone_name: 'Other Z', region: 'Other', city: 'Outstation', zone_code: 'ZN-OTH' }
 ];
 
 export const OFFICIAL_AREAS_MASTER: AreaMaster[] = RAW_OFFICIAL_AREAS.map((raw, idx) => ({
@@ -152,7 +156,7 @@ export const OFFICIAL_ZONE_MASTERS: ZoneMaster[] = OFFICIAL_ZONE_DEFINITIONS.map
 export const resolveOfficialZone = (areaOrText?: string, cityOrText?: string): {
   zoneName: string;
   zoneCode: string;
-  region: 'City' | 'Rural';
+  region: 'City' | 'Rural' | 'Other';
   matchedArea: string;
 } => {
   const normArea = (areaOrText || '').toLowerCase().trim();
@@ -239,8 +243,8 @@ export const DEFAULT_AREA_TYPES: AreaTypeMaster[] = [
     description: 'Out-of-state consignments, Pan-India transport, SEZ, or non-standard custom delivery territories',
     delivery_sla: 'Within 3-5 Business Days (Freight Transit)',
     default_vehicle_mode: 'Third-Party Logistics / Express Cargo / Air or Rail Cargo',
-    associated_zones: [],
-    localities_count: 0,
+    associated_zones: ['Other Z'],
+    localities_count: 1,
     agency_count: 0,
     active: true
   }

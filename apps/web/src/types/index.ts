@@ -247,7 +247,8 @@ export type ZoneName =
   | 'Upper South'
   | 'South'
   | 'East'
-  | 'North';
+  | 'North'
+  | 'Other Z';
 
 export interface ZoneMaster {
   id: string;

@@ -423,7 +423,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
             transition: 'all 0.15s ease'
           }}
         >
-          <Compass size={15} /> Area Types (Rural & City)
+          <Compass size={15} /> Area Types (City, Rural & Other)
         </button>
 
         <button
@@ -445,7 +445,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
             transition: 'all 0.15s ease'
           }}
         >
-          <Map size={15} /> Territory Zones (9 Zones)
+          <Map size={15} /> Territory Zones (10 Zones)
         </button>
 
         <button
