@@ -26,6 +26,7 @@ import {
 import { Order, OrderStatus } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { isCompanyAllowedForUser } from '../../lib/supabase';
+import { formatDisplayDateTime } from '../../utils/dateFormatter';
 
 interface OrderTrackerViewProps {
   orders: Order[];
@@ -340,7 +341,7 @@ export const OrderTrackerView: React.FC<OrderTrackerViewProps> = ({ orders, onRe
                   {selectedOrder.order_number}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 4, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Calendar size={13} /> {selectedOrder.order_date}
+                  <Calendar size={13} /> {formatDisplayDateTime(selectedOrder.order_date)}
                 </div>
               </div>
 

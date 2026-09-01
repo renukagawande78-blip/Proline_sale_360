@@ -166,8 +166,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     if (!d) return '-';
     try {
       const dt = new Date(d);
-      return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + '\n' +
-        dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      if (isNaN(dt.getTime())) return d;
+      const day = dt.toLocaleDateString('en-GB', { day: '2-digit' });
+      const month = dt.toLocaleDateString('en-GB', { month: 'short' });
+      const year = dt.getFullYear();
+      const datePart = `${day}-${month}-${year}`;
+      const timePart = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `${datePart}\n${timePart}`;
     } catch { return d; }
   };
 

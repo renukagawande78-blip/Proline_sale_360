@@ -23,6 +23,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { isCompanyAllowedForUser, checkIsSuperAdmin, fetchAgenciesFromSupabaseTable } from '../../lib/supabase';
 import { resolveOfficialZone } from '../../data/officialAreasData';
+import { formatDateTimeParts } from '../../utils/dateFormatter';
 
 interface DispatchViewProps {
   orders: Order[];
@@ -453,7 +454,24 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                     </div>
                   )}
                 </td>
-                <td>{order.order_date}</td>
+                <td>
+                  {(() => {
+                    const dt = formatDateTimeParts(order.order_date);
+                    return (
+                      <div>
+                        <span style={{ fontWeight: 700, color: '#f8fafc', whiteSpace: 'nowrap', display: 'block', fontSize: '0.8rem' }}>
+                          {dt.date}
+                        </span>
+                        {dt.time && (
+                          <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 2, whiteSpace: 'nowrap' }}>
+                            <Clock size={11} color="#38bdf8" />
+                            {dt.time}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </td>
                 <td>
                   <strong style={{ color: '#f8fafc', display: 'block' }}>{order.agency_name}</strong>
                   {order.area_name && (
