@@ -423,7 +423,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
           <section style={{ background: '#0a1525', border: '1px solid #1e293b', borderRadius: 14, padding: '1.15rem' }}>
             <SectionHeader icon={MapPin} label="3 · Territory, City & Auto-Zone Assignment" color="52,211,153" />
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                   <FieldLabel required>City</FieldLabel>
@@ -530,38 +530,6 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
                 <FieldSelect value={areaName} onChange={setAreaName}>
                   {(areasMap[city] || [areaName || city]).map((a, idx) => (
                     <option key={idx} value={a}>{a}</option>
-                  ))}
-                </FieldSelect>
-              </div>
-
-              <div>
-                <FieldLabel>Assigned Field Salesperson</FieldLabel>
-                <FieldSelect value={assignedSalesperson} onChange={setAssignedSalesperson}>
-                  {[
-                    'Chirag Desai',
-                    'Chirag Patel',
-                    'Amit Shah',
-                    'Vikram Desai',
-                    'Jay',
-                    'Dixit',
-                    'Sumit',
-                    'Keyur (Field Sales)',
-                    'Shailendra',
-                    'Jayendra',
-                    'Nikhil',
-                    'Jay (Field Sales)',
-                    'Sahil',
-                    'Milan',
-                    'Brijesh',
-                    'Kamal',
-                    'Ashish',
-                    'Ankit',
-                    'Tushar',
-                    'Shakti',
-                    'Sanjay',
-                    'Jagrut'
-                  ].map(rep => (
-                    <option key={rep} value={rep}>{rep}</option>
                   ))}
                 </FieldSelect>
               </div>

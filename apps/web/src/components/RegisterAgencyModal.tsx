@@ -736,38 +736,6 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
                 </div>
               </div>
             </div>
-
-            <div style={{ marginTop: '0.5rem' }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
-                Assigned Salespersons (Multiple Allowed, Comma-Separated)
-              </label>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: '#0f172a',
-                border: '1px solid #334155',
-                borderRadius: 10,
-                padding: '0.6rem 0.8rem',
-                gap: '0.6rem'
-              }}>
-                <ShieldCheck size={16} color="#34d399" />
-                <input
-                  type="text"
-                  placeholder="e.g. Chirag Patel, Nikhil, Rahul Sharma"
-                  value={assignedSalesperson}
-                  onChange={(e) => setAssignedSalesperson(e.target.value)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    color: '#34d399',
-                    fontSize: '0.825rem',
-                    fontWeight: 700,
-                    width: '100%'
-                  }}
-                />
-              </div>
-            </div>
           </div>
 
           {/* SECTION 3: Location, Territory & Credit Terms */}
