@@ -471,10 +471,17 @@ export interface ReturnRequest {
   dispatch_notes?: string;
 }
 
+export type HoldReasonCategory = 'FINANCIAL' | 'OPERATIONAL' | 'INVENTORY' | 'DISPUTE' | 'COMPLIANCE';
+
 export interface HoldReason {
   id: string;
   reason_code: string;
   reason_description: string;
+  category?: HoldReasonCategory;
+  action_rule?: string;
+  sla_hours?: number;
+  active?: boolean;
+  created_at?: string;
 }
 
 export interface Dispatch {

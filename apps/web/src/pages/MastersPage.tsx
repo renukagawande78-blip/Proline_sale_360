@@ -14,7 +14,8 @@ import {
   MapPin,
   Trash2,
   Layers,
-  ShieldCheck
+  ShieldCheck,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   isCompanyAllowedForUser, 
@@ -38,6 +39,7 @@ import { BrandsMasterView } from '../views/masters/BrandsMasterView';
 import { UsersMasterView } from '../views/masters/UsersMasterView';
 import { ZonesMasterView } from '../views/masters/ZonesMasterView';
 import { RolePermissionsMasterView } from '../views/masters/RolePermissionsMasterView';
+import { HoldReasonsMasterView } from '../views/masters/HoldReasonsMasterView';
 import { RegisterAgencyModal } from '../components/RegisterAgencyModal';
 import { AddProductModal } from '../components/AddProductModal';
 import { BulkImportModal } from '../components/BulkImportModal';
@@ -491,6 +493,28 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
             <ShieldCheck size={15} /> Role & Permissions
           </button>
         )}
+
+        <button
+          onClick={() => setActiveTab('reasons')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            borderRadius: 10,
+            border: 'none',
+            background: activeTab === 'reasons' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
+            color: activeTab === 'reasons' ? '#090d16' : '#94a3b8',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            boxShadow: activeTab === 'reasons' ? '0 4px 12px rgba(245, 158, 11, 0.4)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <AlertTriangle size={15} /> Hold Reason Directory
+        </button>
       </div>
 
 
@@ -535,6 +559,10 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
 
       {activeTab === 'permissions' && (
         <RolePermissionsMasterView searchQuery={searchQuery} />
+      )}
+
+      {activeTab === 'reasons' && (
+        <HoldReasonsMasterView searchQuery={searchQuery} />
       )}
 
       {/* Add Item Modal */}

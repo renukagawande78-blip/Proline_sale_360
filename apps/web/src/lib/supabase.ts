@@ -16,6 +16,7 @@ import {
   OFFICIAL_ZONE_MASTERS, 
   resolveOfficialZone 
 } from '../data/officialAreasData';
+import { DEFAULT_HOLD_REASONS } from '../data/officialHoldReasonsData';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://psaguppgoigpxumzgvjx.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBzYWd1cHBnb2lncHh1bXpndmp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjYyNjcsImV4cCI6MjEwMTcwMjI2N30.fJbplLizPdrvvxWlZ2L-Nh32RCaAnpJhXVPP4cWqj68';
@@ -1634,7 +1635,46 @@ export const deleteSegmentFromSupabase = async (segmentId: string): Promise<{ su
 // 6. ORDERS & ORDER ITEMS CRUD
 // ============================================================================
 
-export const MOCK_HOLD_REASONS: HoldReason[] = [];
+export const MOCK_HOLD_REASONS: HoldReason[] = DEFAULT_HOLD_REASONS;
+
+export const fetchHoldReasonsFromSupabase = async (): Promise<HoldReason[]> => {
+  try {
+    const { data, error } = await supabase.from('hold_reasons').select('*').order('reason_code');
+    if (error || !data || data.length === 0) {
+      return DEFAULT_HOLD_REASONS;
+    }
+    return data.map((r: any, idx: number) => ({
+      id: r.id || `hr_${idx + 1}`,
+      reason_code: r.reason_code || `HR-${idx + 1}`,
+      reason_description: r.reason_description || r.description || 'Standard Operational Hold',
+      category: r.category || 'OPERATIONAL',
+      action_rule: r.action_rule || 'Requires Super Admin / Commercial Review',
+      sla_hours: r.sla_hours || 24,
+      active: r.active !== false,
+      created_at: r.created_at || new Date().toISOString()
+    }));
+  } catch (err) {
+    return DEFAULT_HOLD_REASONS;
+  }
+};
+
+export const saveHoldReasonToSupabase = async (reason: HoldReason): Promise<{ success: boolean; error: string | null }> => {
+  try {
+    const { error } = await supabase.from('hold_reasons').upsert([{
+      reason_code: reason.reason_code,
+      reason_description: reason.reason_description,
+      category: reason.category || 'OPERATIONAL',
+      action_rule: reason.action_rule || '',
+      sla_hours: reason.sla_hours || 24,
+      active: reason.active !== false
+    }]);
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to save hold reason' };
+  }
+};
+
 export const INITIAL_ORDERS: Order[] = [];
 
 export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; error: string | null }> => {

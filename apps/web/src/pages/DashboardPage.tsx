@@ -7,6 +7,7 @@ interface DashboardPageProps {
   onOpenCreateOrder: () => void;
   onSelectOrder: (order: Order) => void;
   onNavigateToReports?: (reportName?: string) => void;
+  onReleaseHold?: (orderId: string, remarks?: string) => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = (props) => {

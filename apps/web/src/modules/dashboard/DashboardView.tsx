@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   ShoppingBag, 
   TrendingUp, 
@@ -7,29 +7,33 @@ import {
   AlertTriangle, 
   Plus, 
   ArrowUpRight,
-  ShieldCheck,
   PackageCheck,
   Truck,
-  BarChart3
+  BarChart3,
+  Layers
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getOrderAccessPermission } from '../../lib/supabase';
 import { Order } from '../../types';
+import { HoldReasonDirectoryModal } from '../../components/HoldReasonDirectoryModal';
 
 interface DashboardViewProps {
   orders: Order[];
   onOpenCreateOrder: () => void;
   onSelectOrder: (order: Order) => void;
   onNavigateToReports?: (reportName?: string) => void;
+  onReleaseHold?: (orderId: string, remarks?: string) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   orders,
   onOpenCreateOrder,
   onSelectOrder,
-  onNavigateToReports
+  onNavigateToReports,
+  onReleaseHold
 }) => {
   const { currentUser } = useAuth();
+  const [isHoldDirectoryOpen, setIsHoldDirectoryOpen] = useState(false);
   const role = currentUser?.role_name || 'SALES_PERSON';
   const roleDashboard = role === 'SUPER_ADMIN' ? {
     title: 'Super Admin Control Dashboard', focus: 'Approvals, holds, exceptions, company-wide order flow'
@@ -70,6 +74,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button 
+            className="btn btn-outline" 
+            onClick={() => setIsHoldDirectoryOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#f59e0b', color: '#fbbf24', fontWeight: 700 }}
+            title="Open Hold Reason Directory & Held Orders Review"
+          >
+            <AlertTriangle size={16} /> Hold Reason Directory {heldOrders.length > 0 ? `(${heldOrders.length})` : ''}
+          </button>
+
           {onNavigateToReports && (
             <button 
               className="btn btn-outline" 
@@ -142,18 +155,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* KPI 3: Held Orders */}
-        <div className="kpi-card" style={{ borderColor: heldOrders.length > 0 ? '#f59e0b' : 'transparent' }}>
+        <div 
+          className="kpi-card" 
+          onClick={() => setIsHoldDirectoryOpen(true)}
+          style={{ 
+            borderColor: heldOrders.length > 0 ? '#f59e0b' : 'rgba(245, 158, 11, 0.3)', 
+            cursor: 'pointer',
+            background: heldOrders.length > 0 ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(15, 23, 42, 0.6))' : undefined,
+            transition: 'all 0.15s ease'
+          }}
+          title="Click to open Hold Reason Directory & Held Orders Review"
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div className="kpi-title">ORDERS ON HOLD</div>
+              <div className="kpi-title" style={{ color: '#fbbf24' }}>ORDERS ON HOLD</div>
               <div className="kpi-value" style={{ color: '#fbbf24' }}>{heldOrders.length}</div>
             </div>
             <div style={{ background: 'rgba(245, 158, 11, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#f59e0b' }}>
               <AlertTriangle size={20} />
             </div>
           </div>
-          <div className="kpi-subtext" style={{ color: '#fbbf24' }}>
-            Credit limit / Overdue invoice review
+          <div className="kpi-subtext" style={{ color: '#fbbf24', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Credit limit / Overdue invoice review</span>
+            <span style={{ fontSize: '0.725rem', textDecoration: 'underline', fontWeight: 800 }}>Open Directory ➔</span>
           </div>
         </div>
 
@@ -228,30 +252,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </table>
         </div>
 
-        {/* Hold Reasons Operational Monitor */}
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: '1.25rem' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <ShieldCheck size={18} color="#f59e0b" /> Hold Reason Directory
-          </h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            <div style={{ background: '#0f172a', padding: '0.85rem', borderRadius: 8, borderLeft: '3px solid #f59e0b' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fbbf24' }}>CREDIT_LIMIT_EXCEEDED</div>
-              <p style={{ fontSize: '0.775rem', color: '#94a3b8', marginTop: 2 }}>Agency credit line has breached allowed threshold.</p>
-            </div>
-
-            <div style={{ background: '#0f172a', padding: '0.85rem', borderRadius: 8, borderLeft: '3px solid #ef4444' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#f87171' }}>OVERDUE_PAYMENT_PENDING</div>
-              <p style={{ fontSize: '0.775rem', color: '#94a3b8', marginTop: 2 }}>Invoices pending settlement beyond credit days limit.</p>
-            </div>
-
-            <div style={{ background: '#0f172a', padding: '0.85rem', borderRadius: 8, borderLeft: '3px solid #38bdf8' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#38bdf8' }}>STOCK_OUT_OFFLINE</div>
-              <p style={{ fontSize: '0.775rem', color: '#94a3b8', marginTop: 2 }}>Warehouse temporary stock out for specific SKU item.</p>
-            </div>
-          </div>
-        </div>
       </div>
+      {/* Hold Reason Directory & Governance Modal */}
+      <HoldReasonDirectoryModal
+        isOpen={isHoldDirectoryOpen}
+        onClose={() => setIsHoldDirectoryOpen(false)}
+        orders={orders}
+        onSelectOrder={onSelectOrder}
+        onReleaseHold={onReleaseHold}
+      />
     </div>
   );
 };

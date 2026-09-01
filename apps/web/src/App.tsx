@@ -1250,6 +1250,7 @@ const MainLayout: React.FC = () => {
             orders={globallyFilteredOrders} 
             onOpenCreateOrder={() => setIsCreateOpen(true)}
             onSelectOrder={(o) => setSelectedOrderForApproval(o)}
+            onReleaseHold={handleReleaseHold}
             onNavigateToReports={(reportName) => {
               setSelectedReportName(reportName || 'Completed Orders Report');
               setCurrentTab('reports');
