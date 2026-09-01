@@ -259,6 +259,22 @@ export interface ZoneMaster {
   agency_count?: number;
 }
 
+export type AreaTypeName = 'City' | 'Rural';
+
+export interface AreaTypeMaster {
+  id: string;
+  type_code: string;
+  type_name: AreaTypeName;
+  description: string;
+  delivery_sla: string;
+  default_vehicle_mode: string;
+  associated_zones: ZoneName[];
+  localities_count?: number;
+  agency_count?: number;
+  active: boolean;
+  created_at?: string;
+}
+
 export interface Agency {
   id: string;
   agency_code: string;

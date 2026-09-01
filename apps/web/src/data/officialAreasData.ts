@@ -1,4 +1,4 @@
-import { AreaMaster, ZoneMaster, ZoneName } from '../types';
+import { AreaMaster, ZoneMaster, ZoneName, AreaTypeMaster } from '../types';
 
 export interface RawAreaEntry {
   area_name: string;
@@ -206,3 +206,30 @@ export const resolveOfficialZone = (areaOrText?: string, cityOrText?: string): {
     matchedArea: areaOrText || 'General'
   };
 };
+
+export const DEFAULT_AREA_TYPES: AreaTypeMaster[] = [
+  {
+    id: 'at_city',
+    type_code: 'CITY',
+    type_name: 'City',
+    description: 'Surat Municipal Corporation urban areas, textile markets, and local industrial corridors (City-A through City-E)',
+    delivery_sla: 'Within 4-8 Hours (Same Day Delivery)',
+    default_vehicle_mode: 'Local Tempo / Van / Chhota Hathi',
+    associated_zones: ['City-A', 'City-B', 'City-C', 'City-D', 'City-E'],
+    localities_count: 47,
+    agency_count: 14,
+    active: true
+  },
+  {
+    id: 'at_rural',
+    type_code: 'RURAL',
+    type_name: 'Rural',
+    description: 'South Gujarat highway, outstation, taluka, and industrial belts (Upper South, South, East, North)',
+    delivery_sla: 'Within 24-48 Hours (Next Day Delivery)',
+    default_vehicle_mode: 'Heavy Vehicle / F.O.R Truck / Dedicated Transport Cargo',
+    associated_zones: ['Upper South', 'South', 'East', 'North'],
+    localities_count: 28,
+    agency_count: 8,
+    active: true
+  }
+];

@@ -9,11 +9,13 @@ import {
   AgencyFinancials, 
   ZoneMaster, 
   AreaMaster, 
+  AreaTypeMaster,
   getGroupCode 
 } from '../types';
 import { 
   OFFICIAL_AREAS_MASTER, 
   OFFICIAL_ZONE_MASTERS, 
+  DEFAULT_AREA_TYPES,
   resolveOfficialZone 
 } from '../data/officialAreasData';
 import { DEFAULT_HOLD_REASONS } from '../data/officialHoldReasonsData';
@@ -2110,5 +2112,49 @@ export const deleteOrderItemFromSupabase = async (itemId: string): Promise<{ suc
   } catch (err: any) {
     console.error('Error deleting order item from Supabase:', err?.message || err);
     return { success: false, error: err?.message || 'Failed to delete order item' };
+  }
+};
+
+export const fetchAreaTypesFromSupabase = async (): Promise<AreaTypeMaster[]> => {
+  try {
+    const { data, error } = await supabase.from('area_types').select('*').order('type_code');
+    if (error || !data || data.length === 0) {
+      return DEFAULT_AREA_TYPES;
+    }
+    return data.map((d: any) => ({
+      id: d.id,
+      type_code: d.type_code,
+      type_name: d.type_name,
+      description: d.description || '',
+      delivery_sla: d.delivery_sla || 'Standard Delivery',
+      default_vehicle_mode: d.default_vehicle_mode || 'F.O.R (Vehicle)',
+      associated_zones: d.type_code === 'CITY' 
+        ? ['City-A', 'City-B', 'City-C', 'City-D', 'City-E'] 
+        : ['Upper South', 'South', 'East', 'North'],
+      localities_count: d.type_code === 'CITY' ? 47 : 28,
+      agency_count: d.type_code === 'CITY' ? 14 : 8,
+      active: d.active !== false
+    }));
+  } catch {
+    return DEFAULT_AREA_TYPES;
+  }
+};
+
+export const saveAreaTypeToSupabase = async (areaType: AreaTypeMaster): Promise<{ success: boolean; error: string | null }> => {
+  try {
+    const payload = {
+      type_code: areaType.type_code,
+      type_name: areaType.type_name,
+      description: areaType.description,
+      delivery_sla: areaType.delivery_sla,
+      default_vehicle_mode: areaType.default_vehicle_mode,
+      active: areaType.active,
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await supabase.from('area_types').upsert([payload], { onConflict: 'type_code' });
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to save area type' };
   }
 };

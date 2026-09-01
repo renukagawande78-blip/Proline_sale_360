@@ -15,7 +15,9 @@ import {
   Trash2,
   Layers,
   ShieldCheck,
-  AlertTriangle
+  AlertTriangle,
+  Compass,
+  Map
 } from 'lucide-react';
 import { 
   isCompanyAllowedForUser, 
@@ -38,6 +40,7 @@ import { ProductsMasterView } from '../views/masters/ProductsMasterView';
 import { BrandsMasterView } from '../views/masters/BrandsMasterView';
 import { UsersMasterView } from '../views/masters/UsersMasterView';
 import { ZonesMasterView } from '../views/masters/ZonesMasterView';
+import { AreaTypesMasterView } from '../views/masters/AreaTypesMasterView';
 import { RolePermissionsMasterView } from '../views/masters/RolePermissionsMasterView';
 import { HoldReasonsMasterView } from '../views/masters/HoldReasonsMasterView';
 import { RegisterAgencyModal } from '../components/RegisterAgencyModal';
@@ -46,7 +49,7 @@ import { BulkImportModal } from '../components/BulkImportModal';
 import { MasterType, downloadSampleCSV, exportMasterCSV } from '../lib/masterImportExport';
 
 interface MastersPageProps {
-  initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'permissions';
+  initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'area_types' | 'permissions';
   onOpenUserMgmtModal?: (user?: any) => void;
   onOpenCreateOrderForAgency?: (agencyId: string) => void;
 }
@@ -58,7 +61,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
   const isSalesPerson = role === 'SALES_PERSON';
   const canAddMaster = hasPermission('new_party') || hasPermission('product_mgmt') || role === 'SUPER_ADMIN';
 
-  const [activeTab, setActiveTab] = useState<'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'permissions'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'area_types' | 'permissions'>(initialTab);
 
   useEffect(() => {
     if (initialTab) {
@@ -402,6 +405,50 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         </button>
 
         <button
+          onClick={() => setActiveTab('area_types')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            borderRadius: 10,
+            border: 'none',
+            background: activeTab === 'area_types' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+            color: activeTab === 'area_types' ? '#ffffff' : '#94a3b8',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            boxShadow: activeTab === 'area_types' ? '0 4px 12px rgba(2, 132, 199, 0.4)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Compass size={15} /> Area Types (Rural & City)
+        </button>
+
+        <button
+          onClick={() => setActiveTab('zones')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            borderRadius: 10,
+            border: 'none',
+            background: activeTab === 'zones' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+            color: activeTab === 'zones' ? '#ffffff' : '#94a3b8',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            boxShadow: activeTab === 'zones' ? '0 4px 12px rgba(2, 132, 199, 0.4)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Map size={15} /> Territory Zones (9 Zones)
+        </button>
+
+        <button
           onClick={() => setActiveTab('products')}
           style={{
             display: 'flex',
@@ -542,6 +589,18 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
 
       {activeTab === 'areas' && (
         <AreasMasterView agencies={mappedAgencies} searchQuery={searchQuery} />
+      )}
+
+      {activeTab === 'area_types' && (
+        <AreaTypesMasterView 
+          agencies={mappedAgencies} 
+          searchQuery={searchQuery} 
+          onNavigateToAreas={() => setActiveTab('areas')}
+        />
+      )}
+
+      {activeTab === 'zones' && (
+        <ZonesMasterView agencies={mappedAgencies} searchQuery={searchQuery} />
       )}
 
       {activeTab === 'products' && (
