@@ -49,6 +49,14 @@ VALUES
     'Within 24-48 Hours (Next Day Delivery)',
     'Heavy Vehicle / F.O.R Truck / Dedicated Transport Cargo',
     true
+  ),
+  (
+    'OTHER',
+    'Other',
+    'Out-of-state consignments, Pan-India transport, SEZ, or non-standard custom delivery territories',
+    'Within 3-5 Business Days (Freight Transit)',
+    'Third-Party Logistics / Express Cargo / Air or Rail Cargo',
+    true
   )
 ON CONFLICT (type_code) DO UPDATE SET
     type_name = EXCLUDED.type_name,

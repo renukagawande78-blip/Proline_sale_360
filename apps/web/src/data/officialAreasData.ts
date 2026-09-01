@@ -231,5 +231,17 @@ export const DEFAULT_AREA_TYPES: AreaTypeMaster[] = [
     localities_count: 28,
     agency_count: 8,
     active: true
+  },
+  {
+    id: 'at_other',
+    type_code: 'OTHER',
+    type_name: 'Other',
+    description: 'Out-of-state consignments, Pan-India transport, SEZ, or non-standard custom delivery territories',
+    delivery_sla: 'Within 3-5 Business Days (Freight Transit)',
+    default_vehicle_mode: 'Third-Party Logistics / Express Cargo / Air or Rail Cargo',
+    associated_zones: [],
+    localities_count: 0,
+    agency_count: 0,
+    active: true
   }
 ];

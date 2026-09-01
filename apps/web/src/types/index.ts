@@ -236,7 +236,7 @@ export interface Area {
   region: string;
 }
 
-export type ZoneRegion = 'Surat City Zone' | 'South Gujarat Rural Zone' | 'City' | 'Rural';
+export type ZoneRegion = 'Surat City Zone' | 'South Gujarat Rural Zone' | 'City' | 'Rural' | 'Other';
 
 export type ZoneName =
   | 'City-A'
@@ -259,7 +259,7 @@ export interface ZoneMaster {
   agency_count?: number;
 }
 
-export type AreaTypeName = 'City' | 'Rural';
+export type AreaTypeName = 'City' | 'Rural' | 'Other';
 
 export interface AreaTypeMaster {
   id: string;

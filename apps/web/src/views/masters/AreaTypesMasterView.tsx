@@ -13,7 +13,8 @@ import {
   Compass, 
   ExternalLink,
   ChevronRight,
-  Info
+  Info,
+  Globe
 } from 'lucide-react';
 import { AreaTypeMaster, Agency } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -23,7 +24,7 @@ import { DEFAULT_AREA_TYPES, RAW_OFFICIAL_AREAS } from '../../data/officialAreas
 interface AreaTypesMasterViewProps {
   agencies?: Agency[];
   searchQuery?: string;
-  onNavigateToAreas?: (regionFilter: 'City' | 'Rural') => void;
+  onNavigateToAreas?: (regionFilter: 'City' | 'Rural' | 'Other') => void;
 }
 
 export const AreaTypesMasterView: React.FC<AreaTypesMasterViewProps> = ({
@@ -200,6 +201,42 @@ export const AreaTypesMasterView: React.FC<AreaTypesMasterViewProps> = ({
             <span>🚚 Transport: <strong>F.O.R Heavy Truck</strong></span>
           </div>
         </div>
+
+        {/* Other Type Summary Card */}
+        <div 
+          onClick={() => setSelectedType(areaTypes.find(t => t.type_name === 'Other') || null)}
+          style={{
+            background: selectedType?.type_name === 'Other' ? 'rgba(168, 85, 247, 0.12)' : '#1e293b',
+            border: selectedType?.type_name === 'Other' ? '2px solid #a855f7' : '1px solid #334155',
+            borderRadius: 12,
+            padding: '1.25rem',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: selectedType?.type_name === 'Other' ? '0 8px 24px rgba(168, 85, 247, 0.2)' : 'none'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(168, 85, 247, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c084fc' }}>
+                <Globe size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>Other</h3>
+                <span style={{ fontSize: '0.7rem', color: '#c084fc', fontWeight: 700 }}>CODE: OTHER</span>
+              </div>
+            </div>
+            <span style={{ background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', padding: '0.2rem 0.6rem', borderRadius: 20, fontSize: '0.75rem', fontWeight: 800 }}>
+              Special / Pan-India
+            </span>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0 0 0.75rem 0', lineHeight: 1.4 }}>
+            Out-of-state consignments, Pan-India transport, SEZ, or non-standard custom delivery territories.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#cbd5e1', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <span>⚡ SLA: <strong>3-5 Days (Freight)</strong></span>
+            <span>🚚 Transport: <strong>Express Cargo / 3PL</strong></span>
+          </div>
+        </div>
       </div>
 
       {/* Main Table Card */}
@@ -253,7 +290,13 @@ export const AreaTypesMasterView: React.FC<AreaTypesMasterViewProps> = ({
             <tbody>
               {filteredTypes.map(t => {
                 const isCity = t.type_name === 'City';
+                const isRural = t.type_name === 'Rural';
+                const isOther = t.type_name === 'Other';
                 const isSelected = selectedType?.type_code === t.type_code;
+                const accentColor = isCity ? '#38bdf8' : isRural ? '#34d399' : '#c084fc';
+                const accentBg = isCity ? 'rgba(56, 189, 248, 0.15)' : isRural ? 'rgba(52, 211, 153, 0.15)' : 'rgba(168, 85, 247, 0.15)';
+                const accentBorder = isCity ? '1px solid rgba(56, 189, 248, 0.3)' : isRural ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid rgba(168, 85, 247, 0.3)';
+                const rowSelectedBg = isCity ? 'rgba(56, 189, 248, 0.08)' : isRural ? 'rgba(52, 211, 153, 0.08)' : 'rgba(168, 85, 247, 0.08)';
 
                 return (
                   <tr 
@@ -261,7 +304,7 @@ export const AreaTypesMasterView: React.FC<AreaTypesMasterViewProps> = ({
                     onClick={() => setSelectedType(t)}
                     style={{
                       borderBottom: '1px solid #334155',
-                      background: isSelected ? (isCity ? 'rgba(56, 189, 248, 0.08)' : 'rgba(52, 211, 153, 0.08)') : 'transparent',
+                      background: isSelected ? rowSelectedBg : 'transparent',
                       cursor: 'pointer',
                       transition: 'background 0.15s ease'
                     }}
@@ -274,9 +317,9 @@ export const AreaTypesMasterView: React.FC<AreaTypesMasterViewProps> = ({
                         fontSize: '0.8rem',
                         padding: '0.2rem 0.55rem',
                         borderRadius: 6,
-                        background: isCity ? 'rgba(56, 189, 248, 0.15)' : 'rgba(52, 211, 153, 0.15)',
-                        color: isCity ? '#38bdf8' : '#34d399',
-                        border: isCity ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(52, 211, 153, 0.3)'
+                        background: accentBg,
+                        color: accentColor,
+                        border: accentBorder
                       }}>
                         {t.type_code}
                       </span>
@@ -285,7 +328,7 @@ export const AreaTypesMasterView: React.FC<AreaTypesMasterViewProps> = ({
                     {/* Type Name */}
                     <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {isCity ? <Building2 size={16} color="#38bdf8" /> : <Compass size={16} color="#34d399" />}
+                        {isCity ? <Building2 size={16} color="#38bdf8" /> : isRural ? <Compass size={16} color="#34d399" /> : <Globe size={16} color="#c084fc" />}
                         <strong style={{ fontSize: '0.95rem', color: '#f8fafc' }}>{t.type_name}</strong>
                       </div>
                     </td>
@@ -400,49 +443,59 @@ export const AreaTypesMasterView: React.FC<AreaTypesMasterViewProps> = ({
         <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: '1.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Layers size={18} color="#38bdf8" />
+              <Layers size={18} color={selectedType.type_name === 'City' ? '#38bdf8' : selectedType.type_name === 'Rural' ? '#34d399' : '#c084fc'} />
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#f8fafc' }}>
-                Localities Mapping Drilldown for: <span style={{ color: selectedType.type_name === 'City' ? '#38bdf8' : '#34d399' }}>{selectedType.type_name}</span>
+                Localities Mapping Drilldown for: <span style={{ color: selectedType.type_name === 'City' ? '#38bdf8' : selectedType.type_name === 'Rural' ? '#34d399' : '#c084fc' }}>{selectedType.type_name}</span>
               </h3>
             </div>
             <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-              Showing all official localities categorized under {selectedType.type_name}
+              Showing localities categorized under {selectedType.type_name}
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.6rem' }}>
-            {RAW_OFFICIAL_AREAS
-              .filter(a => a.region === selectedType.type_name)
-              .map((area, i) => (
-                <div 
-                  key={area.area_name + i}
-                  style={{
-                    background: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: 8,
-                    padding: '0.6rem 0.8rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <div>
-                    <strong style={{ fontSize: '0.8rem', color: '#f8fafc', display: 'block' }}>{area.area_name}</strong>
-                    <span style={{ fontSize: '0.68rem', color: '#64748b' }}>{area.city}</span>
+          {RAW_OFFICIAL_AREAS.filter(a => a.region === selectedType.type_name).length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.6rem' }}>
+              {RAW_OFFICIAL_AREAS
+                .filter(a => a.region === selectedType.type_name)
+                .map((area, i) => (
+                  <div 
+                    key={area.area_name + i}
+                    style={{
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: 8,
+                      padding: '0.6rem 0.8rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: '0.8rem', color: '#f8fafc', display: 'block' }}>{area.area_name}</strong>
+                      <span style={{ fontSize: '0.68rem', color: '#64748b' }}>{area.city}</span>
+                    </div>
+                    <span style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      background: selectedType.type_name === 'City' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(52, 211, 153, 0.15)',
+                      color: selectedType.type_name === 'City' ? '#38bdf8' : '#34d399',
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: 4
+                    }}>
+                      {area.zone_name}
+                    </span>
                   </div>
-                  <span style={{
-                    fontSize: '0.68rem',
-                    fontWeight: 700,
-                    background: selectedType.type_name === 'City' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(52, 211, 153, 0.15)',
-                    color: selectedType.type_name === 'City' ? '#38bdf8' : '#34d399',
-                    padding: '0.15rem 0.45rem',
-                    borderRadius: 4
-                  }}>
-                    {area.zone_name}
-                  </span>
-                </div>
-              ))}
-          </div>
+                ))}
+            </div>
+          ) : (
+            <div style={{ background: 'rgba(168, 85, 247, 0.08)', border: '1px dashed rgba(168, 85, 247, 0.3)', borderRadius: 8, padding: '1.25rem', textAlign: 'center' }}>
+              <Globe size={24} color="#c084fc" style={{ margin: '0 auto 0.5rem auto' }} />
+              <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.9rem' }}>Flexible / Pan-India Scope</div>
+              <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0.35rem 0 0 0' }}>
+                The "Other" classification handles all out-of-state consignments, special economic zones (SEZ), and custom logistics destinations across India that do not require fixed local municipal zone constraints.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
