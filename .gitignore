@@ -1,0 +1,15 @@
+node_modules
+*/node_modules
+apps/web/node_modules
+dist
+apps/web/dist
+.vercel
+apps/web/.vercel
+.DS_Store
+*.log
+android/app/build
+apps/web/android/app/build
+apps/web/android/.gradle
+*.apk
+*service-account*.json
+!*service-account.example.json

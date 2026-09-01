@@ -1,0 +1,9 @@
+android
+node_modules
+dist
+.git
+.gradle
+*.apk
+public/*.apk
+public/proline-oms-app.apk
+test_crud_operations.js

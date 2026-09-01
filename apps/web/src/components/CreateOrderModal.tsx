@@ -186,14 +186,14 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
   );
 };
 
-interface SearchableMultiBrandSelectProps {
+interface SearchableBrandRadioSelectProps {
   selectedCompanyIds: string[];
   onChangeCompanyIds: (ids: string[]) => void;
   availableCompanies: any[];
   userCompanyHandle?: string;
 }
 
-export const SearchableMultiBrandSelect: React.FC<SearchableMultiBrandSelectProps> = ({
+export const SearchableBrandRadioSelect: React.FC<SearchableBrandRadioSelectProps> = ({
   selectedCompanyIds,
   onChangeCompanyIds,
   availableCompanies,
@@ -221,37 +221,19 @@ export const SearchableMultiBrandSelect: React.FC<SearchableMultiBrandSelectProp
     return nameMatch || codeMatch || segMatch;
   });
 
-  const isAllSelected = selectedCompanyIds.length === 0 || selectedCompanyIds.length === availableCompanies.length;
+  const selectedBrand = availableCompanies.find(c => selectedCompanyIds.includes(c.id));
+  const isAllSelected = selectedCompanyIds.length === 0;
 
-  const handleToggle = (id: string) => {
-    if (selectedCompanyIds.length === 0) {
-      const allIds = availableCompanies.map(c => c.id);
-      onChangeCompanyIds(allIds.filter(x => x !== id));
-    } else if (selectedCompanyIds.includes(id)) {
-      const remaining = selectedCompanyIds.filter(x => x !== id);
-      onChangeCompanyIds(remaining.length === 0 ? [] : remaining);
-    } else {
-      const updated = [...selectedCompanyIds, id];
-      onChangeCompanyIds(updated.length === availableCompanies.length ? [] : updated);
-    }
-  };
-
-  const handleSelectAll = () => {
-    onChangeCompanyIds([]);
-  };
-
-  const selectedCount = isAllSelected ? availableCompanies.length : selectedCompanyIds.length;
-
-  const displayText = isAllSelected 
-    ? `All Assigned Brands (${availableCompanies.length})` 
-    : selectedCompanyIds.length === 1 
-      ? availableCompanies.find(c => c.id === selectedCompanyIds[0])?.company_name || '1 Brand Selected'
-      : `${selectedCompanyIds.length} Brands Selected`;
+  const displayText = selectedBrand 
+    ? selectedBrand.company_name 
+    : isAllSelected 
+      ? `All Assigned Brands (${availableCompanies.length})` 
+      : '-- Select Brand --';
 
   return (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
       <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>
-        BRANDS / COMPANIES (MULTI-SELECT)
+        BRAND / COMPANY (RADIO SELECT)
       </label>
 
       {/* Selected Box Trigger */}
@@ -271,8 +253,8 @@ export const SearchableMultiBrandSelect: React.FC<SearchableMultiBrandSelectProp
           alignItems: 'center'
         }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isAllSelected ? '#34d399' : '#38bdf8' }}>
-          {displayText}
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: selectedBrand ? '#38bdf8' : '#34d399' }}>
+          🔘 {displayText}
         </span>
         <ChevronDown size={16} color="#94a3b8" />
       </div>
@@ -296,14 +278,7 @@ export const SearchableMultiBrandSelect: React.FC<SearchableMultiBrandSelectProp
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>Filter Brands ({selectedCount}/{availableCompanies.length})</span>
-            <button 
-              type="button" 
-              onClick={handleSelectAll} 
-              style={{ background: 'none', border: 'none', color: '#38bdf8', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
-            >
-              {isAllSelected ? 'Select All' : 'Select All'}
-            </button>
+            <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>Choose 1 Brand ({availableCompanies.length} available)</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.35rem 0.55rem', marginBottom: '0.4rem', gap: '0.4rem' }}>
@@ -318,18 +293,67 @@ export const SearchableMultiBrandSelect: React.FC<SearchableMultiBrandSelectProp
             />
           </div>
 
-          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {availableCompanies.length > 1 && (
+              <div 
+                onClick={() => {
+                  onChangeCompanyIds([]);
+                  setIsOpen(false);
+                }}
+                style={{
+                  padding: '0.45rem 0.6rem',
+                  borderRadius: 6,
+                  background: isAllSelected ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '0.3rem',
+                  borderBottom: '1px dashed #334155',
+                  paddingBottom: '0.45rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                  <div style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    border: isAllSelected ? '2px solid #38bdf8' : '1.5px solid #64748b',
+                    background: 'transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {isAllSelected && (
+                      <div style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: '#38bdf8'
+                      }} />
+                    )}
+                  </div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: isAllSelected ? '#38bdf8' : '#94a3b8' }}>
+                    All Assigned Brands ({availableCompanies.length})
+                  </span>
+                </div>
+              </div>
+            )}
+
             {filteredCompanies.map(c => {
-              const isChecked = isAllSelected || selectedCompanyIds.includes(c.id);
+              const isSelected = selectedCompanyIds.length === 1 && selectedCompanyIds[0] === c.id;
               const isFmcd = (c.segment || '').toUpperCase() === 'FMCD';
               return (
                 <div 
                   key={c.id}
-                  onClick={() => handleToggle(c.id)}
+                  onClick={() => {
+                    onChangeCompanyIds([c.id]);
+                    setIsOpen(false);
+                  }}
                   style={{
-                    padding: '0.4rem 0.6rem',
+                    padding: '0.45rem 0.6rem',
                     borderRadius: 6,
-                    background: isChecked ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
+                    background: isSelected ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -337,21 +361,28 @@ export const SearchableMultiBrandSelect: React.FC<SearchableMultiBrandSelectProp
                     marginBottom: '0.2rem'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                    {/* Radio Button Circle */}
                     <div style={{
                       width: 16,
                       height: 16,
-                      borderRadius: 4,
-                      border: isChecked ? '1px solid #38bdf8' : '1px solid #64748b',
-                      background: isChecked ? '#38bdf8' : 'transparent',
+                      borderRadius: '50%',
+                      border: isSelected ? '2px solid #38bdf8' : '1.5px solid #64748b',
+                      background: 'transparent',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#0f172a'
+                      justifyContent: 'center'
                     }}>
-                      {isChecked && <Check size={12} strokeWidth={3} />}
+                      {isSelected && (
+                        <div style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: '#38bdf8'
+                        }} />
+                      )}
                     </div>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isChecked ? '#f8fafc' : '#94a3b8' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: isSelected ? 800 : 600, color: isSelected ? '#f8fafc' : '#cbd5e1' }}>
                       {c.company_name}
                     </span>
                   </div>
@@ -374,6 +405,9 @@ export const SearchableMultiBrandSelect: React.FC<SearchableMultiBrandSelectProp
     </div>
   );
 };
+
+// Backwards compatibility alias
+export const SearchableMultiBrandSelect = SearchableBrandRadioSelect;
 
 interface SearchableProductSelectProps {
   selectedProductId: string;
@@ -404,7 +438,13 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
   const activeProducts = (products && products.length > 0) ? products : MOCK_PRODUCTS;
   const activeCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES;
 
-  const selectedProduct = activeProducts.find(p => p.id === selectedProductId) || activeProducts[0];
+  const rawSelectedProduct = selectedProductId ? activeProducts.find(p => p.id === selectedProductId) : null;
+  const isSelectedProductInScope = rawSelectedProduct && (
+    selectedCompanyIds.length === 0 || 
+    selectedCompanyIds.includes('ALL') || 
+    selectedCompanyIds.includes(rawSelectedProduct.company_id)
+  );
+  const selectedProduct = isSelectedProductInScope ? rawSelectedProduct : null;
 
   const updatePosition = () => {
     if (dropdownRef.current) {
@@ -478,7 +518,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
         style={{
           padding: '0.55rem 0.75rem',
           background: '#0f172a',
-          border: '1px solid #334155',
+          border: selectedProduct ? '1px solid #334155' : '1px dashed #64748b',
           borderRadius: 6,
           color: 'white',
           fontWeight: 600,
@@ -489,8 +529,14 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
           alignItems: 'center'
         }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {selectedProduct?.product_name || 'Select Product'}
+        <span style={{ 
+          overflow: 'hidden', 
+          textOverflow: 'ellipsis', 
+          whiteSpace: 'nowrap',
+          color: selectedProduct ? '#ffffff' : '#94a3b8',
+          fontStyle: selectedProduct ? 'normal' : 'italic'
+        }}>
+          {selectedProduct ? selectedProduct.product_name : '-- Select Product / SKU --'}
         </span>
         <ChevronDown size={14} color="#94a3b8" />
       </div>
@@ -726,6 +772,8 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       if (bSeg === 'FMCG' || bSeg === 'FMCD') {
         setSelectedSegments([bSeg]);
       }
+    } else {
+      setSelectedCompanyIds([]);
     }
   }, [isOpen, orderToEdit, currentUser, mergedUsers, activeCompaniesPool]);
 
@@ -786,12 +834,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     remark?: string;
   }>>([
     {
-      product_id: liveProducts[0]?.id || MOCK_PRODUCTS[0]?.id || '',
-      pcs_per_box: liveProducts[0]?.pcs_per_box || MOCK_PRODUCTS[0]?.pcs_per_box || 24,
-      box_qty: 10,
+      product_id: '',
+      pcs_per_box: 1,
+      box_qty: 0,
       loose_pcs: 0,
       free_pcs: 0,
-      unit_price: liveProducts[0]?.unit_price || MOCK_PRODUCTS[0]?.unit_price || 0,
+      unit_price: 0,
       remark: ''
     }
   ]);
@@ -838,43 +886,76 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       setAgencyId(allowedAgencies[0].id);
     }
 
-    // 3. Ensure line items use products belonging to allowed brands & selected segments
+    // 3. Clear any line items that do not belong to the allowed brands & segments
     const allowedCompanyIds = allowedCompanies.map(c => c.id);
-    const activeProductsPool = (liveProducts && liveProducts.length > 0) ? liveProducts : MOCK_PRODUCTS;
-    const validProducts = activeProductsPool.filter(p => {
-      const parentComp = activeCompaniesPool.find(c => c.id === p.company_id);
-      const matchesComp = allowedCompanyIds.length === 0 || allowedCompanyIds.includes(p.company_id) || isCompanyAllowedForUser(p.product_name, spHandle);
-      const prodSeg = (p.segment || parentComp?.segment || 'FMCG').toUpperCase();
-      const matchesSeg = selectedSegments.length === 0 || selectedSegments.some(s => prodSeg.includes(s));
-      return matchesComp && matchesSeg;
-    });
+    setItems(prev => prev.map(item => {
+      if (!item.product_id) return item;
+      const prod = activeProductsPool.find(p => p.id === item.product_id);
+      const parentComp = activeCompaniesPool.find(c => c.id === prod?.company_id);
+      const prodSeg = (prod?.segment || parentComp?.segment || 'FMCG').toUpperCase();
+      const isProdValid = prod && 
+        (allowedCompanyIds.length === 0 || allowedCompanyIds.includes(prod.company_id) || isCompanyAllowedForUser(prod.product_name, spHandle)) &&
+        (selectedSegments.length === 0 || selectedSegments.some(s => prodSeg.includes(s)));
 
-    if (validProducts.length > 0) {
-      const defaultProd = validProducts[0];
-      setItems(prev => prev.map(item => {
-        const prod = activeProductsPool.find(p => p.id === item.product_id);
-        const parentComp = activeCompaniesPool.find(c => c.id === prod?.company_id);
-        const prodSeg = (prod?.segment || parentComp?.segment || 'FMCG').toUpperCase();
-        const isProdValid = prod && 
-          (allowedCompanyIds.length === 0 || allowedCompanyIds.includes(prod.company_id) || isCompanyAllowedForUser(prod.product_name, spHandle)) &&
-          (selectedSegments.length === 0 || selectedSegments.some(s => prodSeg.includes(s)));
-
-        if (!isProdValid) {
-          return {
-            ...item,
-            product_id: defaultProd.id,
-            pcs_per_box: defaultProd.pcs_per_box,
-            unit_price: defaultProd.unit_price || defaultProd.mrp_price || 100
-          };
-        }
-        return item;
-      }));
-    }
+      if (!isProdValid) {
+        return {
+          ...item,
+          product_id: '',
+          pcs_per_box: 1,
+          unit_price: 0,
+          box_qty: 0,
+          free_pcs: 0
+        };
+      }
+      return item;
+    }));
   }, [salespersonId, selectedSegments, isOpen, orderToEdit, mergedUsers, currentUser, activeCompaniesPool, liveProducts]);
 
+  // When selected brand/company filter changes (e.g. user selects Whirlpool), clear any products not belonging to the chosen brand(s)
+  useEffect(() => {
+    if (!isOpen || orderToEdit) return;
+    if (selectedCompanyIds.length === 0 || selectedCompanyIds.includes('ALL')) return;
+
+    setItems(prev => prev.map(item => {
+      if (!item.product_id) return item;
+      const prod = activeProductsPool.find(p => p.id === item.product_id);
+      const isMatchingBrand = prod && selectedCompanyIds.includes(prod.company_id);
+      if (!isMatchingBrand) {
+        return {
+          ...item,
+          product_id: '',
+          pcs_per_box: 1,
+          box_qty: 0,
+          free_pcs: 0,
+          unit_price: 0
+        };
+      }
+      return item;
+    }));
+  }, [selectedCompanyIds, isOpen, orderToEdit, activeProductsPool]);
+
+
+  const resetFormToBlank = () => {
+    setRemarks('');
+    setDeliveryType('F.O.R');
+    setItems([
+      {
+        product_id: '',
+        pcs_per_box: 1,
+        box_qty: 0,
+        loose_pcs: 0,
+        free_pcs: 0,
+        unit_price: 0,
+        remark: ''
+      }
+    ]);
+  };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      resetFormToBlank();
+      return;
+    }
     if (orderToEdit) {
       setSelectedCompanyIds(orderToEdit.company_id && orderToEdit.company_id !== 'ALL' && orderToEdit.company_id !== 'c01' ? [orderToEdit.company_id] : []);
       setAgencyId(orderToEdit.agency_id || MOCK_AGENCIES[0]?.id || '');
@@ -894,8 +975,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           remark: item.remark || ''
         })));
       }
-    } else if (initialAgencyId) {
-      setAgencyId(initialAgencyId);
+    } else {
+      // New Order: Always clear all previous order data from form
+      resetFormToBlank();
+      if (initialAgencyId) {
+        setAgencyId(initialAgencyId);
+      }
     }
   }, [orderToEdit, initialAgencyId, isOpen]);
 
@@ -915,11 +1000,14 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
     setItems(prev => {
       const updated = [...prev];
+      const currentBoxQty = updated[index]?.box_qty || 0;
       updated[index] = {
         ...updated[index],
         product_id: prod.id,
-        pcs_per_box: prod.pcs_per_box,
-        unit_price: prod.unit_price || prod.mrp_price || 100
+        pcs_per_box: prod.pcs_per_box || 1,
+        unit_price: prod.unit_price || prod.mrp_price || 0,
+        // When salesperson adds/selects product, revise details and set minimum quantity of 1 box
+        box_qty: currentBoxQty > 0 ? currentBoxQty : 1
       };
       return updated;
     });
@@ -948,29 +1036,15 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   };
 
   const addItemRow = () => {
-    const existingProductIds = items.map(i => i.product_id);
-    const availableProds = activeProductsPool.filter(p => {
-      const parentComp = activeCompaniesPool.find(c => c.id === p.company_id);
-      const matchesBrand = (selectedCompanyIds.length === 0 || selectedCompanyIds.includes(p.company_id)) &&
-        isCompanyAllowedForUser(parentComp?.company_name, activeSalespersonHandle, parentComp?.company_code);
-      const prodSeg = (p.segment || parentComp?.segment || 'FMCG').toUpperCase();
-      const matchesSeg = selectedSegments.length === 0 || selectedSegments.some(s => prodSeg.includes(s));
-      return matchesBrand && matchesSeg;
-    });
-
-    const nextUnselectedProd = availableProds.find(p => !existingProductIds.includes(p.id)) || availableProds[0] || liveProducts[0] || MOCK_PRODUCTS[0];
-
-    if (!nextUnselectedProd) return;
-
     setItems(prev => [
       ...prev,
       {
-        product_id: nextUnselectedProd.id,
-        pcs_per_box: nextUnselectedProd.pcs_per_box || 24,
-        box_qty: 5,
+        product_id: '',
+        pcs_per_box: 1,
+        box_qty: 0,
         loose_pcs: 0,
         free_pcs: 0,
-        unit_price: nextUnselectedProd.unit_price || nextUnselectedProd.mrp_price || 0,
+        unit_price: 0,
         remark: ''
       }
     ]);
@@ -984,28 +1058,24 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   // Auto Calculations
   const processedItems = items.map((item, idx) => {
     const rawItem = item as any;
-    const prod = activeProductsPool.find(p => p.id === item.product_id || (p.product_name && p.product_name === rawItem.product_name)) || activeProductsPool[0] || {
-      id: item.product_id || `prd_${idx + 1}`,
-      product_name: rawItem.product_name || 'Selected Product SKU',
-      product_code: rawItem.product_code || 'SKU-001',
-      pcs_per_box: 24,
-      unit_price: item.unit_price || 100,
-      mrp_price: rawItem.mrp_price || 120
-    };
+    const prod = item.product_id 
+      ? (activeProductsPool.find(p => p.id === item.product_id || (p.product_name && p.product_name === rawItem.product_name)) || null)
+      : null;
+
     const boxQty = item.box_qty || 0;
     const loosePcs = 0;
     const freePcs = item.free_pcs || 0;
-    const pcsPerBox = prod?.pcs_per_box || 24;
-    const totalQtyPcs = (boxQty * pcsPerBox) + freePcs;
+    const pcsPerBox = prod?.pcs_per_box || item.pcs_per_box || 1;
+    const totalQtyPcs = item.product_id ? ((boxQty * pcsPerBox) + freePcs) : 0;
     const unitPrice = item.unit_price || prod?.unit_price || prod?.mrp_price || 0;
-    const mrpPrice = prod?.mrp_price || Math.round(unitPrice * 1.15);
+    const mrpPrice = prod?.mrp_price || (unitPrice > 0 ? Math.round(unitPrice * 1.15) : 0);
     const totalPrice = (boxQty * pcsPerBox) * unitPrice;
 
     return {
       id: `item-${idx + 1}`,
-      product_id: prod?.id || item.product_id || `prd_${idx + 1}`,
-      product_name: prod?.product_name || rawItem.product_name || 'Selected Product SKU',
-      product_code: prod?.product_code || rawItem.product_code || 'SKU-001',
+      product_id: item.product_id || '',
+      product_name: prod?.product_name || rawItem.product_name || '',
+      product_code: prod?.product_code || rawItem.product_code || '',
       pcs_per_box: pcsPerBox,
       box_qty: boxQty,
       loose_pcs: 0,
@@ -1020,11 +1090,11 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     };
   });
 
-  const totalBoxQty = processedItems.reduce((acc, curr) => acc + curr.box_qty, 0);
+  const totalBoxQty = processedItems.reduce((acc, curr) => acc + (curr.product_id ? curr.box_qty : 0), 0);
   const totalLoosePcs = 0;
-  const totalFreePcs = processedItems.reduce((acc, curr) => acc + (curr.free_pcs || 0), 0);
-  const totalQtyPcs = processedItems.reduce((acc, curr) => acc + curr.total_qty_pcs, 0);
-  const totalAmount = processedItems.reduce((acc, curr) => acc + curr.total_price, 0);
+  const totalFreePcs = processedItems.reduce((acc, curr) => acc + (curr.product_id ? (curr.free_pcs || 0) : 0), 0);
+  const totalQtyPcs = processedItems.reduce((acc, curr) => acc + (curr.product_id ? curr.total_qty_pcs : 0), 0);
+  const totalAmount = processedItems.reduce((acc, curr) => acc + (curr.product_id ? curr.total_price : 0), 0);
 
   const getProduct3LetterPrefix = (productName: string) => {
     const clean = productName.replace(/[^a-zA-Z]/g, '').toUpperCase();
@@ -1032,6 +1102,18 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   };
 
   const handleSubmit = (status: 'DRAFT' | 'SUBMITTED') => {
+    // Validation: ensure products are selected and minimum 1 box quantity
+    const emptyProductItem = items.find(i => !i.product_id);
+    if (emptyProductItem) {
+      alert('Please select a product for all order line items (or delete empty lines).');
+      return;
+    }
+
+    const invalidQtyItem = items.find(i => (i.box_qty || 0) < 1);
+    if (invalidQtyItem) {
+      alert('Minimum quantity is 1 Box for each product line item.');
+      return;
+    }
     const resolvedCompany = selectedCompanyIds.length === 1 
       ? (activeCompaniesPool.find(c => c.id === selectedCompanyIds[0]) || MOCK_COMPANIES.find(c => c.id === selectedCompanyIds[0]))
       : (allowedBrandsForActiveSalesperson.length === 1
@@ -1127,6 +1209,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     };
 
     onSubmitOrder(newOrder);
+    resetFormToBlank();
+    onClose();
+  };
+
+  const handleClose = () => {
+    resetFormToBlank();
     onClose();
   };
 
@@ -1148,7 +1236,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
               }
             </p>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+          <button onClick={handleClose} title="Close and clear" style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
             <X size={20} />
           </button>
         </div>
@@ -1238,9 +1326,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             )}
           </div>
 
-          {/* 3. BRANDS / COMPANIES (MULTI-SELECT) */}
+          {/* 3. BRAND / COMPANY (RADIO SELECT) */}
           <div>
-            <SearchableMultiBrandSelect 
+            <SearchableBrandRadioSelect 
               selectedCompanyIds={selectedCompanyIds}
               onChangeCompanyIds={setSelectedCompanyIds}
               availableCompanies={allowedBrandsForActiveSalesperson}
@@ -1282,7 +1370,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <strong style={{ color: '#38bdf8' }}>{selectedSegments.join(' & ')}</strong>
           </div>
           <div style={{ color: '#38bdf8', fontWeight: 600 }}>
-            Brand Filter: <strong style={{ color: '#34d399' }}>{selectedCompanyIds.length === 0 ? `All (${allowedBrandsForActiveSalesperson.length})` : `${selectedCompanyIds.length} Selected`}</strong>
+            Selected Brand: <strong style={{ color: '#34d399' }}>{selectedCompanyIds.length === 1 ? (allowedBrandsForActiveSalesperson.find(c => c.id === selectedCompanyIds[0])?.company_name || '1 Brand') : `All (${allowedBrandsForActiveSalesperson.length})`}</strong>
             <span style={{ color: '#64748b', marginLeft: 8 }}>| Agencies Available: </span>
             <strong style={{ color: '#f8fafc' }}>{allowedAgenciesForSegment.length}</strong>
           </div>
@@ -1326,15 +1414,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                     />
 
                   </td>
-                  <td style={{ textAlign: 'center', fontWeight: 700, color: '#34d399' }}>
-                    ₹{item.mrp_price}
-                    <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>/ Pc</span>
+                  <td style={{ textAlign: 'center', fontWeight: 700, color: item.product_id ? '#34d399' : '#64748b' }}>
+                    {item.product_id ? `₹${item.mrp_price}` : '—'}
+                    {item.product_id ? <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>/ Pc</span> : null}
                   </td>
                   <td>
                     <input 
                       type="number" 
                       min="0"
-                      value={item.box_qty}
+                      value={item.box_qty || ''}
+                      placeholder="0"
                       onChange={e => handleQuantityChange(index, 'box_qty', parseInt(e.target.value) || 0)}
                       style={{ width: 65, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
                     />
@@ -1343,14 +1432,21 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                     <input 
                       type="number" 
                       min="0"
-                      value={item.free_pcs || 0}
+                      value={item.free_pcs ? item.free_pcs : ''}
+                      placeholder="0"
                       onChange={e => handleQuantityChange(index, 'free_pcs', parseInt(e.target.value) || 0)}
                       style={{ width: 65, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #fbbf24', borderRadius: 4, color: '#fbbf24', fontWeight: 800, margin: '0 auto', display: 'block' }}
                     />
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <span style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.925rem' }}>{item.total_qty_pcs} Pcs</span>
-                    <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>({item.box_qty} Box + {item.free_pcs || 0} Free)</span>
+                    {item.product_id ? (
+                      <>
+                        <span style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.925rem' }}>{item.total_qty_pcs} Pcs</span>
+                        <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>({item.box_qty} Box + {item.free_pcs || 0} Free)</span>
+                      </>
+                    ) : (
+                      <span style={{ color: '#64748b', fontSize: '0.85rem' }}>—</span>
+                    )}
                   </td>
                   <td>
                     <input 
@@ -1403,7 +1499,15 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button 
+              type="button"
+              className="btn btn-outline" 
+              onClick={handleClose}
+              style={{ color: '#94a3b8', borderColor: '#475569' }}
+            >
+              Cancel
+            </button>
             <button className="btn btn-outline" onClick={() => handleSubmit('DRAFT')}>
               Save as Draft
             </button>

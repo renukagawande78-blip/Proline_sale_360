@@ -33,11 +33,17 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
         order_id: order.id
       });
     } else {
-      if (!details.trim()) return;
-      onConfirmPOD(order.id, 'ISSUE_RAISED', issueType, details);
+      const issueDescriptions: Record<string, string> = {
+        SHORTAGE: 'Shortage reported — Discrepancy in Delivered Quantity',
+        DAMAGED: 'Damaged Goods reported — Physical Goods Damaged in Transport',
+        GOOD_RETURN: 'Good Return — Intact Goods Returned by Customer',
+        OTHER: 'Delivery Exception reported during drop'
+      };
+      const note = details.trim() || issueDescriptions[issueType] || 'Delivery exception reported during drop';
+      onConfirmPOD(order.id, 'ISSUE_RAISED', issueType, note);
       addNotification({
         title: `⚠️ Delivery Exception Raised: ${order.order_number}`,
-        message: `Delivery Issue (${issueType}) reported for ${order.agency_name}. Exception alert sent to Chirag Sir (Super Admin) & Sales Admin Exception Desk. Notes: "${details}"`,
+        message: `Delivery Issue (${issueType}) reported for ${order.agency_name}. Exception alert sent to Chirag Sir (Super Admin) & Sales Admin Exception Desk. Notes: "${note}"`,
         event_type: 'POD_ISSUE_RAISED',
         order_id: order.id
       });
@@ -144,8 +150,7 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
               placeholder="Enter the message received from the salesperson or driver..."
               style={{ width: '100%', padding: '0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.8rem' }}
             />
-            {!details.trim() && <span style={{ fontSize: '0.7rem', color: '#fbbf24', fontWeight: 700, display: 'block', marginTop: 4 }}>Salesperson / driver message is mandatory.</span>}
-            <span style={{ fontSize: '0.7rem', color: '#fb7185', fontWeight: 700, display: 'block', marginTop: 4 }}>
+            <span style={{ fontSize: '0.7rem', color: '#fb7185', fontWeight: 700, display: 'block', marginTop: 6 }}>
               ⚠️ Exception alert will be automatically routed to Chirag Sir (Super Admin) & Sales Admin Exception Desk.
             </span>
           </div>
@@ -155,10 +160,10 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button
+            type="button"
             className={verificationType === 'CLEAN' ? 'btn btn-success' : 'btn btn-danger'}
             onClick={handleConfirm}
-            disabled={verificationType === 'ISSUE_RAISED' && !details.trim()}
-            style={{ fontWeight: 800 }}
+            style={{ fontWeight: 800, cursor: 'pointer' }}
           >
             {verificationType === 'CLEAN' ? 'Confirm Delivery (Clean POD)' : 'Raise Delivery Exception to Chirag Sir'}
           </button>

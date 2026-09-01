@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Receipt, DollarSign, CheckCircle2, X } from 'lucide-react';
+import { Receipt, DollarSign, CheckCircle2, X, Truck } from 'lucide-react';
 import { Order } from '../../types';
 import { useNotifications } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
@@ -10,12 +10,13 @@ interface AccountsViewProps {
   orders: Order[];
   onGenerateInvoice?: (order: Order, invoiceNumber: string, billingTotalQty: number, invoiceAmount: number, creditDays: number, remark: string, billedQtyByItem: Record<string, number>) => void;
   onCompleteGrn?: (orderId: string, grnNumber: string, grnDate: string, grnValue: number, grnRemark: string) => void;
+  onViewInvoice?: (order: Order) => void;
 }
 
-export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateInvoice, onCompleteGrn }) => {
+export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateInvoice, onCompleteGrn, onViewInvoice }) => {
   const { addNotification } = useNotifications();
   const { currentUser } = useAuth();
-  const canViewAllCompanies = checkIsSuperAdmin(currentUser);
+  const canViewAllCompanies = checkIsSuperAdmin(currentUser) || !currentUser?.company_handle || currentUser?.company_handle === 'All';
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState('');
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
@@ -37,7 +38,18 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
   // Billing users see only companies mapped to their login; Super Admin / All
   // handles continue to see the complete queue through the same helper.
   const billingQueueOrders = orders
-    .filter(o => o.status === 'APPROVED' || o.status === 'ACCOUNTS_APPROVED' || o.status === 'BILLED' || o.status === 'DISPATCHED' || o.status === 'PARTIALLY_DISPATCHED')
+    .filter(o => 
+      o.status === 'APPROVED' || 
+      o.status === 'ACCOUNTS_APPROVED' || 
+      o.status === 'SALES_ADMIN_APPROVED' || 
+      o.status === 'BILLED' || 
+      o.status === 'DISPATCHED' || 
+      o.status === 'PARTIALLY_DISPATCHED' ||
+      o.status === 'OUT_FOR_DELIVERY' ||
+      o.status === 'READY_FOR_PICKUP' ||
+      o.status === 'DELIVERED' ||
+      o.status === 'COMPLETED'
+    )
     .filter(o => canViewAllCompanies || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle))
     .sort((a, b) => {
       const priorityWeight: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
@@ -48,7 +60,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
 
   const handleOpenInvoiceModal = (order: Order) => {
     setSelectedOrderForInvoice(order);
-    const autoInv = order.invoice_number || `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const autoInv = order.invoice_number || `BILL-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     setInvoiceNumberInput(autoInv);
     setCreditDaysInput(order.payment_type === 'ADVANCE' ? 0 : (order.credit_days || 30));
     const initialBilledQty = Object.fromEntries((order.items || []).map(item => [item.id, item.issued_qty_pcs || 0]));
@@ -63,19 +75,41 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
 
     if (billingTotalQtyInput <= 0 || billingAmountInput < 0) return;
     const lockedCreditDays = selectedOrderForInvoice.payment_type === 'ADVANCE' ? 0 : Math.max(0, creditDaysInput);
+    const finalInvNo = invoiceNumberInput.trim();
 
     if (onGenerateInvoice) {
-      onGenerateInvoice(selectedOrderForInvoice, invoiceNumberInput.trim(), billingTotalQtyInput, billingAmountInput, lockedCreditDays, invoiceRemark, billedQtyByItem);
+      onGenerateInvoice(selectedOrderForInvoice, finalInvNo, billingTotalQtyInput, billingAmountInput, lockedCreditDays, invoiceRemark, billedQtyByItem);
     }
 
     addNotification({
-      title: `🧾 Tax Invoice Issued: ${invoiceNumberInput}`,
-      message: `Billing invoice ${invoiceNumberInput.trim()} for ${billingTotalQtyInput.toLocaleString()} PCS and ₹${billingAmountInput.toLocaleString()} issued for ${selectedOrderForInvoice.agency_name}.`,
+      title: `🧾 Tax Invoice Issued: ${finalInvNo}`,
+      message: `Billing invoice ${finalInvNo} for ${billingTotalQtyInput.toLocaleString()} PCS and ₹${billingAmountInput.toLocaleString()} issued for ${selectedOrderForInvoice.agency_name}.`,
       event_type: 'INVOICE_GENERATED',
       order_id: selectedOrderForInvoice.id
     });
 
+    const billedOrder: Order = {
+      ...selectedOrderForInvoice,
+      status: 'BILLED',
+      invoice_number: finalInvNo,
+      invoice_amount: billingAmountInput,
+      billing_total_qty: billingTotalQtyInput,
+      credit_days: lockedCreditDays,
+      remarks: invoiceRemark || selectedOrderForInvoice.remarks,
+      items: (selectedOrderForInvoice.items || []).map(item => ({
+        ...item,
+        issued_qty_pcs: billedQtyByItem[item.id] !== undefined ? billedQtyByItem[item.id] : (item.total_qty_pcs || 0)
+      }))
+    };
+
     setSelectedOrderForInvoice(null);
+
+    // Promptly open the Delivery Challan for the billed order
+    if (onViewInvoice) {
+      setTimeout(() => {
+        onViewInvoice(billedOrder);
+      }, 100);
+    }
   };
 
   return (
@@ -146,9 +180,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
               <th>Agency / B2B Party</th>
               <th>Payment Type</th>
               <th>Order Value (₹)</th>
-              <th>Tax Invoice No</th>
+              <th>Bill No</th>
               <th>Total Billing Qty</th>
-              <th>Total Billing Amount (₹)</th>
+              <th>Total Bill Amount (₹)</th>
               <th>Credit Lock</th>
               <th>Billing Status</th>
               <th style={{ textAlign: 'center' }}>Action</th>
@@ -158,7 +192,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
             {billingQueueOrders.length === 0 ? (
               <tr>
                 <td colSpan={11} style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
-                  No orders pending invoicing. Orders marked In Stock in Order Approvals appear here sorted by priority.
+                  No orders pending billing. Orders marked In Stock in Order Approvals appear here sorted by priority.
                 </td>
               </tr>
             ) : (
@@ -172,7 +206,16 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
 
                 return (
                   <tr key={order.id} style={{ background: isHigh ? 'rgba(244, 63, 94, 0.05)' : undefined }}>
-                    <td><strong style={{ color: '#38bdf8' }}>{order.order_number}</strong></td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <strong style={{ color: '#38bdf8' }}>{order.order_number}</strong>
+                        {order.reattempt_delivery && (
+                          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#fbbf24', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: '0.1rem 0.4rem', borderRadius: 4 }}>
+                            🔄 REATTEMPT
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       <span className="status-badge" style={{
                         background: order.priority === 'HIGH' ? 'rgba(244, 63, 94, 0.2)' : order.priority === 'LOW' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
@@ -193,7 +236,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                       {order.invoice_number ? (
                         <code style={{ color: '#fbbf24', fontSize: '0.775rem', fontWeight: 800 }}>{order.invoice_number}</code>
                       ) : (
-                        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Pending Invoice</span>
+                        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Pending Bill</span>
                       )}
                     </td>
                     <td>{order.billing_total_qty != null ? `${order.billing_total_qty.toLocaleString()} PCS` : '—'}</td>
@@ -201,11 +244,11 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                     <td>{order.invoice_number ? `${order.payment_type === 'ADVANCE' ? 0 : (order.credit_days || 0)} Days` : '—'}</td>
                     <td>
                       {isBilled ? (
-                        <span className="status-badge status-APPROVED" style={{ background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', color: '#34d399' }}>
-                          ✅ INVOICED
+                        <span className="status-badge status-BILLED" style={{ background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', color: '#34d399' }}>
+                          BILLED
                         </span>
                       ) : (
-                        <span className="status-badge status-SUBMITTED">READY FOR INVOICE</span>
+                        <span className="status-badge status-SUBMITTED">READY FOR BILL</span>
                       )}
                     </td>
                     <td style={{ textAlign: 'center' }}>
@@ -215,12 +258,19 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                           onClick={() => handleOpenInvoiceModal(order)}
                           style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                         >
-                          <Receipt size={14} /> {order.reattempt_delivery ? 'Review / Modify Invoice' : 'Issue Tax Invoice'}
+                          <Receipt size={14} /> {order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}
                         </button>
                       ) : (
-                        <span style={{ fontSize: '0.725rem', color: '#34d399', fontWeight: 700 }}>
-                          Invoice Sent to Dispatch
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <button
+                            className="btn btn-outline"
+                            onClick={() => onViewInvoice && onViewInvoice(order)}
+                            style={{ borderColor: '#f59e0b', color: '#fbbf24', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                            title="View / Print Delivery Challan"
+                          >
+                            <Truck size={14} /> Delivery Challan
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -238,7 +288,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.65rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Receipt size={20} color="#34d399" />
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>Stage 4: Issue B2B Tax Invoice & Credit Lock</h3>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>Stage 4: Issue B2B Bill & Credit Lock</h3>
               </div>
               <button onClick={() => setSelectedOrderForInvoice(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
                 <X size={18} />
@@ -293,12 +343,12 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
             </div>
 
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#fbbf24', marginBottom: 4 }}>BILLING INVOICE NUMBER (Mandatory)*</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#fbbf24', marginBottom: 4 }}>BILL NUMBER (Mandatory)*</label>
               <input 
                 type="text" 
                 value={invoiceNumberInput}
                 onChange={e => setInvoiceNumberInput(e.target.value)}
-                placeholder="e.g. INV-2026-9042"
+                placeholder="e.g. BILL-2026-9042"
                 style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#38bdf8', fontWeight: 800, fontSize: '0.9rem' }}
               />
             </div>
@@ -310,8 +360,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                 <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Calculated from item billing quantities.</span>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>TOTAL BILLING AMOUNT (₹)</label>
-                <input type="number" min="0" step="0.01" value={billingAmountInput} onChange={event => setBillingAmountInput(Math.max(0, Number(event.target.value) || 0))} placeholder="Enter invoice amount" style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', fontWeight: 800 }} />
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>TOTAL BILL AMOUNT (₹)</label>
+                <input type="number" min="0" step="0.01" value={billingAmountInput} onChange={event => setBillingAmountInput(Math.max(0, Number(event.target.value) || 0))} placeholder="Enter bill amount" style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', fontWeight: 800 }} />
                 <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Entered manually; price is not calculated.</span>
               </div>
             </div>
@@ -339,7 +389,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
               <button className="btn btn-outline" onClick={() => setSelectedOrderForInvoice(null)}>Cancel</button>
               <button className="btn btn-success" onClick={handleConfirmInvoice} style={{ fontWeight: 800 }}>
-                <CheckCircle2 size={16} /> Confirm Tax Invoice & Lock Credit
+                <CheckCircle2 size={16} /> Confirm Bill & Lock Credit
               </button>
             </div>
           </div>

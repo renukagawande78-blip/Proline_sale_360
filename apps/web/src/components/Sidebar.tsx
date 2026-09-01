@@ -13,7 +13,9 @@ import {
   ShoppingBag,
   PackageX,
   ScanSearch,
-  FileCheck2
+  FileCheck2,
+  User as UserIcon,
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PermissionControl } from '../types';
@@ -36,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed: externalIsCollapsed,
   onToggleCollapse: externalOnToggleCollapse
 }) => {
-  const { currentUser, hasPermission } = useAuth();
+  const { currentUser, hasPermission, logout } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
   const userSegment = resolveSegmentForUser(currentUser);
   
@@ -144,21 +146,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }}
         >
           <img 
-            src="/proline-logo.png" 
-            alt="Proline Logo" 
+            src="/prokap-badge.png" 
+            alt="PROKAP Logo" 
             style={{ 
               width: 38, 
               height: 38, 
-              borderRadius: '50%', 
+              borderRadius: '10px', 
               objectFit: 'contain',
-              flexShrink: 0
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
             }} 
           />
 
           {!isCollapsed && (
             <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-              <div className="logo-text" style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap' }}>PROLINE OMS</div>
-              <span style={{ fontSize: '0.625rem', color: '#38bdf8', fontWeight: 700, letterSpacing: '0.04em', display: 'block', whiteSpace: 'nowrap' }}>SALES AGENCY 360</span>
+              <div className="logo-text" style={{ fontSize: '1rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>PROKAP</div>
+              <span style={{ fontSize: '0.625rem', color: '#10b981', fontWeight: 700, letterSpacing: '0.04em', display: 'block', whiteSpace: 'nowrap' }}>ORDER FAST. TRACK LIVE.</span>
             </div>
           )}
 
@@ -223,10 +226,53 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </ul>
 
-        {/* Footer System Status & Logged-In Segment Scope */}
+        {/* Footer System Status & Logged-In User Details */}
         <div style={{ marginTop: 'auto', paddingTop: '0.85rem', borderTop: '1px solid #334155' }}>
           {!isCollapsed ? (
             <>
+              {/* Logged-In Person Name & Role */}
+              <div style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
+                LOGGED-IN USER
+              </div>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.5rem',
+                background: '#0f172a',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                padding: '0.5rem 0.65rem',
+                marginBottom: '0.65rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', overflow: 'hidden' }}>
+                  <div style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontWeight: 900,
+                    fontSize: '0.825rem',
+                    flexShrink: 0
+                  }}>
+                    {(currentUser?.full_name || 'U').charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '0.825rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {currentUser?.full_name || 'System User'}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: '#38bdf8', fontWeight: 700 }}>
+                      {(currentUser?.role_name || 'SALES_PERSON').replace(/_/g, ' ')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Segment Scope */}
               <div style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
                 LOGGED-IN SEGMENT SCOPE
               </div>
@@ -241,13 +287,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 background: userSegment === 'FMCG' ? 'rgba(16, 185, 129, 0.15)' : (userSegment === 'FMCD' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(56, 189, 248, 0.15)'),
                 color: userSegment === 'FMCG' ? '#34d399' : (userSegment === 'FMCD' ? '#fbbf24' : '#38bdf8'),
                 border: userSegment === 'FMCG' ? '1px solid rgba(16, 185, 129, 0.3)' : (userSegment === 'FMCD' ? '1px solid rgba(251, 191, 36, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'),
-                marginBottom: '0.75rem'
+                marginBottom: '0.65rem'
               }}>
                 <ShoppingBag size={13} />
                 <span>Segment: {userSegment === 'ALL' ? 'FMCG & FMCD' : userSegment}</span>
               </div>
 
-              <div style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
+              {/* Sign Out Button */}
+              <button
+                onClick={() => logout()}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.45rem',
+                  padding: '0.45rem 0.65rem',
+                  borderRadius: '7px',
+                  background: 'rgba(244, 63, 94, 0.12)',
+                  border: '1px solid rgba(244, 63, 94, 0.35)',
+                  color: '#fb7185',
+                  fontSize: '0.775rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  marginBottom: '0.65rem',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(244, 63, 94, 0.22)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(244, 63, 94, 0.12)')}
+              >
+                <LogOut size={14} />
+                <span>Sign Out</span>
+              </button>
+
+              <div style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.04em', marginBottom: '0.35rem' }}>
                 SYSTEM ENVIRONMENT
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.775rem', color: '#38bdf8', fontWeight: 700 }}>
@@ -256,8 +329,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </>
           ) : (
-            <div style={{ display: 'flex', justifyContent: 'center' }} title={`Mapped Segment: ${userSegment}`}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: userSegment === 'FMCG' ? '#10b981' : (userSegment === 'FMCD' ? '#fbbf24' : '#38bdf8'), boxShadow: '0 0 8px currentColor' }}></div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.55rem' }}>
+              <div style={{
+                width: 26,
+                height: 26,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                fontWeight: 900,
+                fontSize: '0.725rem'
+              }} title={`Logged in: ${currentUser?.full_name || 'User'} (${userSegment})`}>
+                {(currentUser?.full_name || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: userSegment === 'FMCG' ? '#10b981' : (userSegment === 'FMCD' ? '#fbbf24' : '#38bdf8'), boxShadow: '0 0 8px currentColor' }} title={`Segment: ${userSegment}`}></div>
+              <button
+                onClick={() => logout()}
+                title="Sign Out"
+                style={{
+                  background: 'rgba(244, 63, 94, 0.15)',
+                  border: '1px solid rgba(244, 63, 94, 0.3)',
+                  color: '#fb7185',
+                  borderRadius: 6,
+                  padding: '0.35rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <LogOut size={13} />
+              </button>
             </div>
           )}
         </div>

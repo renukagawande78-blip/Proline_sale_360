@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, UserCheck, ArrowRight, Eye, EyeOff, KeyRound, Sparkles, Smartphone, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { Capacitor } from '@capacitor/core';
 
 export const LoginPage: React.FC = () => {
   const { login, users } = useAuth();
@@ -14,13 +15,14 @@ export const LoginPage: React.FC = () => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
+
     try {
       const res = await login(userInput, passwordInput);
       if (!res.success) {
-        setError(res.error || 'Authentication failed');
+        setError(res.error || 'Invalid credentials');
       }
     } catch {
-      setError('Login failed. Please try again.');
+      setError('An unexpected error occurred during login');
     } finally {
       setIsLoading(false);
     }
@@ -47,66 +49,44 @@ export const LoginPage: React.FC = () => {
   return (
     <div style={{
       minHeight: '100vh',
-      width: '100vw',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'radial-gradient(ellipse at 50% 20%, #1e1b4b 0%, #0f172a 50%, #020617 100%)',
-      padding: '1.5rem',
-      position: 'relative',
-      overflow: 'hidden',
-      fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif"
+      background: 'radial-gradient(circle at 50% 10%, #1e293b 0%, #070e20 100%)',
+      padding: '1rem',
+      fontFamily: 'Inter, sans-serif'
     }}>
-      {/* Dynamic Background Glow Orbs */}
-      <div style={{
-        position: 'absolute',
-        top: '15%',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 420,
-        height: 320,
-        background: 'radial-gradient(circle, rgba(56, 189, 248, 0.12) 0%, rgba(0,0,0,0) 70%)',
-        borderRadius: '50%',
-        pointerEvents: 'none'
-      }} />
-
-      {/* Main Glassmorphism Card */}
       <div style={{
         width: '100%',
-        maxWidth: 460,
-        background: 'rgba(15, 23, 42, 0.85)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderRadius: 24,
-        padding: '2.25rem 2rem',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 40px rgba(56, 189, 248, 0.1)',
-        position: 'relative',
-        zIndex: 10
+        maxWidth: '440px',
+        background: '#0f172a',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '24px',
+        padding: '2.5rem 2rem',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(56, 189, 248, 0.1)',
+        position: 'relative'
       }}>
-
-        {/* Brand Header */}
+        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'linear-gradient(135deg, #38bdf8 0%, #6366f1 100%)',
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            color: 'white',
-            fontWeight: 900,
-            fontSize: '1.35rem',
-            marginBottom: '1rem',
-            boxShadow: '0 8px 20px -4px rgba(56, 189, 248, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.3)'
-          }}>
-            360
-          </div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '-0.02em', margin: 0 }}>
-            PROLINE OMS 360
+          <img 
+            src="/prokap-badge.png" 
+            alt="PROKAP" 
+            style={{ 
+              width: 76, 
+              height: 76, 
+              objectFit: 'contain',
+              borderRadius: 20,
+              boxShadow: '0 10px 28px rgba(0, 0, 0, 0.45), 0 0 20px rgba(16, 185, 129, 0.25)',
+              marginBottom: '0.85rem'
+            }} 
+          />
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '-0.02em', margin: 0 }}>
+            PROKAP
           </h1>
-          <p style={{ fontSize: '0.825rem', color: '#94a3b8', marginTop: 6, marginBottom: 0 }}>
+          <p style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 700, marginTop: 4, marginBottom: 0, letterSpacing: '0.02em' }}>
+            Order Fast. Track Live.
+          </p>
+          <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 4, marginBottom: 0 }}>
             Sign in to access your sales workspace
           </p>
         </div>
@@ -276,69 +256,70 @@ export const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        {/* Android App Download Banner */}
-        <div 
-          style={{ 
-            marginTop: '1.25rem', 
-            padding: '0.85rem 1rem', 
-            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(56, 189, 248, 0.1))', 
-            border: '1px solid rgba(52, 211, 153, 0.35)', 
-            borderRadius: 14, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
-            gap: '0.75rem',
-            boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <div 
-              style={{ 
-                width: 38, 
-                height: 38, 
-                borderRadius: 10, 
-                background: 'linear-gradient(135deg, #10b981, #059669)', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                color: 'white', 
-                flexShrink: 0, 
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' 
-              }}
-            >
-              <Smartphone size={20} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.825rem', fontWeight: 800, color: '#f8fafc' }}>
-                Android Mobile App
-              </div>
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                Native APK for field staff & managers
-              </div>
-            </div>
-          </div>
-          <a
-            href="/proline-oms-app.apk"
-            download="proline-oms-app.apk"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.5rem 0.85rem',
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              color: 'white',
-              borderRadius: 8,
-              fontSize: '0.775rem',
-              fontWeight: 800,
-              textDecoration: 'none',
-              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
-              whiteSpace: 'nowrap',
-              transition: 'all 0.15s ease'
+        {/* Android App Download Banner (Minimized & Responsive) */}
+        {!Capacitor.isNativePlatform() && (
+          <div 
+            style={{ 
+              marginTop: '1.25rem', 
+              padding: '0.65rem 0.85rem', 
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(56, 189, 248, 0.08))', 
+              border: '1px solid rgba(52, 211, 153, 0.3)', 
+              borderRadius: 12, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              gap: '0.5rem'
             }}
           >
-            <Download size={14} /> Download APK
-          </a>
-        </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div 
+                style={{ 
+                  width: 32, 
+                  height: 32, 
+                  borderRadius: 8, 
+                  background: 'linear-gradient(135deg, #10b981, #059669)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  color: 'white', 
+                  flexShrink: 0,
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)'
+                }}
+              >
+                <Smartphone size={17} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap' }}>
+                  Android App
+                </span>
+                <span style={{ fontSize: '0.65rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', padding: '0.1rem 0.35rem', borderRadius: 4, fontWeight: 700 }}>
+                  v1.0
+                </span>
+              </div>
+            </div>
+            <a
+              href="/proline-oms-app.apk"
+              download="proline-oms-app.apk"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.45rem 0.75rem',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                color: 'white',
+                borderRadius: 8,
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                textDecoration: 'none',
+                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+                whiteSpace: 'nowrap',
+                flexShrink: 0
+              }}
+            >
+              <Download size={13} /> Download APK
+            </a>
+          </div>
+        )}
 
         {/* Person Quick Select Shortcuts */}
         {users && users.length > 0 && (

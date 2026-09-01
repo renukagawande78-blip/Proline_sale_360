@@ -21,7 +21,7 @@ export const PODQueueView: React.FC<PODQueueViewProps> = ({ orders, onVerifyPOD,
   const renderTable = (rows: Order[], type: 'PENDING' | 'VERIFIED' | 'ISSUE') => (
     <div className="data-table-container" style={{ marginBottom: '1.25rem' }}>
       <table className="data-table">
-        <thead><tr><th>Order No.</th><th>Agency</th><th>Invoice</th><th>Driver / Vehicle</th>{type === 'ISSUE' && <th>Query Raised By</th>}<th>Status</th><th>Action</th></tr></thead>
+        <thead><tr><th>Order No.</th><th>Agency</th><th>Bill No.</th><th>Driver / Vehicle</th>{type === 'ISSUE' && <th>Query Raised By</th>}<th>Status</th><th>Action</th></tr></thead>
         <tbody>
           {rows.length === 0 ? <tr><td colSpan={type === 'ISSUE' ? 7 : 6} style={{ textAlign: 'center', color: '#64748b', padding: '1.5rem' }}>No records</td></tr> : rows.map(order => (
             <tr key={order.id}>

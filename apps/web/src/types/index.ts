@@ -370,6 +370,8 @@ export interface Order {
   agency_code?: string;
   area_id: string;
   area_name?: string;
+  zone_name?: string;
+  zone_region?: string;
   salesperson_id: string;
   salesperson_name?: string;
   asm_id?: string;
@@ -491,6 +493,15 @@ export interface Dispatch {
   dispatched_by_name?: string;
 }
 
+export type NotificationCategory = 
+  | 'ORDER'      // New order created / modified
+  | 'APPROVAL'   // Super Admin approval / review required
+  | 'INVENTORY'  // Wait for stock / stock availability
+  | 'DISPATCH'   // Out for delivery / dispatched / reattempt delivery
+  | 'BILLING'    // Tax invoice / GRN checked / GRN forwarded
+  | 'POD'        // POD query raised / POD verified
+  | 'SYSTEM';    // System notices
+
 export interface NotificationItem {
   id: string;
   title: string;
@@ -500,6 +511,9 @@ export interface NotificationItem {
   dispatch_id?: string;
   is_read: boolean;
   created_at: string;
+  target_roles?: RoleName[];
+  category?: NotificationCategory;
+  brand_name?: string;
 }
 
 export type DateRangeType = 'ALL_DATES' | 'TODAY' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR' | 'CUSTOM';

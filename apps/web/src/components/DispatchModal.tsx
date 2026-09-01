@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Truck, Check, PackageCheck, AlertTriangle, Layers, Send } from 'lucide-react';
+import { X, Truck, Check, PackageCheck } from 'lucide-react';
 import { Order } from '../types';
 
 interface DispatchModalProps {
@@ -48,16 +48,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
   if (!isOpen || !order) return null;
 
-  // Mock Warehouse Live Inventory Fetcher
-  const getWarehouseStock = (productId?: string, totalNeeded: number = 10) => {
-    const seed = productId ? productId.charCodeAt(0) : 75;
-    const stockAvailable = Math.floor((seed * 185) % 650) + 15;
-    let status: 'IN_STOCK' | 'PARTIAL_STOCK' | 'OUT_OF_STOCK' = 'IN_STOCK';
-    if (stockAvailable === 0) status = 'OUT_OF_STOCK';
-    else if (stockAvailable < totalNeeded) status = 'PARTIAL_STOCK';
-    return { stockAvailable, status };
-  };
-
   const handleDispatchQtyChange = (itemId: string, qty: number, maxPending: number) => {
     const validQty = Math.max(0, Math.min(qty, maxPending));
     setDispatchItems(prev => ({ ...prev, [itemId]: validQty }));
@@ -70,7 +60,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       return;
     }
     if (dispatchType === 'F.O.R' && !isCompanyVehicle && (!rentalAgencyName.trim() || freightAmount <= 0)) {
-      setValidationError('Rental agency name and rental price are mandatory for rented vehicles.');
+      setValidationError('Rental agency name and rent amount are mandatory for rented vehicles.');
       return;
     }
     const payload = {
@@ -85,10 +75,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       freight_amount: freightAmount,
       dispatch_remark: dispatchRemark.trim(),
       lr_number: lrNumber,
-      items: (order.items || []).map(item => ({
-        order_item_id: item.id,
-        dispatch_qty: dispatchItems[item.id] ?? item.issued_qty_pcs ?? item.pending_qty_pcs
-      }))
+      items: (order.items || []).map(item => {
+        const itemTargetQty = (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) ? item.issued_qty_pcs : item.total_qty_pcs;
+        return {
+          order_item_id: item.id,
+          dispatch_qty: dispatchItems[item.id] !== undefined ? dispatchItems[item.id] : itemTargetQty
+        };
+      })
     };
     onConfirmDispatch(order.id, payload);
     onClose();
@@ -214,12 +207,12 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>FREIGHT AMOUNT (₹)*</label>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>RENT AMOUNT (₹)*</label>
                       <input 
                         type="number" 
                         value={freightAmount}
                         onChange={e => setFreightAmount(Number(e.target.value))}
-                        placeholder="Freight INR"
+                        placeholder="Rent INR"
                         style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 700 }}
                       />
                     </div>
@@ -243,14 +236,14 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
           {validationError && <div style={{ marginTop: '0.75rem', color: '#fb7185', fontSize: '0.75rem', fontWeight: 800 }}>{validationError}</div>}
         </div>
 
-        {/* Item-level Warehouse Stock & Allocation Table */}
+        {/* Item-level Dispatch Allocation Table */}
         <div style={{ marginBottom: '1.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <PackageCheck size={16} color="#34d399" /> Central Warehouse Live Stock & Item Dispatch Allocation
+              <PackageCheck size={16} color="#34d399" /> Order Items for Dispatch
             </h3>
             <span style={{ fontSize: '0.725rem', color: '#94a3b8' }}>
-              Auto-allocated based on available warehouse inventory
+              Verify quantities to load and deliver
             </span>
           </div>
 
@@ -259,55 +252,29 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               <thead>
                 <tr>
                   <th>Product SKU</th>
+                  <th style={{ textAlign: 'center' }}>Total Ordered (PCS)</th>
                   <th style={{ textAlign: 'center' }}>Billing Qty (PCS)</th>
-                  <th style={{ textAlign: 'center' }}>Warehouse Live Stock</th>
-                  <th style={{ textAlign: 'center' }}>Stock Availability</th>
-                  <th style={{ textAlign: 'center' }}>Pending (PCS)</th>
-                  <th style={{ textAlign: 'center' }}>Dispatch Now (PCS)</th>
+                  <th style={{ textAlign: 'center' }}>Dispatch Qty (PCS)</th>
                 </tr>
               </thead>
               <tbody>
                 {order.items?.map(item => {
-                  const pending = item.issued_qty_pcs ?? item.pending_qty_pcs;
-                  const { stockAvailable, status } = getWarehouseStock(item.product_id || item.id, pending);
-                  
-                  // Pre-fill input value
-                  const defaultQty = Math.min(pending, stockAvailable);
-                  const currentVal = dispatchItems[item.id] !== undefined ? dispatchItems[item.id] : defaultQty;
+                  const targetQty = (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) ? item.issued_qty_pcs : item.total_qty_pcs;
+                  const currentVal = dispatchItems[item.id] !== undefined ? dispatchItems[item.id] : targetQty;
 
                   return (
                     <tr key={item.id}>
                       <td><strong style={{ color: '#f8fafc' }}>{item?.product_name || 'Product SKU'}</strong></td>
-                      <td style={{ textAlign: 'center' }}>{item.issued_qty_pcs || 0}</td>
+                      <td style={{ textAlign: 'center', color: '#94a3b8' }}>{item.total_qty_pcs || 0} PCS</td>
                       <td style={{ textAlign: 'center' }}>
-                        <span style={{ fontWeight: 800, color: stockAvailable > 0 ? '#34d399' : '#f43f5e' }}>
-                          {stockAvailable} PCS
-                        </span>
+                        <strong style={{ color: '#38bdf8' }}>{item.issued_qty_pcs || item.total_qty_pcs || 0} PCS</strong>
                       </td>
-                      <td style={{ textAlign: 'center' }}>
-                        {status === 'IN_STOCK' && (
-                          <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.15rem 0.5rem', borderRadius: 6 }}>
-                            🟢 Full Stock
-                          </span>
-                        )}
-                        {status === 'PARTIAL_STOCK' && (
-                          <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#fbbf24', background: 'rgba(251, 191, 36, 0.15)', border: '1px solid rgba(251, 191, 36, 0.3)', padding: '0.15rem 0.5rem', borderRadius: 6 }}>
-                            🟡 Partial Stock
-                          </span>
-                        )}
-                        {status === 'OUT_OF_STOCK' && (
-                          <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#f43f5e', background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', padding: '0.15rem 0.5rem', borderRadius: 6 }}>
-                            🔴 Out of Stock
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center' }}><strong style={{ color: '#fbbf24' }}>{pending}</strong></td>
                       <td style={{ textAlign: 'center' }}>
                         <input 
                           type="number"
                           value={currentVal}
-                          onChange={e => handleDispatchQtyChange(item.id, parseInt(e.target.value) || 0, pending)}
-                          style={{ width: 100, padding: '0.4rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#38bdf8', fontWeight: 900, textAlign: 'center', fontSize: '0.85rem' }}
+                          onChange={e => handleDispatchQtyChange(item.id, parseInt(e.target.value) || 0, item.total_qty_pcs || 999999)}
+                          style={{ width: 110, padding: '0.4rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#38bdf8', fontWeight: 900, textAlign: 'center', fontSize: '0.85rem' }}
                         />
                       </td>
                     </tr>
@@ -318,19 +285,11 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
           </div>
         </div>
 
-        {/* Accounts Invoicing Notification Info Box */}
-        <div style={{ background: 'rgba(52, 211, 153, 0.1)', border: '1px solid rgba(52, 211, 153, 0.3)', borderRadius: 8, padding: '0.75rem', marginBottom: '1.25rem', fontSize: '0.775rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Send size={16} color="#34d399" style={{ flexShrink: 0 }} />
-          <span>
-            <strong>Accounts Invoicing Workflow:</strong> Confirming warehouse dispatch updates item availability, generates the Dispatch Challan, and automatically pushes the shipment to the <strong>Accounts & Billing Console</strong> for immediate Tax Invoice generation.
-          </span>
-        </div>
-
         {/* Modal Actions */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.85rem', borderTop: '1px solid #334155', paddingTop: '1rem' }}>
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button className="btn btn-success" onClick={handleConfirm} style={{ fontWeight: 800 }}>
-            <Check size={16} /> Confirm Dispatch & Send to Accounts for Invoicing
+            <Check size={16} /> Confirm Dispatch & Assign Vehicle
           </button>
         </div>
       </div>

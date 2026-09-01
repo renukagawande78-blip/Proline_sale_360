@@ -7,6 +7,8 @@ interface HeaderProps {
   onOpenUserManagement?: () => void;
   onOpenGlobalFilter?: () => void;
   globalFilterState?: GlobalFilterState;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = (props) => {

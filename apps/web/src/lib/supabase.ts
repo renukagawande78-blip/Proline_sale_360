@@ -744,9 +744,9 @@ export const fetchAreasFromSupabaseTable = async (): Promise<AreaMaster[]> => {
     const { data, error } = await supabase.from('areas').select('*').order('created_at', { ascending: false });
     if (error) {
       console.warn('Supabase fetch areas error:', error.message);
-      return [];
+      return deduplicateAreas(DEFAULT_AREAS);
     }
-    if (!data || data.length === 0) return [];
+    if (!data || data.length === 0) return deduplicateAreas(DEFAULT_AREAS);
     const formatted: AreaMaster[] = data.map((row, idx) => ({
       id: row.id || `ar_${idx + 1}`,
       area_code: row.area_code || row.area_id || `AR-SUR-${(idx + 1).toString().padStart(3, '0')}`,
@@ -757,44 +757,59 @@ export const fetchAreasFromSupabaseTable = async (): Promise<AreaMaster[]> => {
       description: row.description || 'Live Supabase Area Master Row',
       created_at: row.created_at || new Date().toISOString()
     }));
-    return deduplicateAreas(formatted);
+    return deduplicateAreas([...formatted, ...DEFAULT_AREAS]);
   } catch (err: any) {
     console.error('Error fetching areas from Supabase:', err?.message || err);
-    return [];
+    return deduplicateAreas(DEFAULT_AREAS);
   }
 };
 
 export const saveAreaToSupabase = async (area: AreaMaster): Promise<{ success: boolean; error: string | null }> => {
   try {
     const nowIso = new Date().toISOString();
-    const payload: Record<string, any> = {
+    const fullPayload: Record<string, any> = {
       area_code: area.area_code,
       area_name: area.area_name,
-      area: area.area_name,
       city: area.city || 'Surat',
-      location: area.city || 'Surat',
       zone_code: area.zone_code || 'ZN-SUR-A',
       region: area.region || 'Surat City Zone',
       description: area.description || '',
+      active: true,
       created_at: area.created_at || nowIso,
       updated_at: nowIso
     };
 
     if (isValidUuid(area.id)) {
-      payload.id = area.id;
-    } else {
-      payload.id = generateUuid();
+      fullPayload.id = area.id;
     }
 
-    const { error } = await supabase.from('areas').upsert([payload]);
-    if (error) {
-      console.warn('Supabase saveArea error:', error.message);
-      delete payload.id;
-      const retryRes = await supabase.from('areas').insert([payload]);
-      if (retryRes.error) {
-        return { success: false, error: retryRes.error.message };
+    // Attempt 1: Full modern schema upsert
+    let { error } = await supabase.from('areas').upsert([fullPayload]);
+
+    // If column doesn't exist in remote schema cache (PGRST204), fall back to base schema
+    if (error && (error.code === 'PGRST204' || (error.message && error.message.includes('Could not find')))) {
+      console.warn('Supabase areas table has legacy columns. Falling back to core columns:', error.message);
+      const basePayload: Record<string, any> = {
+        area_code: area.area_code,
+        area_name: area.area_name,
+        region: area.region || 'Surat City Zone',
+        active: true,
+        created_at: area.created_at || nowIso
+      };
+      if (isValidUuid(area.id)) basePayload.id = area.id;
+      
+      const retryRes = await supabase.from('areas').upsert([basePayload]);
+      if (!retryRes.error) {
+        return { success: true, error: null };
       }
+      error = retryRes.error;
     }
+
+    if (error) {
+      console.warn('Supabase saveArea note:', error.message);
+      return { success: false, error: error.message };
+    }
+
     return { success: true, error: null };
   } catch (err: any) {
     console.error('Error saving area to Supabase:', err?.message || err);
@@ -1714,7 +1729,10 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
       const latestDispatchDetails = [...(o.order_history || [])]
         .reverse()
         .find((entry: any) => entry.action === 'DISPATCH_TRANSPORT_ASSIGNED')?.details || {};
-      const hasReattemptHistory = (o.order_history || []).some((entry: any) => entry.action === 'REATTEMPT_DELIVERY');
+      const hasReattemptHistory = 
+        (o.order_history || []).some((entry: any) => entry.action === 'REATTEMPT_DELIVERY') ||
+        (o.remarks || '').includes('<!--REATTEMPT:true-->') ||
+        (o.remarks || '').toLowerCase().includes('reattempt');
       const latestGrnEntry = [...(o.order_history || [])].reverse().find((entry: any) =>
         ['GRN_REQUESTED_BY_ADMIN', 'GRN_FORWARDED_TO_BILLING', 'GRN_CREATED', 'ORDER_COMPLETED_AFTER_GRN'].includes(entry.action)
       );
@@ -1731,6 +1749,8 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         agency_code: ag?.agency_code || 'AG-001',
         area_id: o.area_id || ag?.area_id || 'ar_01',
         area_name: ag?.area_name || ag?.city || 'Surat Area',
+        zone_name: ag?.zone_name || (o as any).zone_name || undefined,
+        zone_region: ag?.zone_region || (o as any).zone_region || undefined,
         salesperson_id: o.salesperson_id || 'u12',
         salesperson_name: usr?.full_name || 'Sales Representative',
         asm_id: o.asm_id || undefined,
@@ -1746,16 +1766,52 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
           ? (itemsMap[o.id] || []).reduce((sum, item) => sum + Number(item.issued_qty_pcs || 0), 0)
           : Number(o.billing_total_qty),
         credit_days: o.credit_days == null ? undefined : Number(o.credit_days),
-        vehicle_number: o.vehicle_number || latestDispatchDetails.vehicle_number || undefined,
-        is_company_vehicle: o.is_company_vehicle == null ? latestDispatchDetails.is_company_vehicle : Boolean(o.is_company_vehicle),
-        driver_name: o.driver_name || latestDispatchDetails.driver_name || undefined,
-        driver_mobile: o.driver_mobile || latestDispatchDetails.driver_mobile || undefined,
-        tempo_number: o.tempo_number || latestDispatchDetails.tempo_number || undefined,
-        booking_id: o.booking_id || latestDispatchDetails.booking_id || undefined,
-        rental_agency_name: o.rental_agency_name || latestDispatchDetails.rental_agency_name || undefined,
-        freight_amount: o.freight_amount == null ? latestDispatchDetails.freight_amount : Number(o.freight_amount),
-        dispatch_remark: o.dispatch_remark || latestDispatchDetails.dispatch_remark || undefined,
-        reattempt_delivery: hasReattemptHistory && (o.status === 'SALES_ADMIN_APPROVED' || o.status === 'WAIT_FOR_STOCK' || o.status === 'APPROVED'),
+        vehicle_number: o.vehicle_number || (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) { try { return JSON.parse(match[1]).vehicle_number; } catch {} }
+          return undefined;
+        })() || latestDispatchDetails.vehicle_number || undefined,
+        is_company_vehicle: o.is_company_vehicle == null ? (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) { try { return JSON.parse(match[1]).is_company_vehicle; } catch {} }
+          return latestDispatchDetails.is_company_vehicle;
+        })() : Boolean(o.is_company_vehicle),
+        driver_name: o.driver_name || (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) { try { return JSON.parse(match[1]).driver_name; } catch {} }
+          return undefined;
+        })() || latestDispatchDetails.driver_name || undefined,
+        driver_mobile: o.driver_mobile || (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) { try { return JSON.parse(match[1]).driver_mobile; } catch {} }
+          return undefined;
+        })() || latestDispatchDetails.driver_mobile || undefined,
+        tempo_number: o.tempo_number || (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) { try { return JSON.parse(match[1]).tempo_number; } catch {} }
+          return undefined;
+        })() || latestDispatchDetails.tempo_number || undefined,
+        booking_id: o.booking_id || (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) { try { return JSON.parse(match[1]).booking_id; } catch {} }
+          return undefined;
+        })() || latestDispatchDetails.booking_id || undefined,
+        rental_agency_name: o.rental_agency_name || (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) { try { return JSON.parse(match[1]).rental_agency_name; } catch {} }
+          return undefined;
+        })() || latestDispatchDetails.rental_agency_name || undefined,
+        freight_amount: o.freight_amount == null ? (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) { try { return JSON.parse(match[1]).freight_amount; } catch {} }
+          return latestDispatchDetails.freight_amount;
+        })() : Number(o.freight_amount),
+        dispatch_remark: o.dispatch_remark || (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) { try { return JSON.parse(match[1]).dispatch_remark; } catch {} }
+          return undefined;
+        })() || latestDispatchDetails.dispatch_remark || undefined,
+        reattempt_delivery: Boolean(hasReattemptHistory && o.status !== 'COMPLETED' && o.status !== 'CANCELLED' && o.status !== 'POD_ISSUE_RAISED'),
         grn_workflow_status: latestGrnEntry?.action === 'GRN_REQUESTED_BY_ADMIN'
           ? 'PENDING_SALES_ADMIN'
           : latestGrnEntry?.action === 'GRN_FORWARDED_TO_BILLING'
@@ -1772,7 +1828,7 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         pod_issue_details: o.pod_issue_details || latestPodQuery?.details?.message,
         pod_query_raised_by: o.pod_query_raised_by || latestPodQuery?.details?.raised_by,
         pod_query_raised_at: o.pod_query_raised_at || latestPodQuery?.details?.raised_at,
-        remarks: o.remarks || '',
+        remarks: (o.remarks || '').replace(/<!--DISPATCH:.*?-->/, '').trim(),
         delivery_type: 'F.O.R',
         items: itemsMap[o.id] || itemsMap[o.order_number] || [],
         sales_admin_approved: o.sales_admin_approved ?? (o.status === 'SALES_ADMIN_APPROVED' || o.status === 'APPROVED'),
@@ -1923,35 +1979,29 @@ export const updateOrderAccountsApprovalInSupabase = async (
     if (accountsData.invoice_number !== undefined) payload.invoice_number = accountsData.invoice_number;
     if (accountsData.invoice_date !== undefined) payload.invoice_date = accountsData.invoice_date;
     if (accountsData.invoice_amount !== undefined) payload.invoice_amount = accountsData.invoice_amount;
-    if (accountsData.billing_total_qty !== undefined) payload.billing_total_qty = accountsData.billing_total_qty;
     if (accountsData.credit_days !== undefined) payload.credit_days = accountsData.credit_days;
-    if (accountsData.vehicle_number !== undefined) payload.vehicle_number = accountsData.vehicle_number;
-    if (accountsData.is_company_vehicle !== undefined) payload.is_company_vehicle = accountsData.is_company_vehicle;
-    if (accountsData.driver_name !== undefined) payload.driver_name = accountsData.driver_name;
-    if (accountsData.driver_mobile !== undefined) payload.driver_mobile = accountsData.driver_mobile;
-    if (accountsData.tempo_number !== undefined) payload.tempo_number = accountsData.tempo_number;
-    if (accountsData.booking_id !== undefined) payload.booking_id = accountsData.booking_id;
-    if (accountsData.rental_agency_name !== undefined) payload.rental_agency_name = accountsData.rental_agency_name;
-    if (accountsData.freight_amount !== undefined) payload.freight_amount = accountsData.freight_amount;
-    if (accountsData.dispatch_remark !== undefined) payload.dispatch_remark = accountsData.dispatch_remark;
-    if (accountsData.remarks !== undefined) payload.remarks = accountsData.remarks;
-    if (accountsData.order_history !== undefined) payload.order_history = accountsData.order_history;
 
-    let { error } = await supabase.from('orders').update(payload).eq('id', orderId);
-    if (error?.message?.includes('billing_total_qty') || error?.message?.includes('column orders.')) {
-      delete payload.billing_total_qty;
-      delete payload.vehicle_number;
-      delete payload.is_company_vehicle;
-      delete payload.driver_name;
-      delete payload.driver_mobile;
-      delete payload.tempo_number;
-      delete payload.booking_id;
-      delete payload.rental_agency_name;
-      delete payload.freight_amount;
-      delete payload.dispatch_remark;
-      const retryResult = await supabase.from('orders').update(payload).eq('id', orderId);
-      error = retryResult.error;
+    // Collect dispatch metadata if provided so it survives on the order
+    const dispatchMeta: Record<string, any> = {};
+    if (accountsData.vehicle_number) dispatchMeta.vehicle_number = accountsData.vehicle_number;
+    if (accountsData.is_company_vehicle !== undefined) dispatchMeta.is_company_vehicle = accountsData.is_company_vehicle;
+    if (accountsData.driver_name) dispatchMeta.driver_name = accountsData.driver_name;
+    if (accountsData.driver_mobile) dispatchMeta.driver_mobile = accountsData.driver_mobile;
+    if (accountsData.tempo_number) dispatchMeta.tempo_number = accountsData.tempo_number;
+    if (accountsData.booking_id) dispatchMeta.booking_id = accountsData.booking_id;
+    if (accountsData.rental_agency_name) dispatchMeta.rental_agency_name = accountsData.rental_agency_name;
+    if (accountsData.freight_amount !== undefined) dispatchMeta.freight_amount = accountsData.freight_amount;
+    if (accountsData.dispatch_remark) dispatchMeta.dispatch_remark = accountsData.dispatch_remark;
+    if (accountsData.billing_total_qty !== undefined) dispatchMeta.billing_total_qty = accountsData.billing_total_qty;
+
+    if (Object.keys(dispatchMeta).length > 0 || accountsData.remarks !== undefined) {
+      const cleanRemarks = ((accountsData.remarks !== undefined ? accountsData.remarks : '') || '').replace(/<!--DISPATCH:.*?-->/, '').trim();
+      payload.remarks = Object.keys(dispatchMeta).length > 0
+        ? `<!--DISPATCH:${JSON.stringify(dispatchMeta)}-->${cleanRemarks}`
+        : cleanRemarks;
     }
+
+    const { error } = await supabase.from('orders').update(payload).eq('id', orderId);
     if (error) {
       console.error('Supabase updateOrderAccountsApproval error:', error.message);
       return { success: false, error: error.message };

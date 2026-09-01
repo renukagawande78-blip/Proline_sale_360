@@ -32,6 +32,7 @@ import { useAuth } from '../context/AuthContext';
 import { Company, Agency, Product } from '../types';
 
 import { AgenciesMasterView } from '../views/masters/AgenciesMasterView';
+import { AreasMasterView } from '../views/masters/AreasMasterView';
 import { ProductsMasterView } from '../views/masters/ProductsMasterView';
 import { BrandsMasterView } from '../views/masters/BrandsMasterView';
 import { UsersMasterView } from '../views/masters/UsersMasterView';
@@ -377,6 +378,28 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         </button>
 
         <button
+          onClick={() => setActiveTab('areas')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.55rem 1rem',
+            borderRadius: 10,
+            border: 'none',
+            background: activeTab === 'areas' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+            color: activeTab === 'areas' ? '#ffffff' : '#94a3b8',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            boxShadow: activeTab === 'areas' ? '0 4px 12px rgba(2, 132, 199, 0.4)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <MapPin size={15} /> Area Master (Localities & Zones)
+        </button>
+
+        <button
           onClick={() => setActiveTab('products')}
           style={{
             display: 'flex',
@@ -493,6 +516,9 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         />
       )}
 
+      {activeTab === 'areas' && (
+        <AreasMasterView agencies={mappedAgencies} searchQuery={searchQuery} />
+      )}
 
       {activeTab === 'products' && (
         <ProductsMasterView products={mappedProducts} companies={companiesList} searchQuery={searchQuery} />

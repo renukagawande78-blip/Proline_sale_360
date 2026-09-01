@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle, AlertTriangle, FileText, ShieldAlert, ShieldCheck, Check, XCircle, RefreshCw, Lock, Unlock, User } from 'lucide-react';
+import { X, CheckCircle, AlertTriangle, FileText, ShieldAlert, ShieldCheck, Check, XCircle, RefreshCw, Lock, Unlock, User, Edit } from 'lucide-react';
 import { Order, HoldReason } from '../types';
 import { MOCK_HOLD_REASONS, getOrderAccessPermission, getAgencyFinancialsByAgencyId } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -15,11 +15,13 @@ interface OrderApprovalModalProps {
   onRequestAccountsClearance?: (orderId: string, queryMsg: string) => void;
   onApproveReturnRequest?: (orderId: string) => void;
   onRejectReturnRequest?: (orderId: string) => void;
+  onOpenEditOrder?: (order: Order) => void;
 }
 
 export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
   order, isOpen, onClose, onApprove, onHold, onReject,
-  onRequestAccountsClearance, onApproveReturnRequest, onRejectReturnRequest
+  onRequestAccountsClearance, onApproveReturnRequest, onRejectReturnRequest,
+  onOpenEditOrder
 }) => {
   const { currentUser, hasPermission } = useAuth();
   const { addNotification } = useNotifications();
@@ -79,6 +81,31 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
               <span className={'status-badge status-' + order.status}>{order.status}</span>
               {bothApproved && <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#34d399', background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>✅ Both Approvals Complete</span>}
               {waitingForSuperAdmin && <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#fbbf24', background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>🔔 Awaiting Super Admin Final Sign-off</span>}
+              {onOpenEditOrder && (isSalesAdmin || isSuperAdmin) && order.status !== 'CANCELLED' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenEditOrder(order);
+                  }}
+                  style={{
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid #38bdf8',
+                    borderRadius: 6,
+                    color: '#38bdf8',
+                    padding: '0.25rem 0.65rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    cursor: 'pointer'
+                  }}
+                  title="Edit Order"
+                >
+                  <Edit size={13} /> Edit Order
+                </button>
+              )}
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 3 }}>
               Order: <strong style={{ color: '#38bdf8' }}>{order.order_number}</strong>
@@ -377,6 +404,28 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
+            {onOpenEditOrder && (isSalesAdmin || isSuperAdmin) && order.status !== 'CANCELLED' && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  onClose();
+                  onOpenEditOrder(order);
+                }}
+                style={{
+                  background: 'rgba(56, 189, 248, 0.12)',
+                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                  color: '#38bdf8',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem'
+                }}
+              >
+                <Edit size={14} /> Edit Order
+              </button>
+            )}
             {order.status === 'WAIT_FOR_STOCK' && bothApproved && (isSalesAdmin || isSuperAdmin) && (
               <button
                 className="btn btn-success"

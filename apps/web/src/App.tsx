@@ -22,6 +22,8 @@ import { ProcessReturnModal } from './components/ProcessReturnModal';
 import { PODVerificationModal } from './components/PODVerificationModal';
 import { ZoneMasterModal } from './components/ZoneMasterModal';
 import { RegisterAgencyModal } from './components/RegisterAgencyModal';
+import { ActiveFiltersBar } from './components/ActiveFiltersBar';
+import { NotificationToast } from './components/NotificationToast';
 import { LoginPage } from './components/LoginPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
@@ -82,11 +84,16 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 }
 
 const MainLayout: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, users } = useAuth();
   const { addNotification } = useNotifications();
 
   if (!currentUser) {
-    return <LoginPage />;
+    return (
+      <>
+        <LoginPage />
+        <NotificationToast />
+      </>
+    );
   }
 
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -139,7 +146,7 @@ const MainLayout: React.FC = () => {
     // Real-time listener for database updates across any Super Admin / Sales session
     const channel = supabase
       .channel(realtimeTopic)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload: any) => {
         fetchOrdersFromSupabase().then(({ orders: liveOrders, error }) => {
           if (liveOrders && liveOrders.length > 0 && !error) {
             setOrders(liveOrders);
@@ -148,6 +155,17 @@ const MainLayout: React.FC = () => {
             } catch {}
           }
         });
+
+        // Trigger notification for newly created orders in real-time
+        if (payload?.eventType === 'INSERT' && payload.new) {
+          const newOrd = payload.new;
+          addNotification({
+            title: `New Order Received: ${newOrd.order_number || 'New Order'}`,
+            message: `Order submitted for approval (${newOrd.total_box_qty || 0} Boxes, ${newOrd.total_qty_pcs || 0} PCS).`,
+            event_type: 'ORDER_SUBMITTED',
+            order_id: newOrd.id
+          });
+        }
       })
       .subscribe();
 
@@ -210,17 +228,31 @@ const MainLayout: React.FC = () => {
 
   const [globalFilterState, setGlobalFilterState] = useState<GlobalFilterState>(DEFAULT_GLOBAL_FILTER);
   const [isGlobalFilterOpen, setIsGlobalFilterOpen] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [selectedReportName, setSelectedReportName] = useState<string>('Completed Orders Report');
 
-  // App-Wide Globally Filtered Orders List across all 10 dimensions + Role/Brand Access Scoping
-  const globallyFilteredOrders = orders.filter(o => {
-    // 0. User Access Scoping (Role & Brand Scoping)
-    const accessPerm = getOrderAccessPermission(o, currentUser, companiesPool);
-    if (!accessPerm.canView) return false;
+  // User accessible orders before app-wide filter conditions
+  const accessibleOrders = orders.filter(o => getOrderAccessPermission(o, currentUser, companiesPool).canView);
+
+  // App-Wide Globally Filtered Orders List across all 10 dimensions + Role/Brand Access Scoping + Global Search
+  const globallyFilteredOrders = accessibleOrders.filter(o => {
+    // 0. Search Query Filter
+    if (globalSearchQuery.trim()) {
+      const q = globalSearchQuery.trim().toLowerCase();
+      const matches = 
+        (o.order_number || '').toLowerCase().includes(q) ||
+        (o.agency_name || '').toLowerCase().includes(q) ||
+        (o.company_name || '').toLowerCase().includes(q) ||
+        (o.salesperson_name || '').toLowerCase().includes(q) ||
+        (o.invoice_number || '').toLowerCase().includes(q) ||
+        (o.vehicle_number || '').toLowerCase().includes(q) ||
+        (o.items || []).some(item => (item.product_name || item.product_code || '').toLowerCase().includes(q));
+      if (!matches) return false;
+    }
 
     // 1. Segment Filter
     if (globalFilterState.segment !== 'ALL') {
-      const comp = MOCK_COMPANIES.find(c => c.id === o.company_id || c.company_name === o.company_name);
+      const comp = companiesPool.find(c => c.id === o.company_id || c.company_name === o.company_name);
       if (comp?.segment !== globalFilterState.segment) return false;
     }
 
@@ -296,6 +328,66 @@ const MainLayout: React.FC = () => {
         const end = new Date(globalFilterState.endDate);
         if (orderDate < start || orderDate > end) return false;
       }
+    }
+
+    return true;
+  });
+
+  // Stage-level scoped orders for Dispatch and Accounts pages (includes role, brand, segment, agency, date filtering, but not restricting to an unrelated stage status)
+  const stageScopedOrders = accessibleOrders.filter(o => {
+    // 0. Search Query Filter
+    if (globalSearchQuery.trim()) {
+      const q = globalSearchQuery.trim().toLowerCase();
+      const matches = 
+        (o.order_number || '').toLowerCase().includes(q) ||
+        (o.agency_name || '').toLowerCase().includes(q) ||
+        (o.company_name || '').toLowerCase().includes(q) ||
+        (o.salesperson_name || '').toLowerCase().includes(q) ||
+        (o.invoice_number || '').toLowerCase().includes(q) ||
+        (o.vehicle_number || '').toLowerCase().includes(q) ||
+        (o.items || []).some(item => (item.product_name || item.product_code || '').toLowerCase().includes(q));
+      if (!matches) return false;
+    }
+
+    // 1. Segment Filter
+    if (globalFilterState.segment !== 'ALL') {
+      const comp = companiesPool.find(c => c.id === o.company_id || c.company_name === o.company_name);
+      if (comp?.segment !== globalFilterState.segment) return false;
+    }
+
+    // 2. Brand / Company Filter
+    if (globalFilterState.companyId !== 'ALL') {
+      if (o.company_id !== globalFilterState.companyId) return false;
+    }
+
+    // 4. Salesperson Filter
+    if (globalFilterState.salespersonId !== 'ALL') {
+      if (o.salesperson_id !== globalFilterState.salespersonId) return false;
+    }
+
+    // 5. Agency Filter
+    if (globalFilterState.agencyId !== 'ALL') {
+      if (o.agency_id !== globalFilterState.agencyId) return false;
+    }
+
+    // 6. Area / Territory Filter
+    if (globalFilterState.areaId !== 'ALL') {
+      const agency = MOCK_AGENCIES.find(a => a.id === o.agency_id || a.agency_name === o.agency_name);
+      if (agency?.area_name !== globalFilterState.areaId) return false;
+    }
+
+    // 7. City Filter
+    if (globalFilterState.city !== 'ALL') {
+      const agency = MOCK_AGENCIES.find(a => a.id === o.agency_id || a.agency_name === o.agency_name);
+      if (agency?.city !== globalFilterState.city) return false;
+    }
+
+    if (globalFilterState.vehicleNumber && !(o.vehicle_number || '').toLowerCase().includes(globalFilterState.vehicleNumber.toLowerCase())) return false;
+
+    // 8. Product SKU Filter
+    if (globalFilterState.productId !== 'ALL') {
+      const hasProduct = o.items?.some(i => i.product_id === globalFilterState.productId);
+      if (!hasProduct) return false;
     }
 
     return true;
@@ -381,7 +473,7 @@ const MainLayout: React.FC = () => {
         status: nextStatus,
         inventory_status: approvalDetails.inventory_status,
         priority: 'HIGH',
-        remarks
+        remarks: `<!--REATTEMPT:true-->${remarks}`
       });
       if (target) {
         addNotification({
@@ -627,6 +719,17 @@ const MainLayout: React.FC = () => {
     } : o));
     if (podStatus === 'CLEAN') {
       updateOrderStatusInSupabase(orderId, 'COMPLETED', 'POD verified with no issue');
+      if (target) {
+        addNotification({
+          title: `✅ POD Verified & Order Completed: ${target.order_number}`,
+          message: `Shipment delivered & verified with store stamp for ${target.agency_name}. Salesperson (${target.salesperson_name}) target credited.`,
+          event_type: 'POD_VERIFIED',
+          order_id: orderId,
+          target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'ACCOUNTS', 'SUPER_ADMIN'],
+          category: 'POD',
+          brand_name: target.company_name
+        });
+      }
     } else {
       updateOrderAccountsApprovalInSupabase(orderId, {
         status: 'POD_ISSUE_RAISED',
@@ -637,6 +740,17 @@ const MainLayout: React.FC = () => {
         accounts_approval_requested_at: timestamp,
         order_history: podHistoryEntry ? [...(target?.order_history || []), podHistoryEntry] : target?.order_history
       });
+      if (target) {
+        addNotification({
+          title: `🚨 POD Query Raised: ${target.order_number}`,
+          message: `Delivery exception reported by ${verifier}: [${issueType || 'ISSUE'}] ${details || 'Store stamp missing / exception'}. Super Admin action needed.`,
+          event_type: 'POD_QUERY_RAISED',
+          order_id: orderId,
+          target_roles: ['SUPER_ADMIN', 'SALES_ADMIN'],
+          category: 'POD',
+          brand_name: target.company_name
+        });
+      }
     }
   };
 
@@ -686,7 +800,7 @@ const MainLayout: React.FC = () => {
         need_accounts_approval: false,
         accounts_approval_status: 'NOT_REQUIRED',
         order_history: [...(target.order_history || []), historyEntry],
-        remarks: 'Reattempt delivery — route to Stage 3 stock check'
+        remarks: '<!--REATTEMPT:true-->Reattempt delivery — route to Stage 3 stock check'
       });
 
       addNotification({
@@ -1112,6 +1226,23 @@ const MainLayout: React.FC = () => {
           onOpenUserManagement={() => setIsUserMgmtOpen(true)}
           onOpenGlobalFilter={() => setIsGlobalFilterOpen(true)}
           globalFilterState={globalFilterState}
+          searchQuery={globalSearchQuery}
+          onSearchChange={setGlobalSearchQuery}
+        />
+
+        {/* ACTIVE FILTER LIST & MISMATCH NOTIFIER */}
+        <ActiveFiltersBar
+          filterState={globalFilterState}
+          onUpdateFilter={(newState) => setGlobalFilterState(newState)}
+          onResetFilter={() => setGlobalFilterState(DEFAULT_GLOBAL_FILTER)}
+          onOpenFilterModal={() => setIsGlobalFilterOpen(true)}
+          totalOrdersCount={accessibleOrders.length}
+          filteredOrdersCount={globallyFilteredOrders.length}
+          companies={companiesPool}
+          agencies={MOCK_AGENCIES}
+          users={users}
+          searchQuery={globalSearchQuery}
+          onClearSearch={() => setGlobalSearchQuery('')}
         />
 
         {currentTab === 'dashboard' && (
@@ -1190,19 +1321,21 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'dispatch' && (
           <DispatchPage 
-            orders={globallyFilteredOrders} 
+            orders={stageScopedOrders} 
             onOpenDispatchModal={(o) => setSelectedOrderForDispatch(o)}
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onOpenProcessReturnModal={(o) => setSelectedOrderForProcessReturn(o)}
             onOpenPODModal={(o) => setSelectedOrderForPOD(o)}
+            onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
           />
         )}
 
         {currentTab === 'accounts' && (
           <AccountsPage 
-            orders={globallyFilteredOrders} 
+            orders={stageScopedOrders} 
             onGenerateInvoice={handleGenerateInvoice}
             onCompleteGrn={handleCompleteGrn}
+            onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
           />
         )}
 
@@ -1268,6 +1401,7 @@ const MainLayout: React.FC = () => {
         onReject={handleRejectOrder}
         onApproveReturnRequest={handleApproveReturnRequest}
         onRejectReturnRequest={handleRejectReturnRequest}
+        onOpenEditOrder={handleOpenEditOrder}
       />
 
       <DispatchModal 
@@ -1315,6 +1449,7 @@ const MainLayout: React.FC = () => {
         onClose={() => setIsGlobalFilterOpen(false)}
         onApplyFilter={(state) => setGlobalFilterState(state)}
         onResetFilter={() => setGlobalFilterState(DEFAULT_GLOBAL_FILTER)}
+        companies={companiesPool}
       />
 
       <RegisterAgencyModal
@@ -1335,6 +1470,9 @@ const MainLayout: React.FC = () => {
         onClose={() => setSelectedOrderForPOD(null)}
         onConfirmPOD={handleConfirmPOD}
       />
+
+      {/* Floating Realtime Notification Toast */}
+      <NotificationToast />
     </div>
   );
 };

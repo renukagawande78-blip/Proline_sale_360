@@ -165,8 +165,12 @@ body {
 
 /* Header Styles */
 .top-header, .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
   min-height: 64px;
-  background-color: rgba(15, 23, 42, 0.95);
+  background-color: rgba(15, 23, 42, 0.98);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   display: flex;
@@ -174,7 +178,7 @@ body {
   justify-content: space-between;
   padding: 0.75rem 1.25rem;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   width: 100%;
 }
 
@@ -564,7 +568,7 @@ body {
 }
 
 /* =========================================================
-   RESPONSIVE BREAKPOINTS
+   RESPONSIVE BREAKPOINTS & MOBILE OPTIMIZATIONS
    ========================================================= */
 
 /* Laptops & Tablets (<= 1200px) */
@@ -574,7 +578,7 @@ body {
   }
 }
 
-/* Tablet & Mobile Screens (<= 992px) */
+/* Tablet Screens (<= 992px) */
 @media (max-width: 992px) {
   .sidebar {
     position: fixed !important;
@@ -634,7 +638,7 @@ body {
   }
 
   .top-header, .app-header {
-    padding: 0.75rem 1rem;
+    padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0.75rem 1rem !important;
   }
 
   .page-body {
@@ -645,91 +649,233 @@ body {
 /* Mobile Screens (<= 768px) */
 @media (max-width: 768px) {
   .mobile-bottom-nav {
-    display: flex;
+    display: flex !important;
   }
 
   .main-content {
-    padding-bottom: calc(68px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom)) !important;
+    overflow-x: hidden;
+  }
+
+  .page-body {
+    padding: 0.75rem !important;
   }
 
   .kpi-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 0.85rem;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.65rem !important;
   }
 
   .orders-kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.65rem;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.5rem !important;
   }
 
   .create-order-grid {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+    grid-template-columns: 1fr !important;
+    gap: 0.65rem !important;
   }
 
   .page-header-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.75rem;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.65rem !important;
   }
 
   .page-header-row .btn, .page-header-row button {
-    width: 100%;
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .orders-filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
   }
 
   .orders-filter-bar > div:first-child {
-    min-width: 100%;
-    width: 100%;
+    min-width: 100% !important;
+    width: 100% !important;
   }
 
   .orders-filter-bar select, .orders-filter-bar button {
-    flex: 1;
+    width: 100% !important;
+  }
+
+  /* Table horizontal touch scroll */
+  .data-table-container {
+    border-radius: 10px !important;
+    margin-bottom: 1rem !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .data-table {
+    min-width: 600px !important;
+  }
+
+  .data-table th {
+    padding: 0.65rem 0.75rem !important;
+    font-size: 0.725rem !important;
+  }
+
+  .data-table td {
+    padding: 0.65rem 0.75rem !important;
+    font-size: 0.775rem !important;
+  }
+
+  /* Bottom sheet style modal on mobile */
+  .modal-overlay {
+    padding: 0 !important;
+    align-items: flex-end !important;
+  }
+
+  .modal-card {
+    width: 100% !important;
+    max-width: 100vw !important;
+    height: auto !important;
+    max-height: 94vh !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-top-left-radius: 20px !important;
+    border-top-right-radius: 20px !important;
+    padding: 1.15rem 0.9rem 4rem !important;
+    margin: 0 !important;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.8) !important;
   }
 }
 
 /* Small Mobile Screens (<= 640px) */
 @media (max-width: 640px) {
   .top-header, .app-header {
-    min-height: 56px !important;
-    padding: 0.55rem 0.75rem !important;
+    min-height: 54px !important;
+    padding: max(0.5rem, env(safe-area-inset-top)) 0.65rem 0.5rem 0.65rem !important;
+    gap: 0.4rem !important;
   }
 
+  /* Hide bulky search on small phones to keep actions aligned */
   .desktop-search {
-    width: 135px !important;
+    display: none !important;
   }
 
   .filter-btn-text {
-    display: none;
+    display: none !important;
   }
 
   .kpi-card {
-    padding: 0.85rem;
+    padding: 0.65rem 0.75rem !important;
+    border-radius: 10px !important;
   }
 
   .kpi-value {
-    font-size: 1.35rem;
+    font-size: 1.15rem !important;
   }
 
-  .modal-overlay {
-    padding: 0.4rem !important;
+  .kpi-title {
+    font-size: 0.65rem !important;
   }
 
-  .modal-card {
-    padding: 1.15rem 0.85rem !important;
-    max-height: 94vh !important;
-    border-radius: 16px !important;
-    width: 100% !important;
-  }
-
-  /* Prevent iOS / Android tap zoom on small inputs */
+  /* Prevent automatic viewport zoom on input focus */
   input, select, textarea {
-    font-size: 15px !important;
+    font-size: 16px !important;
   }
 
-  .data-table th, .data-table td {
-    padding: 0.75rem 0.85rem;
+  /* Filter pill row touch scrolling */
+  .filter-pills-row,
+  .orders-tab-scroll {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 0.4rem !important;
+    padding-bottom: 4px !important;
+  }
+
+  .filter-pills-row::-webkit-scrollbar,
+  .orders-tab-scroll::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .filter-pill,
+  .stage2-tab-btn {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    font-size: 0.75rem !important;
+    padding: 0.35rem 0.65rem !important;
+  }
+
+  /* Quick action buttons sizing */
+  .btn {
+    min-height: 38px !important;
+    font-size: 0.8rem !important;
+  }
+}
+
+/* Extra Small Phones (<= 400px - Galaxy Fold, iPhone SE) */
+@media (max-width: 400px) {
+  .kpi-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem !important;
+  }
+
+  .orders-kpi-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .top-header, .app-header {
+    padding-left: 0.4rem !important;
+    padding-right: 0.4rem !important;
   }
 }
 
 
+/* ==========================================================================
+   PRINT / PDF EXPORT STYLES
+   ========================================================================== */
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: Inter, "Segoe UI", Arial, sans-serif !important;
+  }
 
+  body * {
+    visibility: hidden;
+  }
+
+  #invoice-sheet, #invoice-sheet * {
+    visibility: visible;
+  }
+
+  #invoice-sheet {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .no-print, 
+  .modal-overlay, 
+  .modal-card, 
+  .app-header, 
+  .sidebar, 
+  nav, 
+  header, 
+  footer, 
+  button {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 6mm 6mm 6mm 6mm;
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "444939526301",
+    "project_id": "proline-oms",
+    "storage_bucket": "proline-oms.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:444939526301:android:a35b46f1dbc73d1091f474",
+        "android_client_info": {
+          "package_name": "com.prolineoms.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUHE4IRxF6vsnJF3NvRshARQZb9JPS_90"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

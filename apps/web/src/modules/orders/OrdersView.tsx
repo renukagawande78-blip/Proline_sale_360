@@ -98,6 +98,11 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     isOpen: false, actionName: '', key: 'add_order'
   });
 
+  // Cancel Order Modal with Order Number verification
+  const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null);
+  const [cancelOrderInput, setCancelOrderInput] = useState('');
+  const [cancelOrderError, setCancelOrderError] = useState('');
+
   React.useEffect(() => {
     fetchCompaniesFromSupabase().then(comps => {
       if (comps && comps.length > 0) setLiveCompanies(comps);
@@ -117,7 +122,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
   // Count buckets
   const countNew = scopedOrders.filter(o => o.status === 'SUBMITTED').length;
-  const countReviewRequired = scopedOrders.filter(o => o.status === 'SUBMITTED' && !o.sales_admin_approved).length;
+  const countReviewRequired = scopedOrders.filter(o => (o.status === 'SUBMITTED' && !o.sales_admin_approved) || o.reattempt_delivery).length;
   const countApprovalNeeded = scopedOrders.filter(o => o.need_accounts_approval && o.accounts_approval_status === 'PENDING').length;
   const countHarshadApproved = scopedOrders.filter(o => o.status === 'APPROVED').length;
   const countOnHold = scopedOrders.filter(o => o.status === 'HELD' || o.accounts_approval_status === 'HOLD').length;
@@ -125,7 +130,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const countCompleted = scopedOrders.filter(o => o.status === 'COMPLETED').length;
 
   const qtyNew = scopedOrders.filter(o => o.status === 'SUBMITTED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
-  const qtyReview = scopedOrders.filter(o => o.status === 'SUBMITTED' && !o.sales_admin_approved).reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
+  const qtyReview = scopedOrders.filter(o => (o.status === 'SUBMITTED' && !o.sales_admin_approved) || o.reattempt_delivery).reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyApprovalNeeded = scopedOrders.filter(o => o.need_accounts_approval && o.accounts_approval_status === 'PENDING').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyHarshadApproved = scopedOrders.filter(o => o.status === 'APPROVED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyOnHold = scopedOrders.filter(o => o.status === 'HELD' || o.accounts_approval_status === 'HOLD').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
@@ -135,7 +140,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   // Tab filters
   const filteredOrders = scopedOrders.filter(o => {
     if (activeTab === 'NEW' && o.status !== 'SUBMITTED') return false;
-    if (activeTab === 'REVIEW_REQUIRED' && !(o.status === 'SUBMITTED' && !o.sales_admin_approved)) return false;
+    if (activeTab === 'REVIEW_REQUIRED' && !((o.status === 'SUBMITTED' && !o.sales_admin_approved) || o.reattempt_delivery)) return false;
     if (activeTab === 'APPROVAL_NEEDED' && !(o.need_accounts_approval && o.accounts_approval_status === 'PENDING')) return false;
     if (activeTab === 'HARSHAD_APPROVED' && o.status !== 'APPROVED') return false;
     if (activeTab === 'ON_HOLD' && o.status !== 'HELD' && o.accounts_approval_status !== 'HOLD') return false;
@@ -319,6 +324,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   };
 
   const getStatusBadge = (order: Order) => {
+    if (order.reattempt_delivery) return { label: '🔄 REATTEMPT DELIVERY', color: '#f59e0b', bg: 'rgba(245,158,11,0.18)', border: 'rgba(245,158,11,0.45)' };
     if (order.status === 'SUBMITTED') return { label: 'NEW', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.3)' };
     if (order.status === 'SALES_ADMIN_APPROVED') return { label: 'ACCOUNTS PENDING', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' };
     if (order.status === 'APPROVED') return { label: 'HARSHAD SIR APPROVED', color: '#34d399', bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.3)' };
@@ -550,9 +556,6 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#1e293b', border: '1px solid #334155', padding: '0.35rem 0.65rem', borderRadius: 6 }}>
               📅 Today: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
             </span>
-            <button style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.85rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
-              <RefreshCw size={13} /> Refresh
-            </button>
             {canAddOrder && (
               <button className="btn btn-primary" onClick={onOpenCreateOrder} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, fontSize: '0.85rem' }}>
                 <Plus size={15} /> Create Order
@@ -595,7 +598,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
         </div>
 
         {/* Tab Bar */}
-        <div style={{ display: 'flex', gap: 0, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, padding: '0.35rem', marginBottom: '1rem', overflowX: 'auto' }}>
+        <div className="orders-tab-scroll" style={{ display: 'flex', gap: 0, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, padding: '0.35rem', marginBottom: '1rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {tabDefs.map(tab => {
             const isActive = activeTab === tab.id;
             return (
@@ -763,7 +766,25 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
                     {/* Order Number */}
                     <td>
-                      <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.825rem' }}>{order.order_number}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.825rem' }}>{order.order_number}</div>
+                        {order.reattempt_delivery && (
+                          <span style={{
+                            fontSize: '0.62rem',
+                            fontWeight: 900,
+                            color: '#fbbf24',
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            border: '1px solid rgba(245, 158, 11, 0.4)',
+                            padding: '0.12rem 0.45rem',
+                            borderRadius: 4,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3
+                          }}>
+                            🔄 REATTEMPT
+                          </span>
+                        )}
+                      </div>
                       {isPendingSuperAdminApproval ? (
                         <div style={{
                           marginTop: 3,
@@ -945,10 +966,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                           <button
                             onClick={e => {
                               e.stopPropagation();
-                              if (window.confirm(`Are you sure you want to cancel order ${order.order_number}?`)) {
-                                onCancelOrder(order.id);
-                                if (selectedOrder?.id === order.id) setSelectedOrder(null);
-                              }
+                              setCancelModalOrder(order);
+                              setCancelOrderInput('');
+                              setCancelOrderError('');
                             }}
                             style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', color: '#f43f5e', padding: '0.3rem 0.45rem', borderRadius: 5, cursor: 'pointer' }}
                             title="Cancel Order"
@@ -996,50 +1016,34 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             </div>
           </div>
 
-          {/* Customer & Party */}
-          <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '0.85rem', marginBottom: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem' }}>
-              <Building2 size={13} color="#64748b" />
-              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b' }}>CUSTOMER / PARTY</span>
+          {/* PROMINENT REATTEMPT DELIVERY BANNER */}
+          {selectedOrder.reattempt_delivery && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(239, 68, 68, 0.12))',
+              border: '1.5px solid #f59e0b',
+              borderRadius: 8,
+              padding: '0.85rem',
+              marginBottom: '0.75rem',
+              boxShadow: '0 4px 12px rgba(245, 158, 11, 0.2)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <span style={{ fontSize: '1.1rem' }}>🔄</span>
+                <span style={{ fontSize: '0.825rem', fontWeight: 900, color: '#fbbf24', letterSpacing: '0.04em' }}>
+                  REATTEMPT DELIVERY IN PROGRESS
+                </span>
+              </div>
+              <div style={{ fontSize: '0.725rem', color: '#cbd5e1', marginTop: 4, lineHeight: 1.45 }}>
+                Delivery exception resolved by Sales Admin. Priority elevated to <strong style={{ color: '#f87171' }}>HIGH PRIORITY</strong> for immediate stock re-check and dispatch reattempt.
+              </div>
             </div>
-            <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.875rem' }}>{selectedOrder.agency_name}</div>
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>{selectedOrder.area_name || '—'}</div>
-          </div>
+          )}
 
-          {/* Sales Person */}
-          <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '0.85rem', marginBottom: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
-              <User size={13} color="#64748b" />
-              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b' }}>SALES PERSON</span>
-            </div>
-            <div style={{ fontWeight: 700, color: '#34d399', fontSize: '0.85rem' }}>{selectedOrder.salesperson_name || '—'}</div>
-            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 1 }}>Company / Brand: <strong style={{ color: '#fbbf24' }}>{selectedOrder.company_name}</strong></div>
-          </div>
-
-          {/* Order Summary */}
-          <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '0.85rem', marginBottom: '0.75rem' }}>
-            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.6rem' }}>ORDER SUMMARY</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              {[
-                { label: 'Total Boxes', value: selectedOrder.total_box_qty + ' Boxes', color: '#f8fafc' },
-                { label: 'Total Qty (Pcs)', value: selectedOrder.total_qty_pcs + ' PCS', color: '#38bdf8' },
-                { label: 'Loose PCS', value: (selectedOrder.total_loose_pcs || 0) + ' PCS', color: '#94a3b8' },
-                { label: 'Products', value: (selectedOrder.items?.length || 0) + ' SKU(s)', color: '#fbbf24' },
-              ].map(({ label, value, color }) => (
-                <div key={label} style={{ background: '#0b1120', padding: '0.5rem', borderRadius: 6 }}>
-                  <div style={{ fontSize: '0.62rem', color: '#64748b', marginBottom: 2 }}>{label}</div>
-                  <div style={{ fontWeight: 800, color, fontSize: '0.825rem' }}>{value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* SECTION 2 & 3 & 6: ACCOUNTS APPROVAL WORKFLOW CARD */}
-          <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '0.85rem', marginBottom: '0.75rem' }}>
+          {/* TOP VIEW: SUPER ADMIN APPROVAL WORKFLOW CARD */}
+          <div style={{ background: '#0f172a', border: '1.5px solid #334155', borderRadius: 10, padding: '0.85rem', marginBottom: '0.75rem', boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <ShieldCheck size={14} color="#38bdf8" />
-                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#f8fafc' }}>SUPER ADMIN APPROVAL</span>
+                <ShieldCheck size={16} color="#38bdf8" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.02em' }}>SUPER ADMIN APPROVAL</span>
               </div>
               {(() => {
                 const b = getAccountsApprovalBadge(selectedOrder);
@@ -1068,13 +1072,41 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.6rem', lineHeight: 1.4 }}>
                   No Super Admin approval is required. Sales Admin can send this order to stock check.
                 </div>
-                {isSalesAdmin && (
-                  <button
-                    onClick={() => handleOpenStockCheck(selectedOrder)}
-                    style={{ width: '100%', padding: '0.45rem', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 6, color: '#34d399', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
-                  >
-                    <CheckCircle2 size={12} /> Approve &amp; Proceed to Stock Check
-                  </button>
+                {(isSalesAdmin || isSuperAdmin) && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    <button
+                      onClick={() => handleOpenStockCheck(selectedOrder)}
+                      style={{ width: '100%', padding: '0.5rem', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 6, color: '#34d399', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                    >
+                      <CheckCircle2 size={13} /> Approve &amp; Proceed to Stock Check
+                    </button>
+
+                    {/* TOP VIEW REQUEST BUTTON INSIDE CARD */}
+                    {isSalesAdmin && selectedOrder.status === 'SUBMITTED' && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAccountsRequestModal(selectedOrder)}
+                        style={{
+                          width: '100%',
+                          padding: '0.55rem',
+                          background: 'linear-gradient(135deg, rgba(249,115,22,0.18), rgba(234,88,12,0.25))',
+                          border: '1.5px solid #f97316',
+                          borderRadius: 6,
+                          color: '#fb923c',
+                          cursor: 'pointer',
+                          fontWeight: 800,
+                          fontSize: '0.78rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.4rem',
+                          boxShadow: '0 2px 8px rgba(249,115,22,0.2)'
+                        }}
+                      >
+                        <ShieldCheck size={14} /> Request Super Admin Approval
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -1178,8 +1210,73 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             )}
           </div>
 
+          {/* Customer & Party */}
+          <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '0.85rem', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem' }}>
+              <Building2 size={13} color="#64748b" />
+              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b' }}>CUSTOMER / PARTY</span>
+            </div>
+            <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.875rem' }}>{selectedOrder.agency_name}</div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>{selectedOrder.area_name || '—'}</div>
+          </div>
+
+          {/* Sales Person */}
+          <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '0.85rem', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+              <User size={13} color="#64748b" />
+              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b' }}>SALES PERSON</span>
+            </div>
+            <div style={{ fontWeight: 700, color: '#34d399', fontSize: '0.85rem' }}>{selectedOrder.salesperson_name || '—'}</div>
+            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 1 }}>Company / Brand: <strong style={{ color: '#fbbf24' }}>{selectedOrder.company_name}</strong></div>
+          </div>
+
+          {/* Order Summary */}
+          <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '0.85rem', marginBottom: '0.75rem' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.6rem' }}>ORDER SUMMARY</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              {[
+                { label: 'Total Boxes', value: selectedOrder.total_box_qty + ' Boxes', color: '#f8fafc' },
+                { label: 'Total Qty (Pcs)', value: selectedOrder.total_qty_pcs + ' PCS', color: '#38bdf8' },
+                { label: 'Loose PCS', value: (selectedOrder.total_loose_pcs || 0) + ' PCS', color: '#94a3b8' },
+                { label: 'Products', value: (selectedOrder.items?.length || 0) + ' SKU(s)', color: '#fbbf24' },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{ background: '#0b1120', padding: '0.5rem', borderRadius: 6 }}>
+                  <div style={{ fontSize: '0.62rem', color: '#64748b', marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontWeight: 800, color, fontSize: '0.825rem' }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Section 1: Sales Admin 4 Required Action Buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.75rem' }}>
+            {/* Top View: Request Super Admin Approval Button */}
+            {isSalesAdmin && !selectedOrder.need_accounts_approval && selectedOrder.status === 'SUBMITTED' && (
+              <button
+                type="button"
+                onClick={() => handleOpenAccountsRequestModal(selectedOrder)}
+                style={{ 
+                  width: '100%', 
+                  padding: '0.65rem', 
+                  background: 'linear-gradient(135deg, #ea580c, #c2410c)', 
+                  border: 'none', 
+                  borderRadius: 8, 
+                  color: '#ffffff', 
+                  cursor: 'pointer', 
+                  fontWeight: 800, 
+                  fontSize: '0.82rem', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '0.4rem', 
+                  boxShadow: '0 4px 14px rgba(234,88,12,0.35)',
+                  marginBottom: '0.35rem'
+                }}
+              >
+                <ShieldCheck size={16} /> Request Super Admin Approval
+              </button>
+            )}
+
             {isSalesAdmin && (selectedOrder.status === 'OUT_FOR_DELIVERY' || selectedOrder.status === 'DISPATCHED') && onOpenPODModal && (
               <button
                 type="button"
@@ -1217,9 +1314,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             {onViewInvoice && (
               <button
                 onClick={() => onViewInvoice(selectedOrder)}
-                style={{ width: '100%', padding: '0.55rem', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 8, color: '#fbbf24', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+                style={{ width: '100%', padding: '0.55rem', background: selectedOrder.invoice_number ? 'rgba(245,158,11,0.15)' : 'rgba(251,191,36,0.08)', border: selectedOrder.invoice_number ? '1px solid #f59e0b' : '1px solid rgba(251,191,36,0.25)', borderRadius: 8, color: selectedOrder.invoice_number ? '#fbbf24' : '#fbbf24', cursor: 'pointer', fontWeight: 800, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
               >
-                <Receipt size={14} /> 1. View PDF / Print Invoice
+                {selectedOrder.invoice_number ? <Truck size={15} /> : <Receipt size={14} />} 
+                {selectedOrder.invoice_number ? 'View / Print Delivery Challan' : '1. View Booking Form / PDF'}
               </button>
             )}
 
@@ -1237,24 +1335,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             {(isSalesAdmin || isSuperAdmin) && onCancelOrder && selectedOrder.status !== 'CANCELLED' && (
               <button
                 onClick={() => {
-                  if (window.confirm(`Are you sure you want to cancel order ${selectedOrder.order_number}?`)) {
-                    onCancelOrder(selectedOrder.id);
-                    setSelectedOrder(null);
-                  }
+                  setCancelModalOrder(selectedOrder);
+                  setCancelOrderInput('');
+                  setCancelOrderError('');
                 }}
                 style={{ width: '100%', padding: '0.55rem', background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.25)', borderRadius: 8, color: '#f43f5e', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
               >
                 <Ban size={14} /> 3. Cancel Order
-              </button>
-            )}
-
-            {/* Sales Admin can request Super Admin approval once, while the order is new. */}
-            {isSalesAdmin && !selectedOrder.need_accounts_approval && selectedOrder.status === 'SUBMITTED' && (
-              <button
-                onClick={() => handleOpenAccountsRequestModal(selectedOrder)}
-                style={{ width: '100%', padding: '0.55rem', background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 8, color: '#f97316', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
-              >
-                <ShieldCheck size={14} /> Request Super Admin Approval
               </button>
             )}
           </div>
@@ -1661,6 +1748,165 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               <button type="button" className="btn btn-outline" onClick={() => setStockCheckOrder(null)}>Cancel</button>
               <button type="button" className="btn btn-primary" onClick={handleConfirmStockCheck} style={{ background: stockCheckResult === 'IN_STOCK' ? '#059669' : '#d97706' }}>
                 {stockCheckResult === 'IN_STOCK' ? 'Approve for Billing' : 'Set Wait for Stock'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CANCEL ORDER CONFIRMATION MODAL (Requires typing Order Number) ── */}
+      {cancelModalOrder && (
+        <div className="modal-overlay" style={{ zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)' }}>
+          <div style={{
+            background: '#0f172a',
+            border: '1.5px solid #ef4444',
+            borderRadius: 12,
+            padding: '1.4rem',
+            width: '100%',
+            maxWidth: 440,
+            boxShadow: '0 20px 40px rgba(0,0,0,0.6), 0 0 25px rgba(239,68,68,0.2)',
+            color: '#f8fafc'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ban size={18} color="#ef4444" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.025rem', fontWeight: 800, color: '#f8fafc' }}>Cancel Order</h3>
+                  <p style={{ margin: 0, fontSize: '0.7rem', color: '#94a3b8' }}>Type order number to confirm</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setCancelModalOrder(null); setCancelOrderInput(''); setCancelOrderError(''); }}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Order Details Brief */}
+            <div style={{ background: '#0b1120', border: '1px solid #1e293b', borderRadius: 8, padding: '0.85rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Order Number:</span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 900, color: '#38bdf8' }}>{cancelModalOrder.order_number}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Customer / Party:</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f8fafc' }}>{cancelModalOrder.agency_name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Total Quantity:</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24' }}>{cancelModalOrder.total_box_qty} Boxes ({cancelModalOrder.total_qty_pcs} PCS)</span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.78rem', color: '#cbd5e1', marginBottom: '0.65rem', lineHeight: 1.4 }}>
+              To verify and cancel this order, please type the exact Order Number <strong style={{ color: '#ef4444' }}>{cancelModalOrder.order_number}</strong>:
+            </p>
+
+            {/* Input to write Order Number */}
+            <div style={{ marginBottom: '1rem' }}>
+              <input
+                type="text"
+                value={cancelOrderInput}
+                onChange={(e) => {
+                  setCancelOrderInput(e.target.value);
+                  setCancelOrderError('');
+                }}
+                placeholder={`Type ${cancelModalOrder.order_number} here`}
+                style={{
+                  width: '100%',
+                  padding: '0.65rem 0.75rem',
+                  background: '#020617',
+                  border: cancelOrderError ? '1.5px solid #ef4444' : '1px solid #334155',
+                  borderRadius: 8,
+                  color: '#f8fafc',
+                  fontSize: '0.875rem',
+                  fontWeight: 700,
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (cancelOrderInput.trim().toUpperCase() !== cancelModalOrder.order_number.trim().toUpperCase()) {
+                      setCancelOrderError(`Order number does not match "${cancelModalOrder.order_number}". Please re-type.`);
+                      return;
+                    }
+                    if (onCancelOrder) onCancelOrder(cancelModalOrder.id);
+                    if (selectedOrder?.id === cancelModalOrder.id) setSelectedOrder(null);
+                    setCancelModalOrder(null);
+                    setCancelOrderInput('');
+                    setCancelOrderError('');
+                  }
+                }}
+              />
+              {cancelOrderError && (
+                <div style={{ color: '#f87171', fontSize: '0.72rem', fontWeight: 600, marginTop: 4 }}>
+                  {cancelOrderError}
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '0.65rem' }}>
+              <button
+                type="button"
+                onClick={() => { setCancelModalOrder(null); setCancelOrderInput(''); setCancelOrderError(''); }}
+                style={{
+                  flex: 1,
+                  padding: '0.6rem',
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: 8,
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  fontSize: '0.8rem'
+                }}
+              >
+                Keep Order
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (cancelOrderInput.trim().toUpperCase() !== cancelModalOrder.order_number.trim().toUpperCase()) {
+                    setCancelOrderError(`Order number does not match "${cancelModalOrder.order_number}". Please re-type.`);
+                    return;
+                  }
+                  if (onCancelOrder) {
+                    onCancelOrder(cancelModalOrder.id);
+                  }
+                  if (selectedOrder?.id === cancelModalOrder.id) {
+                    setSelectedOrder(null);
+                  }
+                  setCancelModalOrder(null);
+                  setCancelOrderInput('');
+                  setCancelOrderError('');
+                }}
+                style={{
+                  flex: 1.3,
+                  padding: '0.6rem',
+                  background: cancelOrderInput.trim().toUpperCase() === cancelModalOrder.order_number.trim().toUpperCase()
+                    ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                    : '#331515',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: cancelOrderInput.trim().toUpperCase() === cancelModalOrder.order_number.trim().toUpperCase() ? '#ffffff' : '#9ca3af',
+                  cursor: cancelOrderInput.trim().toUpperCase() === cancelModalOrder.order_number.trim().toUpperCase() ? 'pointer' : 'not-allowed',
+                  fontWeight: 800,
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  boxShadow: cancelOrderInput.trim().toUpperCase() === cancelModalOrder.order_number.trim().toUpperCase() ? '0 4px 14px rgba(239,68,68,0.4)' : 'none'
+                }}
+              >
+                <Ban size={15} /> Confirm Cancel
               </button>
             </div>
           </div>

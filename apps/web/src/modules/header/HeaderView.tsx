@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap } from 'lucide-react';
+import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useNotifications } from '../../context/NotificationContext';
-import { RoleName, GlobalFilterState } from '../../types';
+import { useNotifications, getRoleBadge, getCategoryBadge } from '../../context/NotificationContext';
+import { RoleName, GlobalFilterState, NotificationCategory } from '../../types';
 import { resolveSegmentForUser } from '../../lib/supabase';
 
 interface HeaderViewProps {
@@ -10,16 +10,31 @@ interface HeaderViewProps {
   onOpenUserManagement?: () => void;
   onOpenGlobalFilter?: () => void;
   globalFilterState?: GlobalFilterState;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 export const HeaderView: React.FC<HeaderViewProps> = ({ 
   onToggleSidebarCollapse, 
   onOpenUserManagement, 
   onOpenGlobalFilter,
-  globalFilterState 
+  globalFilterState,
+  searchQuery = '',
+  onSearchChange
 }) => {
   const { currentUser, users, switchUserById, switchRole, logout } = useAuth();
-  const { notifications, unreadCount, markAsRead } = useNotifications();
+  const { 
+    notifications, 
+    filteredNotifications, 
+    unreadCount, 
+    markAsRead, 
+    sendTestNotification, 
+    clearAll,
+    roleFilter,
+    setRoleFilter,
+    categoryFilter,
+    setCategoryFilter
+  } = useNotifications();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
@@ -64,6 +79,8 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
     <header 
       className="top-header app-header"
       style={{
+        position: 'sticky',
+        top: 0,
         minHeight: 64,
         background: '#0f172a',
         borderBottom: '1px solid #1e293b',
@@ -74,11 +91,13 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
         gap: '0.75rem',
         width: '100%',
         zIndex: 100,
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)'
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+        flexShrink: 0,
+        flexWrap: 'nowrap'
       }}
     >
       {/* Left Section: Sidebar Toggle & Global Search */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexShrink: 0 }}>
         <button 
           onClick={onToggleSidebarCollapse}
           style={{ 
@@ -90,7 +109,8 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            flexShrink: 0
           }}
           title="Toggle Left Sidebar Menu Width (Expand / Collapse)"
         >
@@ -98,27 +118,52 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
         </button>
 
         {/* Search Input Box */}
-        <div style={{ position: 'relative', width: 260 }} className="desktop-search">
+        <div style={{ position: 'relative', width: 270 }} className="desktop-search">
           <Search size={15} color="#64748b" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
           <input 
             type="text" 
+            value={searchQuery}
+            onChange={e => onSearchChange?.(e.target.value)}
             placeholder="Search orders, agencies, SKUs..." 
             style={{ 
               width: '100%', 
               background: '#1e293b', 
-              border: '1px solid #334155', 
+              border: searchQuery.trim() ? '1px solid #38bdf8' : '1px solid #334155', 
               borderRadius: 8, 
-              padding: '0.45rem 0.75rem 0.45rem 2.2rem', 
+              padding: '0.45rem 2rem 0.45rem 2.2rem', 
               color: 'white',
               fontSize: '0.8rem',
-              outline: 'none'
+              outline: 'none',
+              boxShadow: searchQuery.trim() ? '0 0 10px rgba(56, 189, 248, 0.2)' : 'none'
             }}
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => onSearchChange?.('')}
+              style={{
+                position: 'absolute',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Right Section: Action Controls & User Mapped Segment */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
         
         {/* Logged-In User Segment Badge */}
         <div style={{
@@ -217,50 +262,237 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
               position: 'absolute', 
               right: 0, 
               top: 'calc(100% + 10px)', 
-              width: 'min(340px, calc(100vw - 1.5rem))', 
+              width: 'min(380px, calc(100vw - 1.5rem))', 
               background: '#1e293b', 
               border: '1px solid rgba(255, 255, 255, 0.12)', 
-              borderRadius: 12, 
-              boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.8), 0 0 25px rgba(56, 189, 248, 0.1)', 
+              borderRadius: 14, 
+              boxShadow: '0 20px 45px -10px rgba(0, 0, 0, 0.85), 0 0 25px rgba(56, 189, 248, 0.15)', 
               zIndex: 1000, 
               padding: '1rem',
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.65rem' }}>
+              {/* Header Bar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.65rem' }}>
                 <span style={{ fontWeight: 800, fontSize: '0.875rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <Bell size={15} color="#38bdf8" /> Notifications
                 </span>
-                <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 700, background: 'rgba(56, 189, 248, 0.12)', padding: '0.15rem 0.5rem', borderRadius: 10 }}>
-                  {unreadCount} Unread
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <button
+                    onClick={sendTestNotification}
+                    style={{
+                      background: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid #38bdf8',
+                      color: '#38bdf8',
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: 6,
+                      cursor: 'pointer'
+                    }}
+                    title="Send a test alert for your current role"
+                  >
+                    🔔 Test Alert
+                  </button>
+                  {notifications.length > 0 && (
+                    <button
+                      onClick={clearAll}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid #475569',
+                        color: '#94a3b8',
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        padding: '0.15rem 0.4rem',
+                        borderRadius: 6,
+                        cursor: 'pointer'
+                      }}
+                      title="Clear all notifications"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <span style={{ fontSize: '0.675rem', color: '#38bdf8', fontWeight: 700, background: 'rgba(56, 189, 248, 0.12)', padding: '0.15rem 0.45rem', borderRadius: 10 }}>
+                    {unreadCount} Unread
+                  </span>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: 300, overflowY: 'auto' }}>
-                {notifications.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '1.25rem', color: '#94a3b8', fontSize: '0.8rem' }}>
-                    No notifications yet
-                  </div>
-                ) : (
-                  notifications.map(n => (
-                    <div 
-                      key={n.id} 
-                      onClick={() => markAsRead(n.id)}
-                      style={{ 
-                        background: n.is_read ? '#0f172a' : 'rgba(56, 189, 248, 0.12)', 
-                        padding: '0.75rem', 
-                        borderRadius: 8, 
-                        borderLeft: n.is_read ? 'none' : '3px solid #38bdf8', 
-                        border: n.is_read ? '1px solid #334155' : '1px solid rgba(56, 189, 248, 0.3)',
+              {/* Role Scope Tabs */}
+              <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.5rem', background: '#0f172a', padding: '0.2rem', borderRadius: 8, border: '1px solid #334155' }}>
+                <button
+                  onClick={() => setRoleFilter('MY_ROLE')}
+                  style={{
+                    flex: 1,
+                    background: roleFilter === 'MY_ROLE' ? '#38bdf8' : 'transparent',
+                    color: roleFilter === 'MY_ROLE' ? '#0f172a' : '#94a3b8',
+                    fontWeight: 800,
+                    fontSize: '0.675rem',
+                    padding: '0.3rem 0.4rem',
+                    borderRadius: 6,
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                    overflow: 'hidden'
+                  }}
+                  title={`Show notifications routed to ${currentUser.role_name}`}
+                >
+                  👤 For My Role ({currentUser.role_name?.replace(/_/g, ' ')})
+                </button>
+                <button
+                  onClick={() => setRoleFilter('ALL')}
+                  style={{
+                    flex: 1,
+                    background: roleFilter === 'ALL' ? '#38bdf8' : 'transparent',
+                    color: roleFilter === 'ALL' ? '#0f172a' : '#94a3b8',
+                    fontWeight: 800,
+                    fontSize: '0.675rem',
+                    padding: '0.3rem 0.4rem',
+                    borderRadius: 6,
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Show all system notifications"
+                >
+                  🌐 All Roles ({notifications.length})
+                </button>
+              </div>
+
+              {/* Category Filter Chips */}
+              <div style={{ display: 'flex', gap: '0.3rem', overflowX: 'auto', paddingBottom: '0.45rem', marginBottom: '0.65rem' }}>
+                {(['ALL', 'ORDER', 'INVENTORY', 'APPROVAL', 'DISPATCH', 'BILLING', 'POD'] as const).map(cat => {
+                  const isSelected = categoryFilter === cat;
+                  const label = cat === 'ALL' ? 'All Categories'
+                    : cat === 'ORDER' ? '📦 Orders'
+                    : cat === 'INVENTORY' ? '⏳ Stock'
+                    : cat === 'APPROVAL' ? '🔒 Review'
+                    : cat === 'DISPATCH' ? '🚚 Dispatch'
+                    : cat === 'BILLING' ? '🧾 GRN / Bill'
+                    : '📑 POD';
+
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setCategoryFilter(cat)}
+                      style={{
+                        background: isSelected ? 'rgba(56, 189, 248, 0.2)' : '#0f172a',
+                        border: isSelected ? '1px solid #38bdf8' : '1px solid #334155',
+                        color: isSelected ? '#38bdf8' : '#94a3b8',
+                        fontSize: '0.625rem',
+                        fontWeight: 700,
+                        padding: '0.15rem 0.45rem',
+                        borderRadius: 12,
                         cursor: 'pointer',
-                        transition: 'all 0.15s ease'
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0
                       }}
                     >
-                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>{n.title}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: 4, lineHeight: 1.35 }}>{n.message}</div>
-                      <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>{n.created_at}</div>
-                    </div>
-                  ))
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Notifications List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', maxHeight: 320, overflowY: 'auto' }}>
+                {filteredNotifications.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '1.5rem 1rem', color: '#94a3b8', fontSize: '0.78rem' }}>
+                    <div style={{ fontSize: '1.25rem', marginBottom: '0.35rem' }}>📭</div>
+                    <div>No notifications for this category/role</div>
+                    <button
+                      onClick={() => { setRoleFilter('ALL'); setCategoryFilter('ALL'); }}
+                      style={{
+                        marginTop: '0.65rem',
+                        background: 'rgba(56, 189, 248, 0.1)',
+                        border: '1px solid #38bdf8',
+                        color: '#38bdf8',
+                        fontSize: '0.65rem',
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontWeight: 700
+                      }}
+                    >
+                      View All Notifications
+                    </button>
+                  </div>
+                ) : (
+                  filteredNotifications.map(n => {
+                    const catBadge = getCategoryBadge(n.category);
+                    return (
+                      <div 
+                        key={n.id} 
+                        onClick={() => markAsRead(n.id)}
+                        style={{ 
+                          background: n.is_read ? '#0f172a' : 'rgba(56, 189, 248, 0.10)', 
+                          padding: '0.65rem 0.75rem', 
+                          borderRadius: 10, 
+                          borderLeft: n.is_read ? '3px solid #334155' : '3px solid #38bdf8', 
+                          border: n.is_read ? '1px solid #334155' : '1px solid rgba(56, 189, 248, 0.35)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {/* Meta Tags Row */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.575rem', color: catBadge.color, background: catBadge.bg, padding: '0.05rem 0.35rem', borderRadius: 4, fontWeight: 800 }}>
+                              {catBadge.label}
+                            </span>
+                            {n.brand_name && (
+                              <span style={{ fontSize: '0.575rem', color: '#fbbf24', background: 'rgba(251,191,36,0.12)', padding: '0.05rem 0.35rem', borderRadius: 4, fontWeight: 700 }}>
+                                {n.brand_name}
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: '0.625rem', color: '#64748b', fontWeight: 600 }}>
+                            {n.created_at}
+                          </span>
+                        </div>
+
+                        {/* Title */}
+                        <div style={{ fontSize: '0.785rem', fontWeight: 800, color: '#f8fafc', marginBottom: 2, lineHeight: 1.3 }}>
+                          {n.title}
+                        </div>
+
+                        {/* Message */}
+                        <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginBottom: '0.35rem', lineHeight: 1.35 }}>
+                          {n.message}
+                        </div>
+
+                        {/* Target Role Pills */}
+                        {n.target_roles && n.target_roles.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap', marginTop: 2 }}>
+                            <span style={{ fontSize: '0.575rem', color: '#64748b', fontWeight: 700 }}>For:</span>
+                            {n.target_roles.map(r => {
+                              const rb = getRoleBadge(r);
+                              const isMyRole = currentUser?.role_name === r;
+                              return (
+                                <span 
+                                  key={r} 
+                                  style={{ 
+                                    fontSize: '0.575rem', 
+                                    color: rb.color, 
+                                    background: rb.bg, 
+                                    border: isMyRole ? `1px solid ${rb.color}` : 'none',
+                                    padding: '0.05rem 0.3rem', 
+                                    borderRadius: 4, 
+                                    fontWeight: isMyRole ? 800 : 700 
+                                  }}
+                                >
+                                  {rb.label} {isMyRole ? '★' : ''}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

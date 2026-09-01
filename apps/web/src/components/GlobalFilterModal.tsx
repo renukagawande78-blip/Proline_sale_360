@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
-import { X, Filter, RefreshCw, Check, Calendar, MapPin, Building2, User, Package, DollarSign } from 'lucide-react';
-import { GlobalFilterState, DateRangeType } from '../types';
-import { MOCK_COMPANIES, MOCK_AGENCIES, MOCK_PRODUCTS } from '../lib/supabase';
+import React, { useState, useEffect } from 'react';
+import { X, Filter, RefreshCw, Check, Calendar, MapPin, Building2, User, Package, DollarSign, Search } from 'lucide-react';
+import { GlobalFilterState, DateRangeType, Company, Agency, Product } from '../types';
+import { 
+  fetchCompaniesFromSupabase, 
+  fetchAgenciesFromSupabaseTable, 
+  fetchProductsFromSupabase,
+  deduplicateCompanies,
+  deduplicateAgencies,
+  deduplicateProducts
+} from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
 interface GlobalFilterModalProps {
@@ -10,6 +17,9 @@ interface GlobalFilterModalProps {
   onClose: () => void;
   onApplyFilter: (state: GlobalFilterState) => void;
   onResetFilter: () => void;
+  companies?: Company[];
+  agencies?: Agency[];
+  products?: Product[];
 }
 
 export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
@@ -17,15 +27,65 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
   filterState,
   onClose,
   onApplyFilter,
-  onResetFilter
+  onResetFilter,
+  companies,
+  agencies,
+  products
 }) => {
   const { users } = useAuth();
   const salesTeamMembers = users.filter(u => u.role_name === 'SALES_PERSON' || u.role_name === 'AREA_SALES_MANAGER');
   const dispatchManagers = users.filter(u => u.role_name === 'DISPATCH_MANAGER');
 
-  // Distinct Areas & Cities from Agencies
-  const uniqueAreas = Array.from(new Set(MOCK_AGENCIES.map(a => a.area_name).filter(Boolean))) as string[];
-  const uniqueCities = Array.from(new Set(MOCK_AGENCIES.map(a => a.city).filter(Boolean))) as string[];
+  // Live master data state
+  const [liveCompanies, setLiveCompanies] = useState<Company[]>(companies || []);
+  const [liveAgencies, setLiveAgencies] = useState<Agency[]>(agencies || []);
+  const [liveProducts, setLiveProducts] = useState<Product[]>(products || []);
+  const [agencySearchText, setAgencySearchText] = useState('');
+  const [productSearchText, setProductSearchText] = useState('');
+
+  // Fetch live master data on open if needed
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let isMounted = true;
+    const loadMasterData = async () => {
+      try {
+        const promises: Promise<any>[] = [];
+
+        if (liveCompanies.length === 0) promises.push(fetchCompaniesFromSupabase());
+        else promises.push(Promise.resolve(liveCompanies));
+
+        if (liveAgencies.length === 0) promises.push(fetchAgenciesFromSupabaseTable());
+        else promises.push(Promise.resolve({ agencies: liveAgencies }));
+
+        if (liveProducts.length === 0) promises.push(fetchProductsFromSupabase());
+        else promises.push(Promise.resolve(liveProducts));
+
+        const [comps, agRes, prods] = await Promise.all(promises);
+
+        if (isMounted) {
+          if (comps && Array.isArray(comps) && comps.length > 0) {
+            setLiveCompanies(deduplicateCompanies(comps));
+          }
+          if (agRes && agRes.agencies && Array.isArray(agRes.agencies) && agRes.agencies.length > 0) {
+            setLiveAgencies(deduplicateAgencies(agRes.agencies));
+          }
+          if (prods && Array.isArray(prods) && prods.length > 0) {
+            setLiveProducts(deduplicateProducts(prods));
+          }
+        }
+      } catch (err) {
+        console.warn('GlobalFilterModal live fetch error:', err);
+      }
+    };
+
+    loadMasterData();
+    return () => { isMounted = false; };
+  }, [isOpen]);
+
+  // Distinct Areas & Cities from live Agencies
+  const uniqueAreas = Array.from(new Set(liveAgencies.map(a => a.area_name).filter(Boolean))).sort() as string[];
+  const uniqueCities = Array.from(new Set(liveAgencies.map(a => a.city).filter(Boolean))).sort() as string[];
 
   // Local Filter Form State
   const [segment, setSegment] = useState<'ALL' | 'FMCG' | 'FMCD'>(filterState.segment);
@@ -45,6 +105,38 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
   const [endDate, setEndDate] = useState(filterState.endDate || '');
 
   if (!isOpen) return null;
+
+  // Filtered agencies based on area, city, and search input
+  const filteredAgencies = liveAgencies.filter(a => {
+    const matchesArea = areaId === 'ALL' || (a.area_name || '').toLowerCase() === areaId.toLowerCase();
+    const matchesCity = city === 'ALL' || (a.city || '').toLowerCase() === city.toLowerCase();
+    const q = agencySearchText.toLowerCase().trim();
+    const matchesSearch = !q || (
+      (a.agency_name || '').toLowerCase().includes(q) ||
+      (a.agency_code || '').toLowerCase().includes(q) ||
+      (a.city || '').toLowerCase().includes(q)
+    );
+    return matchesArea && matchesCity && matchesSearch;
+  });
+
+  // Filtered companies based on segment
+  const filteredCompanies = liveCompanies.filter(c => {
+    return segment === 'ALL' || (c.segment || '').toUpperCase() === segment.toUpperCase();
+  });
+
+  // Filtered products based on company, segment, and search input
+  const filteredProducts = liveProducts.filter(p => {
+    const matchesCompany = companyId === 'ALL' || p.company_id === companyId;
+    const parentComp = liveCompanies.find(c => c.id === p.company_id);
+    const prodSegment = p.segment || parentComp?.segment || 'FMCG';
+    const matchesSegment = segment === 'ALL' || prodSegment.toUpperCase() === segment.toUpperCase();
+    const q = productSearchText.toLowerCase().trim();
+    const matchesSearch = !q || (
+      (p.product_name || '').toLowerCase().includes(q) ||
+      (p.product_code || '').toLowerCase().includes(q)
+    );
+    return matchesCompany && matchesSegment && matchesSearch;
+  });
 
   const handleApply = () => {
     const isActive = segment !== 'ALL' || 
@@ -93,13 +185,15 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
     setDateRangeType('ALL_DATES');
     setStartDate('');
     setEndDate('');
+    setAgencySearchText('');
+    setProductSearchText('');
     onResetFilter();
     onClose();
   };
 
   return (
     <div className="modal-overlay" style={{ zIndex: 9999 }}>
-      <div className="modal-card" style={{ maxWidth: 880, width: '95vw', border: '1px solid #38bdf8', maxHeight: '90vh', overflowY: 'auto' }}>
+      <div className="modal-card" style={{ maxWidth: 920, width: '95vw', border: '1px solid #38bdf8', maxHeight: '90vh', overflowY: 'auto' }}>
         
         {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
@@ -107,7 +201,9 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
             <Filter size={24} color="#38bdf8" />
             <div>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>Master Global Filter Console</h2>
-              <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Configure multi-dimensional filters across all System Modules</p>
+              <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                Multi-dimensional live filters ({liveAgencies.length} Parties • {liveCompanies.length} Brands • {liveProducts.length} Products)
+              </p>
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
@@ -121,10 +217,12 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
             <MapPin size={16} /> 1. TERRITORY, CITY & AGENCY FILTERS
           </h3>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '0.85rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.6fr', gap: '0.85rem' }}>
             {/* Area / Territory */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>AREA / TERRITORY</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>
+                AREA / TERRITORY ({uniqueAreas.length})
+              </label>
               <select
                 value={areaId}
                 onChange={e => setAreaId(e.target.value)}
@@ -139,7 +237,9 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
 
             {/* City */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>CITY</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>
+                CITY ({uniqueCities.length})
+              </label>
               <select
                 value={city}
                 onChange={e => setCity(e.target.value)}
@@ -154,15 +254,37 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
 
             {/* Agency */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>AGENCY / B2B PARTY</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8' }}>AGENCY / B2B PARTY</label>
+                <span style={{ fontSize: '0.675rem', color: '#38bdf8', fontWeight: 700 }}>
+                  {filteredAgencies.length} parties
+                </span>
+              </div>
+              <div style={{ position: 'relative', marginBottom: 4 }}>
+                <input
+                  type="text"
+                  placeholder="Filter agency name or city..."
+                  value={agencySearchText}
+                  onChange={e => setAgencySearchText(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.35rem 0.55rem',
+                    background: '#0a0f1d',
+                    border: '1px solid #334155',
+                    borderRadius: 5,
+                    color: 'white',
+                    fontSize: '0.75rem'
+                  }}
+                />
+              </div>
               <select
                 value={agencyId}
                 onChange={e => setAgencyId(e.target.value)}
                 style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, fontSize: '0.825rem' }}
               >
-                <option value="ALL">All Agencies & Parties ({MOCK_AGENCIES.length})</option>
-                {MOCK_AGENCIES.map(a => (
-                  <option key={a.id} value={a.id}>{a.agency_name} ({a.city})</option>
+                <option value="ALL">All Agencies & Parties ({filteredAgencies.length})</option>
+                {filteredAgencies.slice(0, 200).map(a => (
+                  <option key={a.id} value={a.id}>{a.agency_name} ({a.city || a.area_name || 'General'})</option>
                 ))}
               </select>
             </div>
@@ -213,15 +335,17 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
 
             {/* Brand / Company */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>BRAND / COMPANY</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>
+                BRAND / COMPANY ({filteredCompanies.length})
+              </label>
               <select
                 value={companyId}
                 onChange={e => setCompanyId(e.target.value)}
                 style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, fontSize: '0.825rem' }}
               >
-                <option value="ALL">All Brands ({MOCK_COMPANIES.length})</option>
-                {MOCK_COMPANIES.map(c => (
-                  <option key={c.id} value={c.id}>{c.company_name} ({c.segment})</option>
+                <option value="ALL">All Brands ({filteredCompanies.length})</option>
+                {filteredCompanies.map(c => (
+                  <option key={c.id} value={c.id}>{c.company_name} ({c.segment || 'FMCG'})</option>
                 ))}
               </select>
             </div>
@@ -234,18 +358,40 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
             <Package size={16} /> 3. PRODUCT SKU, MRP PRICING & ORDER STATUS
           </h3>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '0.85rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: '0.85rem' }}>
             {/* Product SKU */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>PRODUCT SKU</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8' }}>PRODUCT SKU</label>
+                <span style={{ fontSize: '0.675rem', color: '#fbbf24', fontWeight: 700 }}>
+                  {filteredProducts.length} SKUs
+                </span>
+              </div>
+              <div style={{ position: 'relative', marginBottom: 4 }}>
+                <input
+                  type="text"
+                  placeholder="Filter product name or code..."
+                  value={productSearchText}
+                  onChange={e => setProductSearchText(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.35rem 0.55rem',
+                    background: '#0a0f1d',
+                    border: '1px solid #334155',
+                    borderRadius: 5,
+                    color: 'white',
+                    fontSize: '0.75rem'
+                  }}
+                />
+              </div>
               <select
                 value={productId}
                 onChange={e => setProductId(e.target.value)}
                 style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600, fontSize: '0.825rem' }}
               >
-                <option value="ALL">All Products & SKUs ({MOCK_PRODUCTS.length})</option>
-                {MOCK_PRODUCTS.map(p => (
-                  <option key={p?.id || 'p'} value={p?.id || ''}>{p?.product_name || 'Product'} (₹{p?.unit_price || 0})</option>
+                <option value="ALL">All Products & SKUs ({filteredProducts.length})</option>
+                {filteredProducts.slice(0, 200).map(p => (
+                  <option key={p.id} value={p.id}>{p.product_name} (₹{p.unit_price || p.mrp_price || 0})</option>
                 ))}
               </select>
             </div>
