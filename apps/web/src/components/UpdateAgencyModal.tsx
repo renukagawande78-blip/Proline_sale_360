@@ -19,6 +19,7 @@ import {
 import { Agency } from '../types';
 import { Plus } from 'lucide-react';
 import { updateAgencyDetails, resolveZoneForAreaAndCity, MOCK_COMPANIES, saveAgencyToSupabase, saveAreaToSupabase, saveZoneToSupabase, fetchAreasFromSupabaseTable } from '../lib/supabase';
+import { DEFAULT_AREAS_BY_CITY, normalizeAreaName } from '../data/officialAreasData';
 
 interface UpdateAgencyModalProps {
   isOpen: boolean;
@@ -139,17 +140,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
     'Surat', 'Surat Rural', 'Navsari', 'Valsad', 'Vapi', 'Bharuch', 'Ankleshwar', 'Bardoli', 'Vyara', 'Ahmedabad', 'Vadodara', 'Rajkot', 'Jamnagar', 'Bhavnagar', 'Gandhinagar'
   ]);
 
-  const [areasMap, setAreasMap] = useState<Record<string, string[]>>({
-    'Surat': ['Katargam', 'Varachha', 'Amroli', 'Udhna', 'Adajan', 'Vesu', 'Parle Point', 'Piplod', 'Bhatar', 'Ring Road', 'Salabatpura', 'Begumpura', 'Rander', 'Palanpur Jakatnaka', 'Dindoli', 'Pandesara', 'Limbayat'],
-    'Surat Rural': ['Kamrej', 'Bardoli', 'Kadodara', 'Kim', 'Kosamba', 'Mandvi', 'Valod', 'Mahuva', 'Palsana', 'Pasodara', 'Kathor', 'Niyol', 'Kholvad'],
-    'Navsari': ['Navsari City', 'Gandevi', 'Chikhli', 'Jalalpore', 'Vansda', 'Bilimora'],
-    'Valsad': ['Valsad City', 'Pardi', 'Umbergaon', 'Dharampur', 'Kaprada'],
-    'Vapi': ['Vapi GIDC', 'Vapi Town', 'Chanod', 'Dungra', 'Salvav'],
-    'Bharuch': ['Bharuch City', 'Jambusar', 'Zagadia', 'Vagra', 'Amod'],
-    'Ankleshwar': ['Ankleshwar GIDC', 'Ankleshwar Town', 'Panoli', 'Kosamba'],
-    'Bardoli': ['Bardoli Town', 'Mota', 'Valod', 'Buhari', 'Bajipura'],
-    'Vyara': ['Vyara Town', 'Songadh', 'Valod', 'Uchchhal']
-  });
+  const [areasMap, setAreasMap] = useState<Record<string, string[]>>(DEFAULT_AREAS_BY_CITY);
 
   const [showAddCity, setShowAddCity] = useState(false);
   const [newCityInput, setNewCityInput] = useState('');
@@ -170,7 +161,8 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
 
   const handleAddAreaInline = async () => {
     if (!newAreaInput.trim()) return;
-    const aName = newAreaInput.trim();
+    const rawName = newAreaInput.trim();
+    const aName = normalizeAreaName(rawName) || rawName;
     setAreasMap(prev => ({
       ...prev,
       [city]: Array.from(new Set([...(prev[city] || []), aName]))
@@ -183,7 +175,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
       area_name: aName,
       city: city,
       zone_code: 'ZN-SUR-A',
-      region: resolvedZone.region || 'Surat City Zone',
+      region: resolvedZone.region || 'City',
       description: `New Area added via Agency Master Update: ${aName}`
     });
 
@@ -202,7 +194,8 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
       setMobile(agency.mobile || '');
       setEmail(agency.email || '');
       setCity(agency.city || 'Surat');
-      setAreaName(agency.area_name || 'Katargam');
+      const canonical = normalizeAreaName(agency.area_name);
+      setAreaName(canonical || agency.area_name || 'Katargam');
       setAssignedSalesperson(agency.assigned_salesperson || 'Chirag Patel');
       setBankName(agency.bank_name || 'HDFC Bank');
       setAccountNumber(agency.account_number || '');
@@ -217,11 +210,11 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
           const dynamicCitiesSet = new Set<string>([
             'Surat', 'Surat Rural', 'Navsari', 'Valsad', 'Vapi', 'Bharuch', 'Ankleshwar', 'Bardoli', 'Vyara'
           ]);
-          const dynamicAreasMap: Record<string, string[]> = { ...areasMap };
+          const dynamicAreasMap: Record<string, string[]> = { ...DEFAULT_AREAS_BY_CITY };
 
           sbAreas.forEach(item => {
             const cName = (item.city || 'Surat').trim();
-            const aName = (item.area_name || '').trim();
+            const aName = normalizeAreaName(item.area_name) || (item.area_name || '').trim();
 
             dynamicCitiesSet.add(cName);
 

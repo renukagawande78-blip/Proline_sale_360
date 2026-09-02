@@ -16,7 +16,8 @@ import {
   OFFICIAL_AREAS_MASTER, 
   OFFICIAL_ZONE_MASTERS, 
   DEFAULT_AREA_TYPES,
-  resolveOfficialZone 
+  resolveOfficialZone,
+  normalizeAreaName
 } from '../data/officialAreasData';
 import { DEFAULT_HOLD_REASONS } from '../data/officialHoldReasonsData';
 
@@ -728,13 +729,21 @@ export const DEFAULT_AREAS: AreaMaster[] = OFFICIAL_AREAS_MASTER;
 export const deduplicateAreas = (rawAreas: AreaMaster[]): AreaMaster[] => {
   const map: Record<string, AreaMaster> = {};
   rawAreas.forEach(a => {
-    const key = (a.id || a.area_code || a.area_name || '').toLowerCase().trim();
+    const rawName = (a.area_name || '').trim();
+    if (!rawName || rawName === 'N/A') return;
+    const canonicalName = normalizeAreaName(rawName) || rawName;
+    const city = (a.city || 'Surat').trim();
+    // Unique key combines city and canonical area name to merge casing & aliases
+    const key = `${city.toLowerCase()}::${canonicalName.toLowerCase()}`;
     if (!map[key]) {
+      const resolved = resolveOfficialZone(canonicalName, city);
       map[key] = {
         ...a,
-        area_name: (a.area_name || '').trim(),
-        city: (a.city || 'Surat').trim(),
-        area_code: (a.area_code || `AR-${(a.city || 'SUR').substring(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`).toUpperCase()
+        area_name: canonicalName,
+        city: city,
+        zone_code: a.zone_code || resolved.zoneName,
+        region: a.region || resolved.region,
+        area_code: (a.area_code || `AR-${city.substring(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`).toUpperCase()
       };
     }
   });

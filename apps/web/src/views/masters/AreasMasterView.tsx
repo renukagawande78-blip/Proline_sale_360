@@ -19,7 +19,8 @@ import {
   Store,
   Compass,
   ArrowRight,
-  ShieldAlert
+  ShieldAlert,
+  Zap
 } from 'lucide-react';
 import { AreaMaster, Agency } from '../../types';
 import { 
@@ -34,7 +35,8 @@ import {
   OFFICIAL_ZONE_DEFINITIONS, 
   RAW_OFFICIAL_AREAS, 
   OFFICIAL_AREAS_MASTER, 
-  resolveOfficialZone 
+  resolveOfficialZone,
+  normalizeAreaName
 } from '../../data/officialAreasData';
 import { useAuth } from '../../context/AuthContext';
 import { BulkImportModal } from '../../components/BulkImportModal';
@@ -103,14 +105,17 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
     setSearchQuery(externalSearchQuery);
   }, [externalSearchQuery]);
 
+  const [isNormalizing, setIsNormalizing] = useState(false);
+
   useEffect(() => {
     if (agencies && agencies.length > 0) {
       setLocalAgencies(agencies);
       // Auto-discover localities from registered agency master using official zones
       const dynamicAgencyAreas: AreaMaster[] = [];
       agencies.forEach((ag, idx) => {
-        const aName = (ag.area_name || '').trim();
-        if (aName && aName !== 'N/A') {
+        const raw = (ag.area_name || '').trim();
+        if (raw && raw !== 'N/A') {
+          const aName = normalizeAreaName(raw) || raw;
           const resolved = resolveOfficialZone(aName, ag.city);
           dynamicAgencyAreas.push({
             id: `ar_ag_${idx}_${aName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
@@ -129,6 +134,39 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
       }
     }
   }, [agencies]);
+
+  const handleStandardizeAgencyLocalities = async () => {
+    setIsNormalizing(true);
+    let updatedCount = 0;
+    const updatedAgencies = [...localAgencies];
+
+    for (let i = 0; i < updatedAgencies.length; i++) {
+      const ag = updatedAgencies[i];
+      const raw = (ag.area_name || '').trim();
+      const canonical = normalizeAreaName(raw);
+      if (canonical && canonical !== raw) {
+        const resolved = resolveOfficialZone(canonical, ag.city);
+        const newAg: Agency = {
+          ...ag,
+          area_name: canonical,
+          zone_name: resolved.zoneName,
+          zone_region: resolved.region
+        };
+        updatedAgencies[i] = newAg;
+        await saveAgencyToSupabase(newAg);
+        updatedCount++;
+      }
+    }
+
+    setLocalAgencies(updatedAgencies);
+    setIsNormalizing(false);
+    if (updatedCount > 0) {
+      setSuccessNotice(`⚡ Successfully normalized & standardized ${updatedCount} agency localities (e.g. KATARGAM → Katargam, PAL GAM → Pal)!`);
+    } else {
+      setSuccessNotice(`✅ All ${updatedAgencies.length} registered agencies already match official canonical area names!`);
+    }
+    setTimeout(() => setSuccessNotice(null), 4000);
+  };
 
   const handleRefreshLiveAreas = async () => {
     setIsSyncing(true);
@@ -990,6 +1028,27 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
             }}
           >
             <RefreshCw size={13} className={isSyncing ? 'spin-anim' : ''} /> {isSyncing ? 'Syncing...' : 'Sync DB'}
+          </button>
+
+          <button
+            onClick={handleStandardizeAgencyLocalities}
+            disabled={isNormalizing}
+            style={{
+              padding: '0.5rem 0.85rem',
+              borderRadius: '10px',
+              border: '1px solid rgba(245, 158, 11, 0.4)',
+              background: 'rgba(245, 158, 11, 0.1)',
+              color: '#fbbf24',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              cursor: isNormalizing ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
+            title="Automatically convert uppercase, suffixes and aliases (KATARGAM -> Katargam, PAL GAM -> Pal) to official canonical areas"
+          >
+            <Zap size={13} className={isNormalizing ? 'spin-anim' : ''} /> {isNormalizing ? 'Standardizing...' : 'Clean Area Aliases'}
           </button>
 
           <button

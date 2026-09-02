@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Agency } from '../types';
 import { registerNewAgency, resolveZoneForAreaAndCity, MOCK_COMPANIES, generateNewAgencyCode, saveAgencyToSupabase, saveAreaToSupabase, saveZoneToSupabase, fetchAreasFromSupabaseTable, fetchZonesFromSupabaseAreasTable } from '../lib/supabase';
+import { DEFAULT_AREAS_BY_CITY, normalizeAreaName } from '../data/officialAreasData';
 import { useAuth } from '../context/AuthContext';
 
 interface RegisterAgencyModalProps {
@@ -59,17 +60,7 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
     'Surat', 'Surat Rural', 'Navsari', 'Valsad', 'Vapi', 'Bharuch', 'Ankleshwar', 'Bardoli', 'Vyara', 'Ahmedabad', 'Vadodara', 'Rajkot', 'Jamnagar', 'Bhavnagar', 'Gandhinagar'
   ]);
 
-  const [areasMap, setAreasMap] = useState<Record<string, string[]>>({
-    'Surat': ['Katargam', 'Varachha', 'Amroli', 'Udhna', 'Adajan', 'Vesu', 'Parle Point', 'Piplod', 'Bhatar', 'Ring Road', 'Salabatpura', 'Begumpura', 'Rander', 'Palanpur Jakatnaka', 'Dindoli', 'Pandesara', 'Limbayat'],
-    'Surat Rural': ['Kamrej', 'Bardoli', 'Kadodara', 'Kim', 'Kosamba', 'Mandvi', 'Valod', 'Mahuva', 'Palsana', 'Pasodara', 'Kathor', 'Niyol', 'Kholvad'],
-    'Navsari': ['Navsari City', 'Gandevi', 'Chikhli', 'Jalalpore', 'Vansda', 'Bilimora'],
-    'Valsad': ['Valsad City', 'Pardi', 'Umbergaon', 'Dharampur', 'Kaprada'],
-    'Vapi': ['Vapi GIDC', 'Vapi Town', 'Chanod', 'Dungra', 'Salvav'],
-    'Bharuch': ['Bharuch City', 'Jambusar', 'Zagadia', 'Vagra', 'Amod'],
-    'Ankleshwar': ['Ankleshwar GIDC', 'Ankleshwar Town', 'Panoli', 'Kosamba'],
-    'Bardoli': ['Bardoli Town', 'Mota', 'Valod', 'Buhari', 'Bajipura'],
-    'Vyara': ['Vyara Town', 'Songadh', 'Valod', 'Uchchhal']
-  });
+  const [areasMap, setAreasMap] = useState<Record<string, string[]>>(DEFAULT_AREAS_BY_CITY);
 
   const [zonesList, setZonesList] = useState([
     { code: 'ZN-SUR-A', name: 'City-A (Surat City Zone)', region: 'Surat City Zone' },
@@ -174,11 +165,11 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
         const dynamicCitiesSet = new Set<string>([
           'Surat', 'Surat Rural', 'Navsari', 'Valsad', 'Vapi', 'Bharuch', 'Ankleshwar', 'Bardoli', 'Vyara'
         ]);
-        const dynamicAreasMap: Record<string, string[]> = { ...areasMap };
+        const dynamicAreasMap: Record<string, string[]> = { ...DEFAULT_AREAS_BY_CITY };
 
         sbAreas.forEach(item => {
           const cName = (item.city || 'Surat').trim();
-          const aName = (item.area_name || '').trim();
+          const aName = normalizeAreaName(item.area_name) || (item.area_name || '').trim();
 
           dynamicCitiesSet.add(cName);
 

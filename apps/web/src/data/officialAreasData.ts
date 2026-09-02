@@ -151,6 +151,238 @@ export const OFFICIAL_ZONE_MASTERS: ZoneMaster[] = OFFICIAL_ZONE_DEFINITIONS.map
 });
 
 /**
+ * Comprehensive area alias dictionary to map freeform variations, uppercase,
+ * common suffixes (Gam, GIDC, Road, Char Rasta) to official canonical areas.
+ */
+export const AREA_ALIASES: Record<string, string> = {
+  // Katargam variations
+  'katargam': 'Katargam',
+  'katargam gidc': 'Katargam',
+  'katargam darwaja': 'Katargam',
+  'katargam road': 'Katargam',
+  'katargam gam': 'Katargam',
+
+  // Pal variations
+  'pal': 'Pal',
+  'pal gam': 'Pal',
+  'pal village': 'Pal',
+  'pal rto': 'Pal',
+  'pal road': 'Pal',
+  'pal gaam': 'Pal',
+
+  // Varachha variations
+  'varachha': 'Nana Varachha',
+  'varacha': 'Nana Varachha',
+  'varachha road': 'Nana Varachha',
+  'nana varachha': 'Nana Varachha',
+  'mota varachha': 'Mota Varachha',
+
+  // Adajan variations
+  'adajan': 'Adajan',
+  'adajan gam': 'Adajan',
+  'adajan patia': 'Adajan',
+  'adajan road': 'Adajan',
+  'pal-adajan': 'Adajan',
+
+  // Udhna variations
+  'udhna': 'Udhana',
+  'udhana': 'Udhana',
+  'udhna teen rasta': 'Udhana',
+  'udhna darwaja': 'Udhana',
+  'udhna station': 'Udhana',
+  'udhna gidc': 'Udhana',
+
+  // Rander variations
+  'rander': 'Rander',
+  'rander road': 'Rander',
+  'rander town': 'Rander',
+  'rander gam': 'Rander',
+
+  // Vesu variations
+  'vesu': 'Vesu',
+  'vesu road': 'Vesu',
+  'vesu canal road': 'Vesu',
+
+  // Amroli variations
+  'amroli': 'Amroli',
+  'amroli char rasta': 'Amroli',
+  'amroli bridge': 'Amroli',
+
+  // Godadra
+  'godadra': 'Godadara',
+  'godadara': 'Godadara',
+
+  // Olpad
+  'olpad': 'Oldpad',
+  'oldpad': 'Oldpad',
+  'olpad town': 'Oldpad',
+
+  // Kosamba
+  'kosmba': 'Kosamba',
+  'kosamba': 'Kosamba',
+  'kosamba town': 'Kosamba',
+
+  // Umbergaon
+  'umergaon': 'Umbergaon',
+  'umergoan': 'Umbergaon',
+  'umbergaon': 'Umbergaon',
+  'umar gam': 'Umbergaon',
+
+  // Pandesara
+  'pandesara': 'Pandesara',
+  'pandesara gidc': 'Pandesara',
+
+  // Sachin
+  'sachin': 'Sachin',
+  'sachin gidc': 'Sachin',
+
+  // Parvat Patiya
+  'parvat patiya': 'Parvat Patiya',
+  'parvat patia': 'Parvat Patiya',
+  'parvat': 'Parvat Patiya',
+
+  // Althan
+  'althan': 'Althan',
+  'althan canal road': 'Althan',
+
+  // Bhatar
+  'bhatar': 'Bhatar',
+  'bhatar road': 'Bhatar',
+  'bhatar char rasta': 'Bhatar',
+
+  // Piplod
+  'piplod': 'Piplod',
+  'piplod main road': 'Piplod',
+
+  // Citylight
+  'citylight': 'Citylight',
+  'city light': 'Citylight',
+  'citylight road': 'Citylight',
+
+  // Parle Point
+  'parle point': 'Parle Point',
+  'parlepoint': 'Parle Point',
+
+  // Sarthana
+  'sarthana': 'Sarthana',
+  'sarthana jakatnaka': 'Sarthana',
+
+  // Mini Bazar
+  'mini bazar': 'Mini Bazar',
+  'minibazar': 'Mini Bazar',
+
+  // Hirabaug
+  'hirabaug': 'Hirabaug',
+  'hirabag': 'Hirabaug',
+
+  // Ring Road
+  'ring road': 'Ring Road',
+  'ringroad': 'Ring Road',
+
+  // Majura Gate
+  'majura gate': 'Majura Gate',
+  'majura': 'Majura Gate',
+
+  // Kamrej
+  'kamrej': 'Kamrej',
+  'kamrej char rasta': 'Kamrej',
+
+  // Kadodara
+  'kadodara': 'Kadodara',
+  'kadodara char rasta': 'Kadodara',
+
+  // Bardoli
+  'bardoli': 'Bardoli',
+  'bardoli town': 'Bardoli',
+
+  // Navsari
+  'navsari': 'Navsari',
+  'navsari city': 'Navsari',
+
+  // Vapi
+  'vapi': 'Vapi',
+  'vapi gidc': 'Vapi',
+  'vapi town': 'Vapi'
+};
+
+/**
+ * Normalizes any freeform area input string into a standard canonical title-cased name.
+ * Handles uppercase ('KATARGAM' -> 'Katargam'),
+ * suffixes ('PAL GAM' -> 'Pal', 'KATARGAM GIDC' -> 'Katargam'),
+ * and aliases ('umergaon' -> 'Umbergaon').
+ */
+export const normalizeAreaName = (rawInput?: string): string => {
+  if (!rawInput) return '';
+  const clean = rawInput.trim();
+  if (!clean || clean.toUpperCase() === 'N/A') return '';
+
+  const lower = clean.toLowerCase();
+
+  // 1. Direct Alias Check
+  if (AREA_ALIASES[lower]) {
+    return AREA_ALIASES[lower];
+  }
+
+  // 2. Suffix stripping (e.g. "PAL GAM" -> "pal", "KATARGAM ROAD" -> "katargam")
+  const stripped = lower
+    .replace(/\b(gam|gaam|village|road|rd|gidc|town|circle|char rasta|jakatnaka|cross road|gate|market)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (stripped && AREA_ALIASES[stripped]) {
+    return AREA_ALIASES[stripped];
+  }
+
+  // 3. Exact case-insensitive match against RAW_OFFICIAL_AREAS
+  const exact = RAW_OFFICIAL_AREAS.find(item => item.area_name.toLowerCase() === lower || (stripped && item.area_name.toLowerCase() === stripped));
+  if (exact) {
+    return exact.area_name;
+  }
+
+  // 4. Word boundary match against RAW_OFFICIAL_AREAS
+  for (const item of RAW_OFFICIAL_AREAS) {
+    const target = item.area_name.toLowerCase();
+    const regex = new RegExp(`\\b${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (regex.test(lower) || (stripped && regex.test(stripped))) {
+      return item.area_name;
+    }
+  }
+
+  // 5. Default clean Title Casing for custom/new localities
+  return clean
+    .split(/[\s_-]+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
+/**
+ * Standard areas organized by City with full canonical coverage
+ */
+export const DEFAULT_AREAS_BY_CITY: Record<string, string[]> = (() => {
+  const map: Record<string, string[]> = {
+    'Surat': [],
+    'Surat Rural': ['Kamrej', 'Bardoli', 'Kadodara', 'Kim', 'Kosamba', 'Mandvi', 'Valod', 'Mahuva', 'Palsana', 'Pasodara', 'Kathor', 'Niyol', 'Kholvad'],
+    'Navsari': ['Navsari City', 'Gandevi', 'Chikhli', 'Jalalpore', 'Vansda', 'Bilimora'],
+    'Valsad': ['Valsad City', 'Pardi', 'Umbergaon', 'Dharampur', 'Kaprada'],
+    'Vapi': ['Vapi GIDC', 'Vapi Town', 'Chanod', 'Dungra', 'Salvav'],
+    'Bharuch': ['Bharuch City', 'Jambusar', 'Zagadia', 'Vagra', 'Amod'],
+    'Ankleshwar': ['Ankleshwar GIDC', 'Ankleshwar Town', 'Panoli', 'Kosamba'],
+    'Bardoli': ['Bardoli Town', 'Mota', 'Valod', 'Buhari', 'Bajipura'],
+    'Vyara': ['Vyara Town', 'Songadh', 'Valod', 'Uchchhal']
+  };
+
+  RAW_OFFICIAL_AREAS.forEach(item => {
+    const city = item.city || 'Surat';
+    if (!map[city]) map[city] = [];
+    if (!map[city].includes(item.area_name)) {
+      map[city].push(item.area_name);
+    }
+  });
+
+  return map;
+})();
+
+/**
  * High-speed resolver to find an area's zone and region from any input text (area name, address, agency name)
  */
 export const resolveOfficialZone = (areaOrText?: string, cityOrText?: string): {
@@ -159,7 +391,8 @@ export const resolveOfficialZone = (areaOrText?: string, cityOrText?: string): {
   region: 'City' | 'Rural' | 'Other';
   matchedArea: string;
 } => {
-  const normArea = (areaOrText || '').toLowerCase().trim();
+  const normalized = normalizeAreaName(areaOrText);
+  const normArea = (normalized || areaOrText || '').toLowerCase().trim();
   const normCity = (cityOrText || '').toLowerCase().trim();
   const combined = `${normArea} ${normCity}`;
 
@@ -172,10 +405,22 @@ export const resolveOfficialZone = (areaOrText?: string, cityOrText?: string): {
     };
   }
 
-  // 1. Direct match with official area list
+  // 1. Exact match on normalized area name
+  const exact = RAW_OFFICIAL_AREAS.find(item => item.area_name.toLowerCase() === normArea);
+  if (exact) {
+    return {
+      zoneName: exact.zone_name,
+      zoneCode: exact.zone_code,
+      region: exact.region,
+      matchedArea: exact.area_name
+    };
+  }
+
+  // 2. Direct match with official area list with word boundary (so Pal does not match Palsana)
   for (const item of RAW_OFFICIAL_AREAS) {
     const target = item.area_name.toLowerCase().trim();
-    if (combined.includes(target) || normArea === target) {
+    const regex = new RegExp(`\\b${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (regex.test(normArea) || regex.test(combined)) {
       return {
         zoneName: item.zone_name,
         zoneCode: item.zone_code,
@@ -185,29 +430,12 @@ export const resolveOfficialZone = (areaOrText?: string, cityOrText?: string): {
     }
   }
 
-  // 2. Fuzzy / alternate spellings
-  if (combined.includes('udhna')) {
-    return { zoneName: 'City-D', zoneCode: 'ZN-CTD', region: 'City', matchedArea: 'Udhana' };
-  }
-  if (combined.includes('godadra')) {
-    return { zoneName: 'City-D', zoneCode: 'ZN-CTD', region: 'City', matchedArea: 'Godadara' };
-  }
-  if (combined.includes('olpad')) {
-    return { zoneName: 'North', zoneCode: 'ZN-NOR', region: 'Rural', matchedArea: 'Oldpad' };
-  }
-  if (combined.includes('kosmba')) {
-    return { zoneName: 'North', zoneCode: 'ZN-NOR', region: 'Rural', matchedArea: 'Kosamba' };
-  }
-  if (combined.includes('umergaon') || combined.includes('umergoan')) {
-    return { zoneName: 'Upper South', zoneCode: 'ZN-UPS', region: 'Rural', matchedArea: 'Umbergaon' };
-  }
-
   // 3. Fallback based on city or default to City-A
   return {
     zoneName: 'City-A',
     zoneCode: 'ZN-CTA',
     region: 'City',
-    matchedArea: areaOrText || 'General'
+    matchedArea: normalized || areaOrText || 'General'
   };
 };
 
