@@ -280,14 +280,14 @@ export const getOrderAccessPermission = (
     };
   }
 
-  // ── 6. DISPATCH MANAGER — sees only mapped company orders ─────────
+  // ── 6. DISPATCH MANAGER — warehouse dispatches all brands / bills that come for dispatch ─────────
   if (role === 'DISPATCH_MANAGER' || role === 'DISPATCH') {
     return {
-      canView: isBrandAllowed,
-      canExecuteActions: isBrandAllowed,
-      isDirectBrandOwner: isBrandAllowed,
-      isItemBrandOwner: isBrandAllowed,
-      accessReason: isBrandAllowed ? 'Dispatch — Company Scope' : 'Order outside dispatch scope'
+      canView: true,
+      canExecuteActions: true,
+      isDirectBrandOwner: true,
+      isItemBrandOwner: true,
+      accessReason: 'Dispatch — Universal Warehouse & Logistics Scope'
     };
   }
 

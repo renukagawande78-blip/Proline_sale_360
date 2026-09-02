@@ -64,14 +64,16 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
     }
   }, [agencies]);
 
-  // Super Admin / All scope access
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
-  const canViewAll = isSuperAdmin || !currentUser?.company_handle || currentUser?.company_handle === 'All';
+  const userRole = (currentUser?.role_name || '') as string;
+  const isDispatchUser = userRole === 'DISPATCH_MANAGER' || userRole === 'DISPATCH';
+  const canViewAll = isSuperAdmin || isDispatchUser || !currentUser?.company_handle || currentUser?.company_handle === 'All';
 
-  // Active Dispatch Orders (Billing Completed in Stage 4)
+  // Active Dispatch Orders (All bills with completed Tax Invoicing / Stage 4 clearance)
   const dispatchQueueOrders = orders.filter(o => 
     (o.status === 'BILLED' || 
      o.status === 'INVOICED' || 
+     Boolean(o.invoice_number) ||
      o.status === 'READY_FOR_PICKUP' || 
      o.status === 'PARTIALLY_DISPATCHED' || 
      o.status === 'DISPATCHED' || 
@@ -81,8 +83,9 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
     (canViewAll || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle))
   );
 
-  // Orders awaiting Billing in Stage 4
+  // Orders awaiting Billing in Stage 4 (exclude orders that already have an invoice number)
   const awaitingBillingOrders = orders.filter(o =>
+    !o.invoice_number &&
     (o.status === 'APPROVED' || o.status === 'ACCOUNTS_APPROVED' || o.status === 'SALES_ADMIN_APPROVED') &&
     (canViewAll || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle))
   );
@@ -220,7 +223,7 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Dispatch & Delivery Queue</h1>
           <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-            Manage warehouse packing, logistics vehicle allocation, and dispatch delivery pipeline | Brand Scope: <strong style={{ color: '#34d399' }}>{currentUser?.company_handle === 'All' ? 'All 13 Brands' : currentUser?.company_handle}</strong>
+            Manage warehouse packing, logistics vehicle allocation, and dispatch delivery pipeline | Brand Scope: <strong style={{ color: '#34d399' }}>{canViewAll ? 'All Brands & Bills (Universal Warehouse)' : currentUser?.company_handle}</strong>
           </p>
         </div>
       </div>
@@ -601,8 +604,8 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                     </span>
                   )}
 
-                  {/* Step 1: Initial Warehouse Dispatch Allocation */}
-                  {dispatchFilter !== 'awaiting_billing' && (order.status === 'APPROVED' || order.status === 'PARTIALLY_DISPATCHED') && (
+                  {/* Step 1: Initial Warehouse Dispatch Allocation (Pre-billing) */}
+                  {dispatchFilter !== 'awaiting_billing' && !order.invoice_number && (order.status === 'APPROVED' || order.status === 'PARTIALLY_DISPATCHED') && (
                     <button 
                       className="btn btn-primary"
                       onClick={() => onOpenDispatchModal(order)}
@@ -612,15 +615,8 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                     </button>
                   )}
 
-                  {/* Step 2: Waiting for Accounts to issue Bill */}
-                  {order.status === 'DISPATCHED' && (
-                    <span style={{ fontSize: '0.725rem', color: '#fbbf24', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <Clock size={14} color="#fbbf24" /> Pending Accounts Bill
-                    </span>
-                  )}
-
-                  {/* Step 3: Bill is Ready (Accounts Issued Invoice) -> Execute Delivery based on Self Pickup vs F.O.R */}
-                  {order.status === 'BILLED' && (
+                  {/* Step 2: Bill is Ready (Accounts Issued Invoice / Stage 4 Cleared) -> Load Vehicle & Deliver */}
+                  {(order.status === 'BILLED' || order.status === 'INVOICED' || (Boolean(order.invoice_number) && order.status !== 'DISPATCHED' && order.status !== 'OUT_FOR_DELIVERY' && order.status !== 'DELIVERED' && order.status !== 'COMPLETED' && order.status !== 'READY_FOR_PICKUP')) && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                       {isSelfPickup ? (
                         <button 

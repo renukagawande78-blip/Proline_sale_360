@@ -96,7 +96,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     // 3. Dispatch Manager operational dashboard and logistics tools
     if (role === 'DISPATCH_MANAGER') {
-      if (item.id === 'orders' || item.id === 'approvals' || item.id === 'accounts' || item.id === 'pod' || item.id === 'zones' || item.id === 'masters') {
+      if (item.id === 'approvals' || item.id === 'accounts' || item.id === 'zones' || item.id === 'masters') {
         return false;
       }
       return true;
