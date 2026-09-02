@@ -205,6 +205,17 @@ const MainLayout: React.FC = () => {
     setIsCreateOpen(true);
   };
 
+  const handleClearOperationalData = () => {
+    setOrders([]);
+    try {
+      localStorage.removeItem('proline_oms_orders_v3');
+      localStorage.removeItem('proline_oms_orders');
+      localStorage.removeItem('proline_recent_activity');
+      localStorage.removeItem('proline_returns');
+      localStorage.removeItem('proline_oms_notifications');
+    } catch {}
+  };
+
 
   // Global App-Wide Filter Initial State
   const DEFAULT_GLOBAL_FILTER: GlobalFilterState = {
@@ -1308,6 +1319,7 @@ const MainLayout: React.FC = () => {
             initialTab="agencies" 
             onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} 
             onOpenCreateOrderForAgency={handleOpenCreateOrderForAgency}
+            onClearOperationalData={handleClearOperationalData}
           />
         )}
 
@@ -1316,6 +1328,7 @@ const MainLayout: React.FC = () => {
             initialTab="areas" 
             onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} 
             onOpenCreateOrderForAgency={handleOpenCreateOrderForAgency}
+            onClearOperationalData={handleClearOperationalData}
           />
         )}
 

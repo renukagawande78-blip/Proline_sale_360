@@ -2078,6 +2078,45 @@ export const deleteOrderFromSupabase = async (orderId: string): Promise<{ succes
   }
 };
 
+/**
+ * Clear All Operational Data (Orders & Order Items) from Supabase.
+ * Master Data (Agencies, Products, Companies, Users, Zones, Area Types, Hold Reasons) is STRICTLY PRESERVED.
+ */
+export const clearAllOperationalDataFromSupabase = async (): Promise<{ success: boolean; error: string | null }> => {
+  try {
+    // 1. Delete all order items first to avoid foreign key / relation locks
+    const { error: itemsErr } = await supabase
+      .from('order_items')
+      .delete()
+      .not('id', 'is', null);
+
+    if (itemsErr) {
+      console.warn('Warning clearing order_items:', itemsErr.message);
+      await supabase.from('order_items').delete().neq('id', '');
+    }
+
+    // 2. Delete all orders
+    const { error: ordersErr } = await supabase
+      .from('orders')
+      .delete()
+      .not('id', 'is', null);
+
+    if (ordersErr) {
+      console.warn('Warning clearing orders:', ordersErr.message);
+      const { error: fallbackErr } = await supabase.from('orders').delete().neq('id', '');
+      if (fallbackErr) {
+        console.error('Supabase clearAllOperationalData error:', fallbackErr.message);
+        return { success: false, error: fallbackErr.message };
+      }
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error('Error clearing operational data in Supabase:', err?.message || err);
+    return { success: false, error: err?.message || 'Failed to clear operational data' };
+  }
+};
+
 export const fetchOrderItemsFromSupabase = async (orderId: string): Promise<{ items: OrderItem[]; error: string | null }> => {
   try {
     const { data, error } = await supabase.from('order_items').select('*').eq('order_id', orderId);

@@ -27,7 +27,8 @@ import {
   deduplicateProducts,
   fetchCompaniesFromSupabase,
   deduplicateCompanies,
-  clearZonesFromSupabase
+  clearZonesFromSupabase,
+  clearAllOperationalDataFromSupabase
 } from '../lib/supabase';
 
 
@@ -52,9 +53,15 @@ interface MastersPageProps {
   initialTab?: 'companies' | 'agencies' | 'products' | 'users' | 'reasons' | 'areas' | 'zones' | 'area_types' | 'permissions';
   onOpenUserMgmtModal?: (user?: any) => void;
   onOpenCreateOrderForAgency?: (agencyId: string) => void;
+  onClearOperationalData?: () => Promise<void> | void;
 }
 
-export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies', onOpenUserMgmtModal, onOpenCreateOrderForAgency }) => {
+export const MastersPage: React.FC<MastersPageProps> = ({ 
+  initialTab = 'agencies', 
+  onOpenUserMgmtModal, 
+  onOpenCreateOrderForAgency,
+  onClearOperationalData 
+}) => {
 
   const { users, currentUser, hasPermission, createUser } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
@@ -211,20 +218,44 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
     exportMasterCSV(activeTab === 'reasons' ? 'agencies' : (activeTab as MasterType), currentData);
   };
 
-  const handleClearCurrentMasterData = async () => {
+  const [isClearingOps, setIsClearingOps] = useState(false);
+
+  const handleClearOperationalData = async () => {
     const isConfirmed = window.confirm(
-      `⚠️ SUPER ADMIN MASTER CLEAR GATEWAY:\n\n` +
-      `Are you sure you want to DELETE ALL Master Data records (Products, Agencies, Brands & Zones) to clear wrong data?\n\n` +
-      `Click OK to proceed with deleting all master records.`
+      `⚠️ SUPER ADMIN: CLEAR ALL OPERATIONAL DATA?\n\n` +
+      `This will permanently delete ALL Sales Orders, Invoices, Billing, and Dispatch records from the database.\n\n` +
+      `🛡️ All Master Data (Agencies, Products, Brands, Users, Zones, Area Types) will be KEPT SAFE & PRESERVED.\n\n` +
+      `Click OK to proceed with clearing all operational orders.`
     );
 
-    if (isConfirmed) {
-      setProductsList([]);
-      setAgenciesList([]);
-      setCompaniesList([]);
-      await clearZonesFromSupabase();
-      setSuccessNotice(`🔥 ALL Master Data records (Products, Agencies, Brands & Zones) cleared successfully by Super Admin!`);
-      setTimeout(() => setSuccessNotice(null), 5000);
+    if (!isConfirmed) return;
+
+    setIsClearingOps(true);
+    try {
+      const { success, error } = await clearAllOperationalDataFromSupabase();
+      if (!success) {
+        alert(`Failed to clear operational data: ${error || 'Unknown error'}`);
+        return;
+      }
+
+      try {
+        localStorage.removeItem('proline_oms_orders_v3');
+        localStorage.removeItem('proline_oms_orders');
+        localStorage.removeItem('proline_recent_activity');
+        localStorage.removeItem('proline_returns');
+        localStorage.removeItem('proline_oms_notifications');
+      } catch {}
+
+      if (onClearOperationalData) {
+        await onClearOperationalData();
+      }
+
+      setSuccessNotice('✨ All operational data (orders, bills, and dispatch history) cleared successfully! Master data preserved.');
+      setTimeout(() => setSuccessNotice(null), 6000);
+    } catch (err: any) {
+      alert(`Error clearing operational data: ${err?.message || err}`);
+    } finally {
+      setIsClearingOps(false);
     }
   };
 
@@ -300,7 +331,31 @@ export const MastersPage: React.FC<MastersPageProps> = ({ initialTab = 'agencies
         </div>
 
         {/* Master Action Toolbar */}
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Clear Operational Data Button (Super Admin only) */}
+          {(role === 'SUPER_ADMIN' || (currentUser?.full_name || '').toLowerCase().includes('chirag') || (currentUser?.full_name || '').toLowerCase().includes('harshad')) && (
+            <button
+              className="btn btn-outline"
+              onClick={handleClearOperationalData}
+              disabled={isClearingOps}
+              title="Delete all sales orders, bills, and dispatch history while strictly preserving all Master Data"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                borderColor: 'rgba(239, 68, 68, 0.45)',
+                background: 'rgba(239, 68, 68, 0.1)',
+                color: '#f87171',
+                fontWeight: 800,
+                fontSize: '0.8rem',
+                cursor: isClearingOps ? 'not-allowed' : 'pointer'
+              }}
+            >
+              <Trash2 size={14} className={isClearingOps ? 'spin-anim' : ''} />
+              {isClearingOps ? 'Clearing Operations...' : 'Clear Operational Data'}
+            </button>
+          )}
+
           {/* Bulk Import CSV */}
           {canAddMaster && (
             <button 
