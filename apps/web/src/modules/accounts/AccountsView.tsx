@@ -63,27 +63,38 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
     const autoInv = order.invoice_number || `BILL-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     setInvoiceNumberInput(autoInv);
     setCreditDaysInput(order.payment_type === 'ADVANCE' ? 0 : (order.credit_days || 30));
-    const initialBilledQty = Object.fromEntries((order.items || []).map(item => [item.id, item.issued_qty_pcs || 0]));
+    const initialBilledQty = Object.fromEntries(
+      (order.items || []).map(item => {
+        const defaultQty = (item.issued_qty_pcs != null && item.issued_qty_pcs > 0)
+          ? item.issued_qty_pcs
+          : (item.total_qty_pcs || ((item.box_qty || 0) * (item.pcs_per_box || 1) + (item.loose_pcs || 0)) || 0);
+        return [item.id, defaultQty];
+      })
+    );
     setBilledQtyByItem(initialBilledQty);
-    setBillingTotalQtyInput(Object.values(initialBilledQty).reduce((sum, qty) => sum + qty, 0));
-    setBillingAmountInput(order.invoice_amount || 0);
+    const sumQty = Object.values(initialBilledQty).reduce((sum, qty) => sum + qty, 0) || order.total_qty_pcs || 0;
+    setBillingTotalQtyInput(order.billing_total_qty && order.billing_total_qty > 0 ? order.billing_total_qty : sumQty);
+    setBillingAmountInput(order.invoice_amount && order.invoice_amount > 0 ? order.invoice_amount : (order.total_amount || 0));
     setInvoiceRemark(order.remarks || '');
   };
 
   const handleConfirmInvoice = () => {
     if (!selectedOrderForInvoice || !invoiceNumberInput.trim()) return;
 
-    if (billingTotalQtyInput <= 0 || billingAmountInput < 0) return;
+    const fallbackQty = (selectedOrderForInvoice.items || []).reduce((sum, it) => sum + (it.issued_qty_pcs || it.total_qty_pcs || 0), 0) || selectedOrderForInvoice.total_qty_pcs || 0;
+    const finalBillingQty = billingTotalQtyInput > 0 ? billingTotalQtyInput : fallbackQty;
+    const finalBillingAmount = billingAmountInput > 0 ? billingAmountInput : (selectedOrderForInvoice.total_amount || 0);
+
     const lockedCreditDays = selectedOrderForInvoice.payment_type === 'ADVANCE' ? 0 : Math.max(0, creditDaysInput);
     const finalInvNo = invoiceNumberInput.trim();
 
     if (onGenerateInvoice) {
-      onGenerateInvoice(selectedOrderForInvoice, finalInvNo, billingTotalQtyInput, billingAmountInput, lockedCreditDays, invoiceRemark, billedQtyByItem);
+      onGenerateInvoice(selectedOrderForInvoice, finalInvNo, finalBillingQty, finalBillingAmount, lockedCreditDays, invoiceRemark, billedQtyByItem);
     }
 
     addNotification({
       title: `🧾 Tax Invoice Issued: ${finalInvNo}`,
-      message: `Billing invoice ${finalInvNo} for ${billingTotalQtyInput.toLocaleString()} PCS and ₹${billingAmountInput.toLocaleString()} issued for ${selectedOrderForInvoice.agency_name}.`,
+      message: `Billing invoice ${finalInvNo} for ${finalBillingQty.toLocaleString()} PCS and ₹${finalBillingAmount.toLocaleString()} issued for ${selectedOrderForInvoice.agency_name}.`,
       event_type: 'INVOICE_GENERATED',
       order_id: selectedOrderForInvoice.id
     });
@@ -92,8 +103,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
       ...selectedOrderForInvoice,
       status: 'BILLED',
       invoice_number: finalInvNo,
-      invoice_amount: billingAmountInput,
-      billing_total_qty: billingTotalQtyInput,
+      invoice_amount: finalBillingAmount,
+      billing_total_qty: finalBillingQty,
       credit_days: lockedCreditDays,
       remarks: invoiceRemark || selectedOrderForInvoice.remarks,
       items: (selectedOrderForInvoice.items || []).map(item => ({
@@ -239,7 +250,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                         <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Pending Bill</span>
                       )}
                     </td>
-                    <td>{order.billing_total_qty != null ? `${order.billing_total_qty.toLocaleString()} PCS` : '—'}</td>
+                    <td>{order.invoice_number ? `${((order.billing_total_qty != null && order.billing_total_qty > 0) ? order.billing_total_qty : ((order.items || []).reduce((sum, it) => sum + (it.issued_qty_pcs || it.total_qty_pcs || 0), 0) || order.total_qty_pcs || 0)).toLocaleString()} PCS` : (order.billing_total_qty != null ? `${order.billing_total_qty.toLocaleString()} PCS` : '—')}</td>
                     <td>{order.invoice_amount != null ? `₹${order.invoice_amount.toLocaleString()}` : '—'}</td>
                     <td>{order.invoice_number ? `${order.payment_type === 'ADVANCE' ? 0 : (order.credit_days || 0)} Days` : '—'}</td>
                     <td>

@@ -1784,9 +1784,25 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         invoice_number: o.invoice_number || undefined,
         invoice_date: o.invoice_date || undefined,
         invoice_amount: o.invoice_amount == null ? undefined : Number(o.invoice_amount),
-        billing_total_qty: o.billing_total_qty == null
-          ? (itemsMap[o.id] || []).reduce((sum, item) => sum + Number(item.issued_qty_pcs || 0), 0)
-          : Number(o.billing_total_qty),
+        billing_total_qty: (() => {
+          if (o.billing_total_qty != null && Number(o.billing_total_qty) > 0) {
+            return Number(o.billing_total_qty);
+          }
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) {
+            try {
+              const parsed = JSON.parse(match[1]);
+              if (parsed.billing_total_qty != null && Number(parsed.billing_total_qty) > 0) {
+                return Number(parsed.billing_total_qty);
+              }
+            } catch {}
+          }
+          const itemsIssuedSum = (itemsMap[o.id] || []).reduce((sum, item) => sum + Number(item.issued_qty_pcs || 0), 0);
+          if (itemsIssuedSum > 0) return itemsIssuedSum;
+          const itemsTotalSum = (itemsMap[o.id] || []).reduce((sum, item) => sum + Number(item.total_qty_pcs || 0), 0);
+          if (itemsTotalSum > 0) return itemsTotalSum;
+          return Number(o.total_qty_pcs || 0);
+        })(),
         credit_days: o.credit_days == null ? undefined : Number(o.credit_days),
         vehicle_number: o.vehicle_number || (() => {
           const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
@@ -2002,6 +2018,7 @@ export const updateOrderAccountsApprovalInSupabase = async (
     if (accountsData.invoice_date !== undefined) payload.invoice_date = accountsData.invoice_date;
     if (accountsData.invoice_amount !== undefined) payload.invoice_amount = accountsData.invoice_amount;
     if (accountsData.credit_days !== undefined) payload.credit_days = accountsData.credit_days;
+    if (accountsData.billing_total_qty !== undefined) payload.billing_total_qty = accountsData.billing_total_qty;
 
     // Collect dispatch metadata if provided so it survives on the order
     const dispatchMeta: Record<string, any> = {};

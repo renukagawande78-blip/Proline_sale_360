@@ -220,34 +220,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody>
-              {scopeOrders.slice(0, 7).map(order => (
-                <tr key={order.id}>
-                  <td><strong style={{ color: '#38bdf8' }}>{order.order_number}</strong></td>
-                  <td>{order.company_name}</td>
-                  <td>{order.agency_name}</td>
-                  <td>
-                    {order.invoice_number ? (
-                      <div>
-                        <span style={{ color: '#34d399', fontWeight: 800 }}>✅ BILLING DONE</span>
-                        <div style={{ color: '#fbbf24', fontSize: '0.7rem', marginTop: 2 }}>{order.invoice_number}</div>
-                      </div>
-                    ) : (
-                      <span style={{ color: '#94a3b8', fontWeight: 700 }}>⏳ BILLING PENDING</span>
-                    )}
-                  </td>
-                  <td><strong style={{ color: '#38bdf8' }}>{order.invoice_number ? `${(order.billing_total_qty || 0).toLocaleString()} PCS` : '—'}</strong></td>
-                  <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
-                  <td>
-                    <button 
-                      className="btn btn-outline" 
-                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                      onClick={() => onSelectOrder(order)}
-                    >
-                      Inspect
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {scopeOrders.slice(0, 7).map(order => {
+                const billingQty = (order.billing_total_qty != null && order.billing_total_qty > 0)
+                  ? order.billing_total_qty
+                  : (order.items || []).reduce((sum, it) => sum + (it.issued_qty_pcs || it.total_qty_pcs || 0), 0)
+                  || order.total_qty_pcs
+                  || 0;
+
+                return (
+                  <tr key={order.id}>
+                    <td><strong style={{ color: '#38bdf8' }}>{order.order_number}</strong></td>
+                    <td>{order.company_name}</td>
+                    <td>{order.agency_name}</td>
+                    <td>
+                      {order.invoice_number ? (
+                        <div>
+                          <span style={{ color: '#34d399', fontWeight: 800 }}>✅ BILLING DONE</span>
+                          <div style={{ color: '#fbbf24', fontSize: '0.7rem', marginTop: 2 }}>{order.invoice_number}</div>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontWeight: 700 }}>⏳ BILLING PENDING</span>
+                      )}
+                    </td>
+                    <td><strong style={{ color: '#38bdf8' }}>{order.invoice_number ? `${billingQty.toLocaleString()} PCS` : '—'}</strong></td>
+                    <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
+                    <td>
+                      <button 
+                        className="btn btn-outline" 
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                        onClick={() => onSelectOrder(order)}
+                      >
+                        Inspect
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
