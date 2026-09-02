@@ -159,7 +159,7 @@ export const HoldReasonDirectoryModal: React.FC<HoldReasonDirectoryModalProps> =
               <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 Hold Reason Directory & Governance
                 <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem', borderRadius: 20, background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', fontWeight: 800 }}>
-                  {heldOrders.length} Held Orders
+                  {heldOrders.length} Orders on Hold
                 </span>
               </h2>
               <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0.2rem 0 0 0' }}>
@@ -194,7 +194,7 @@ export const HoldReasonDirectoryModal: React.FC<HoldReasonDirectoryModalProps> =
                 cursor: 'pointer'
               }}
             >
-              <AlertTriangle size={15} /> 1. Held Orders ({heldOrders.length})
+              <AlertTriangle size={15} /> 1. Orders on Hold ({heldOrders.length})
             </button>
 
             <button
@@ -300,7 +300,7 @@ export const HoldReasonDirectoryModal: React.FC<HoldReasonDirectoryModalProps> =
                 </div>
               ) : filteredHeldOrders.length === 0 ? (
                 <div style={{ padding: '2.5rem', textAlign: 'center', background: '#0b1329', borderRadius: 12, color: '#94a3b8' }}>
-                  No held orders match your search or category filter.
+                  No orders on hold match your search or category filter.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>

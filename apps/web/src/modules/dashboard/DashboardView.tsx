@@ -78,7 +78,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             className="btn btn-outline" 
             onClick={() => setIsHoldDirectoryOpen(true)}
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#f59e0b', color: '#fbbf24', fontWeight: 700 }}
-            title="Open Hold Reason Directory & Held Orders Review"
+            title="Open Hold Reason Directory & Orders on Hold Review"
           >
             <AlertTriangle size={16} /> Hold Reason Directory {heldOrders.length > 0 ? `(${heldOrders.length})` : ''}
           </button>
@@ -164,7 +164,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             background: heldOrders.length > 0 ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(15, 23, 42, 0.6))' : undefined,
             transition: 'all 0.15s ease'
           }}
-          title="Click to open Hold Reason Directory & Held Orders Review"
+          title="Click to open Hold Reason Directory & Orders on Hold Review"
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
