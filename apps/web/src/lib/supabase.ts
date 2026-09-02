@@ -1091,6 +1091,7 @@ export const fetchAgenciesFromSupabaseTable = async (): Promise<{ agencies: Agen
       const code = row.agency_code || row.party_code || row.code || `AG-SUR-${(idx + 1).toString().padStart(3, '0')}`;
       const city = row.city || row.district || row.location || 'N/A';
       const area = row.area_name || row.area || row.locality || city;
+      const pincode = row.pincode || row.pin_code || row.postal_code || row.zip_code || row.pin || '';
       const gstin = row.gstin || row.gst_number || row.gst || 'N/A';
       const group = row.account_group || row.group || row.segment || 'N/A';
       const contact = row.contact_person || row.contact || row.owner_name || 'N/A';
@@ -1107,6 +1108,8 @@ export const fetchAgenciesFromSupabaseTable = async (): Promise<{ agencies: Agen
         area_id: row.area_id || undefined,
         area_name: area,
         city: city,
+        pincode: pincode,
+        pin_code: pincode,
         gstin: gstin,
         gst_number: gstin,
         account_group: group,
@@ -1137,6 +1140,7 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
     const nowIso = new Date().toISOString();
     const agencyCity = agency.city || 'Surat';
     const agencyArea = agency.area_name || agencyCity;
+    const agencyPincode = agency.pincode || agency.pin_code || null;
 
     let targetId = isValidUuid(agency.id) ? agency.id : null;
 
@@ -1167,6 +1171,7 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
       agency_name: agency.agency_name,
       city: agencyCity,
       area_name: agencyArea,
+      pincode: agencyPincode,
       gstin: agency.gstin || agency.gst_number || null,
       gst_number: agency.gstin || agency.gst_number || null,
       account_group: agency.account_group || 'FMCG',
@@ -1193,7 +1198,18 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
       payload.area_id = agency.area_id;
     }
 
-    const { data, error } = await supabase.from('agencies').upsert([payload]).select();
+    let { data, error } = await supabase.from('agencies').upsert([payload]).select();
+
+    // If column pincode is missing in remote database, fallback to core payload without failing
+    if (error && (error.code === 'PGRST204' || (error.message && error.message.includes('pincode')))) {
+      console.warn('agencies table missing pincode column in Supabase, retrying without it:', error.message);
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.pincode;
+      const retryRes = await supabase.from('agencies').upsert([fallbackPayload]).select();
+      data = retryRes.data;
+      error = retryRes.error;
+    }
+
     if (error) {
       // If error is duplicate name or unique constraint violation, update existing record matching agency_name
       if (error.message.includes('unique constraint') || error.code === '23505') {
@@ -1213,7 +1229,7 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
     return { success: true, error: null, data };
   } catch (err: any) {
     console.error('Error saving agency to Supabase:', err?.message || err);
-    return { success: false, error: err?.message || 'Failed to save agency to Supabase' };
+    return { success: false, error: err?.message || 'Failed to save agency' };
   }
 };
 
@@ -1221,12 +1237,10 @@ export const deleteAgencyFromSupabase = async (agencyId: string): Promise<{ succ
   try {
     const { error } = await supabase.from('agencies').delete().eq('id', agencyId);
     if (error) {
-      console.error('Supabase deleteAgency error:', error.message);
       return { success: false, error: error.message };
     }
     return { success: true, error: null };
   } catch (err: any) {
-    console.error('Error deleting agency from Supabase:', err?.message || err);
     return { success: false, error: err?.message || 'Failed to delete agency' };
   }
 };
@@ -1237,6 +1251,8 @@ export const registerNewAgency = (newAgencyData: {
   company_id?: string;
   city: string;
   area_name?: string;
+  pincode?: string;
+  pin_code?: string;
   gstin?: string;
   account_group?: string;
   contact_person?: string;
@@ -1251,6 +1267,7 @@ export const registerNewAgency = (newAgencyData: {
 }): Agency => {
   const autoZone = resolveZoneForAreaAndCity(newAgencyData.area_name, newAgencyData.city);
   const agencyCode = newAgencyData.agency_code?.trim() || generateNewAgencyCode(newAgencyData.city);
+  const pin = (newAgencyData.pincode || newAgencyData.pin_code || '').trim();
 
   const agencyRecord: Agency = {
     id: generateUuid(),
@@ -1259,6 +1276,8 @@ export const registerNewAgency = (newAgencyData: {
     agency_name: newAgencyData.agency_name.trim(),
     city: newAgencyData.city.trim(),
     area_name: (newAgencyData.area_name || newAgencyData.city).trim(),
+    pincode: pin,
+    pin_code: pin,
     gstin: newAgencyData.gstin?.trim() || '',
     gst_number: newAgencyData.gstin?.trim() || '',
     account_group: newAgencyData.account_group || 'FMCG',

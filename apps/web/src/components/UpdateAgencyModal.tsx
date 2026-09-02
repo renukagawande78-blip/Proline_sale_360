@@ -123,6 +123,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
 
   const [city, setCity] = useState('Surat');
   const [areaName, setAreaName] = useState('Katargam');
+  const [pincode, setPincode] = useState('');
   const [assignedSalesperson, setAssignedSalesperson] = useState('');
 
   const [bankName, setBankName] = useState('HDFC Bank');
@@ -187,16 +188,16 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
     if (agency) {
       setAgencyName(agency.agency_name || '');
       setAgencyCode(agency.agency_code || '');
-      setCompanyId(agency.company_id || 'c01');
+      setCompanyId(agency.company_id || MOCK_COMPANIES[0]?.id || 'c01');
       setAccountGroup(agency.account_group || 'FMCG');
       setGstin(agency.gstin || agency.gst_number || '');
       setContactPerson(agency.contact_person || '');
       setMobile(agency.mobile || '');
       setEmail(agency.email || '');
       setCity(agency.city || 'Surat');
-      const canonical = normalizeAreaName(agency.area_name);
-      setAreaName(canonical || agency.area_name || 'Katargam');
-      setAssignedSalesperson(agency.assigned_salesperson || 'Chirag Patel');
+      setAreaName(agency.area_name || 'Katargam');
+      setPincode(agency.pincode || agency.pin_code || '');
+      setAssignedSalesperson(agency.assigned_salesperson || '');
       setBankName(agency.bank_name || 'HDFC Bank');
       setAccountNumber(agency.account_number || '');
       setIfscCode(agency.ifsc_code || '');
@@ -255,6 +256,8 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
       email: email.trim(),
       city: city.trim(),
       area_name: areaName.trim() || city.trim(),
+      pincode: pincode.trim(),
+      pin_code: pincode.trim(),
       assigned_salesperson: assignedSalesperson.trim(),
       bank_name: bankName.trim(),
       account_number: accountNumber.trim(),
@@ -416,7 +419,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
           <section style={{ background: '#0a1525', border: '1px solid #1e293b', borderRadius: 14, padding: '1.15rem' }}>
             <SectionHeader icon={MapPin} label="3 · Territory, City & Auto-Zone Assignment" color="52,211,153" />
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 0.9fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                   <FieldLabel required>City</FieldLabel>
@@ -525,6 +528,16 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
                     <option key={idx} value={a}>{a}</option>
                   ))}
                 </FieldSelect>
+              </div>
+
+              <div>
+                <FieldLabel>PIN Code</FieldLabel>
+                <FieldInput
+                  value={pincode}
+                  onChange={(v) => setPincode(v.replace(/\D/g, ''))}
+                  placeholder="e.g. 395004"
+                  mono
+                />
               </div>
             </div>
 

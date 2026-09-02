@@ -284,6 +284,8 @@ export interface Agency {
   area_id?: string;
   area_name?: string;
   city?: string;
+  pincode?: string;
+  pin_code?: string;
   address?: string;
   contact_person?: string;
   mobile?: string;

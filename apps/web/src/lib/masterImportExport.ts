@@ -58,6 +58,7 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
       { key: 'account_group', header: 'Agency Type / Segment (FMCG / FMCD)', example: 'FMCG' },
       { key: 'area_name', header: 'Area / Territory', example: 'Parle Point' },
       { key: 'city', header: 'City', example: 'Surat' },
+      { key: 'pincode', header: 'PIN Code', example: '395007' },
       { key: 'contact_person', header: 'Contact Person', example: 'Ramesh Patel' },
       { key: 'mobile', header: 'Mobile', example: '9898012345' },
       { key: 'email', header: 'Email', example: 'ramesh@shreeram.com' },
@@ -72,6 +73,7 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
         account_group: 'FMCG',
         area_name: 'Parle Point',
         city: 'Surat',
+        pincode: '395007',
         contact_person: 'Ramesh Patel',
         mobile: '9898012345',
         email: 'ramesh@shreeram.com',
@@ -85,6 +87,7 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
         account_group: 'FMCD',
         area_name: 'Piplod Hub',
         city: 'Surat',
+        pincode: '395007',
         contact_person: 'Jayeshbhai Shah',
         mobile: '9879054321',
         email: 'info@jayambe.com',
@@ -98,6 +101,7 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
         account_group: 'FMCG, FMCD',
         area_name: 'Vapi GIDC',
         city: 'Vapi',
+        pincode: '396195',
         contact_person: 'Hareshbhai Mehta',
         mobile: '9825011223',
         email: 'ambica.vapi@gmail.com',
@@ -335,6 +339,18 @@ export const parseCSVContent = (csvText: string, masterType: MasterType): { succ
   // Map headers to schema keys with aliases support
   const keyMap: Record<number, string> = {};
   rawHeaders.forEach((h, idx) => {
+    // Check aliases for agencies
+    if (masterType === 'agencies') {
+      if (h === 'pincode' || h === 'pin code' || h === 'pin_code' || h === 'pin' || h === 'postal code' || h === 'zip code' || h === 'zip' || h === 'oin cide') keyMap[idx] = 'pincode';
+      else if (h === 'agency code' || h === 'agency_code' || h === 'party code' || h === 'code') keyMap[idx] = 'agency_code';
+      else if (h === 'agency name' || h === 'agency_name' || h === 'party name' || h === 'name') keyMap[idx] = 'agency_name';
+      else if (h === 'area' || h === 'area / territory' || h === 'area name' || h === 'territory' || h === 'locality') keyMap[idx] = 'area_name';
+      else if (h === 'city' || h === 'city name') keyMap[idx] = 'city';
+      else if (h === 'mobile' || h === 'phone' || h === 'contact number' || h === 'mobile number') keyMap[idx] = 'mobile';
+      else if (h === 'gstin' || h === 'gst' || h === 'gst number' || h === 'gstin number') keyMap[idx] = 'gstin';
+      else if (h === 'credit limit' || h === 'credit limit (inr)') keyMap[idx] = 'credit_limit';
+    }
+
     // Check aliases for products
     if (masterType === 'products') {
       if (h === 'product' || h === 'product name' || h === 'product_name') keyMap[idx] = 'product_name';

@@ -268,6 +268,8 @@ export const MastersPage: React.FC<MastersPageProps> = ({
         agency_name: r.agency_name || 'Imported Agency',
         city: r.city || 'Surat',
         area_name: r.area_name || 'Central Zone',
+        pincode: r.pincode || r.pin_code || '',
+        pin_code: r.pincode || r.pin_code || '',
         contact_person: r.contact_person || 'Haresh Patel',
         mobile: r.mobile || '9898000000',
         email: r.email || 'party@proline.com',

@@ -51,6 +51,7 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
   // Location & Territory
   const [city, setCity] = useState('Surat');
   const [areaName, setAreaName] = useState('Katargam');
+  const [pincode, setPincode] = useState('');
 
   // Approved Credit Limit (Default 0)
   const [creditLimit, setCreditLimit] = useState<number>(0);
@@ -227,6 +228,8 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
       company_id: companyId,
       city: city.trim(),
       area_name: areaName.trim() || city.trim(),
+      pincode: pincode.trim(),
+      pin_code: pincode.trim(),
       account_group: accountGroup,
       gstin: gstin.trim().toUpperCase(),
       contact_person: contactPerson.trim() || '',
@@ -753,7 +756,7 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
               <span>3. Location, Territory Auto-Zone & Credit Terms</span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 0.9fr', gap: '0.85rem' }}>
               {/* City Selection Dropdown & Inline Add Button */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
@@ -953,6 +956,41 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Postal PIN Code */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Postal PIN Code
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <MapPin size={16} color="#64748b" />
+                  <input
+                    type="text"
+                    placeholder="e.g. 395004"
+                    maxLength={6}
+                    value={pincode}
+                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#fbbf24',
+                      fontSize: '0.825rem',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      width: '100%'
+                    }}
+                  />
                 </div>
               </div>
             </div>

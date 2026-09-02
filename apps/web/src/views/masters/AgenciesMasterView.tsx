@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Store, Plus, Landmark, UserCheck, Edit3, Trash2, FileSpreadsheet, DollarSign, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { Store, Plus, Landmark, UserCheck, Edit3, Trash2, FileSpreadsheet, DollarSign, RefreshCw, Check, AlertCircle, AlertTriangle, Upload, Download } from 'lucide-react';
 import { Agency } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { RegisterAgencyModal } from '../../components/RegisterAgencyModal';
 import { UpdateAgencyModal } from '../../components/UpdateAgencyModal';
 import { UpdatePartyBalanceModal } from '../../components/UpdatePartyBalanceModal';
 import { BulkImportModal } from '../../components/BulkImportModal';
-import { downloadSampleCSV } from '../../lib/masterImportExport';
+import { downloadSampleCSV, exportMasterCSV } from '../../lib/masterImportExport';
 import { 
   checkIsSuperAdmin, 
   fetchAgenciesFromSupabaseTable, 
@@ -29,11 +29,15 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedAgencyToEdit, setSelectedAgencyToEdit] = useState<Agency | null>(null);
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);
   const [isSyncing, setIsSyncing] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const handleDownloadAgencyCSV = () => {
+    exportMasterCSV('agencies', localAgencies);
+  };
 
   useEffect(() => {
     if (agencies) {
@@ -108,6 +112,7 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
     (a.city || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (a.agency_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (a.zone_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (a.pincode || a.pin_code || '').includes(searchQuery) ||
     (a.assigned_salesperson || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (a.contact_person || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -138,111 +143,92 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
       />
 
       <BulkImportModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
         masterType="agencies"
-        onImportSuccess={() => {
-          handleSyncLiveAgencies();
+        onImportSuccess={(importedData) => {
+          const formatted: Agency[] = importedData.map((r: any, i: number) => ({
+            id: 'ag_imp_' + Date.now() + '_' + i,
+            agency_code: r.agency_code || `AG-${Math.floor(1000 + Math.random() * 9000)}`,
+            agency_name: r.agency_name || 'Imported Agency',
+            city: r.city || 'Surat',
+            area_name: r.area_name || 'Central Zone',
+            pincode: r.pincode || r.pin_code || '',
+            contact_person: r.contact_person || 'Haresh Patel',
+            mobile: r.mobile || '9898000000',
+            email: r.email || 'party@proline.com',
+            gstin: r.gstin || '24AAACI1234F1Z9',
+            credit_limit: Number(r.credit_limit) || 250000,
+            assigned_salesperson: r.assigned_salesperson || 'Chirag Patel'
+          }));
+          setLocalAgencies(prev => [...formatted, ...prev]);
+          setSuccessNotice(`Successfully imported ${formatted.length} Agencies / B2B Parties into live view!`);
+          setTimeout(() => setSuccessNotice(null), 4000);
         }}
       />
 
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Agency / Party Master Directory</h2>
+          <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+            Registered Sales Agencies, B2B Superstockists & Authorized Dealers ({activeAgencyList.length})
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button 
+            className="btn btn-outline"
+            onClick={() => setIsBulkImportOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#fbbf24', color: '#fbbf24', fontWeight: 700, fontSize: '0.8rem' }}
+          >
+            <Upload size={14} /> Bulk Import Agencies CSV
+          </button>
+          <button 
+            className="btn btn-outline"
+            onClick={handleDownloadAgencyCSV}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#34d399', color: '#34d399', fontWeight: 700, fontSize: '0.8rem' }}
+          >
+            <Download size={14} /> Export Agencies CSV
+          </button>
+        </div>
+      </div>
+
       {fetchError && (
         <div style={{
-          background: 'rgba(244, 63, 94, 0.15)',
-          border: '1px solid rgba(244, 63, 94, 0.4)',
-          color: '#fb7185',
-          padding: '0.85rem 1.15rem',
-          borderRadius: '12px',
-          fontSize: '0.85rem',
-          fontWeight: 800,
+          background: 'rgba(239, 68, 68, 0.15)',
+          border: '1px solid rgba(239, 68, 68, 0.4)',
+          color: '#f87171',
+          padding: '0.85rem 1rem',
+          borderRadius: 10,
+          fontSize: '0.825rem',
+          fontWeight: 700,
           marginBottom: '1rem',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.65rem'
+          gap: '0.5rem'
         }}>
-          <AlertCircle size={18} /> ⚠️ Supabase Database Fetch Error: {fetchError}
+          <AlertTriangle size={18} />
+          <span>Database connection notice: {fetchError}. Displaying local cached records.</span>
         </div>
       )}
 
       {successNotice && (
         <div style={{
-          background: 'rgba(52, 211, 153, 0.15)',
-          border: '1px solid rgba(52, 211, 153, 0.4)',
+          background: 'rgba(16, 185, 129, 0.15)',
+          border: '1px solid #10b981',
           color: '#34d399',
-          padding: '0.85rem 1.15rem',
-          borderRadius: '12px',
-          fontSize: '0.85rem',
-          fontWeight: 800,
+          padding: '0.85rem 1rem',
+          borderRadius: 10,
+          fontSize: '0.825rem',
+          fontWeight: 700,
           marginBottom: '1rem',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.65rem'
+          gap: '0.5rem'
         }}>
           <Check size={18} /> {successNotice}
         </div>
       )}
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <button
-          onClick={handleSyncLiveAgencies}
-          disabled={isSyncing}
-          title="Fetch latest agency records directly from live Supabase agencies table"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.55rem 1rem',
-            background: 'rgba(56, 189, 248, 0.15)',
-            color: '#38bdf8',
-            border: '1px solid rgba(56, 189, 248, 0.4)',
-            fontWeight: 800,
-            fontSize: '0.8rem',
-            borderRadius: '10px',
-            cursor: isSyncing ? 'not-allowed' : 'pointer'
-          }}
-        >
-          <RefreshCw size={15} className={isSyncing ? 'spin-anim' : ''} /> {isSyncing ? 'Syncing...' : '🔄 Sync Live DB'}
-        </button>
-        <button
-          onClick={() => setIsBalanceModalOpen(true)}
-          title="Bulk update party balances & credit limits for today's billing cycle"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.55rem 1rem',
-            background: 'rgba(251, 191, 36, 0.1)',
-            color: '#fbbf24',
-            border: '1px solid rgba(251, 191, 36, 0.3)',
-            fontWeight: 800,
-            fontSize: '0.8rem',
-            borderRadius: '10px',
-            cursor: 'pointer'
-          }}
-        >
-          <DollarSign size={15} /> Bulk Update Balances
-        </button>
-
-        <button
-          onClick={() => setIsRegisterModalOpen(true)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.55rem 1.15rem',
-            background: 'linear-gradient(135deg, #10b981, #059669)',
-            color: 'white',
-            fontWeight: 800,
-            fontSize: '0.825rem',
-            borderRadius: '10px',
-            border: 'none',
-            cursor: 'pointer',
-            boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
-          }}
-        >
-          <Plus size={16} /> Register New Sales Agency
-        </button>
-      </div>
 
       <div className="data-table-container">
         <table className="data-table">
@@ -251,6 +237,7 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
               <th>Code</th>
               <th>Agency / Party Name</th>
               <th>Zone & Territory</th>
+              <th>PIN Code</th>
               <th>GSTIN & Account Group</th>
               <th>Contact Person & Mobile</th>
               <th>Assigned Salesperson</th>
@@ -286,6 +273,24 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
                     <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8', marginTop: a.zone_name ? 3 : 0 }}>
                       {a.area_name ? `${a.area_name}, ` : ''}{a.city || 'Gujarat'}
                     </div>
+                  </td>
+                  <td>
+                    {a.pincode || a.pin_code ? (
+                      <code style={{ 
+                        color: '#fbbf24', 
+                        fontWeight: 800, 
+                        fontSize: '0.75rem', 
+                        background: 'rgba(251, 191, 36, 0.1)', 
+                        padding: '0.2rem 0.5rem', 
+                        borderRadius: 6, 
+                        border: '1px solid rgba(251, 191, 36, 0.25)',
+                        letterSpacing: '0.05em'
+                      }}>
+                        {a.pincode || a.pin_code}
+                      </code>
+                    ) : (
+                      <span style={{ color: '#64748b', fontSize: '0.725rem' }}>—</span>
+                    )}
                   </td>
                   <td>
                     <code style={{ background: '#0f172a', padding: '0.2rem 0.5rem', borderRadius: 4, color: '#34d399', fontSize: '0.75rem' }}>{a.gstin || a.gst_number || 'N/A'}</code>
