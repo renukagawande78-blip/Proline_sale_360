@@ -630,7 +630,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                         )}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: isAlreadyChosen ? '#64748b' : '#34d399', marginTop: 2, fontWeight: 600 }}>
-                        Company: {parentCompany?.company_name || 'General'} | Code: {p.product_code} | Pack: {p.pcs_per_box} pcs/box | ₹{p.unit_price || p.mrp_price || 0}
+                        Company: {parentCompany?.company_name || 'General'} | Code: {p.product_code} | Pack: {p.pcs_per_box} pcs/box | MRP: ₹{p.mrp_price ?? p.unit_price ?? 0}
                       </div>
                     </div>
                     {isSelected && <Check size={16} color="#38bdf8" />}
@@ -1005,7 +1005,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         ...updated[index],
         product_id: prod.id,
         pcs_per_box: prod.pcs_per_box || 1,
-        unit_price: prod.unit_price || prod.mrp_price || 0,
+        unit_price: prod.unit_price !== undefined && prod.unit_price !== null ? prod.unit_price : (prod.mrp_price || 0),
         // When salesperson adds/selects product, revise details and set minimum quantity of 1 box
         box_qty: currentBoxQty > 0 ? currentBoxQty : 1
       };
@@ -1067,8 +1067,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     const freePcs = item.free_pcs || 0;
     const pcsPerBox = prod?.pcs_per_box || item.pcs_per_box || 1;
     const totalQtyPcs = item.product_id ? ((boxQty * pcsPerBox) + freePcs) : 0;
-    const unitPrice = item.unit_price || prod?.unit_price || prod?.mrp_price || 0;
-    const mrpPrice = prod?.mrp_price || (unitPrice > 0 ? Math.round(unitPrice * 1.15) : 0);
+    const mrpPrice = (prod?.mrp_price !== undefined && prod?.mrp_price !== null && Number(prod.mrp_price) > 0)
+      ? Number(prod.mrp_price)
+      : (prod?.unit_price !== undefined && prod?.unit_price !== null && Number(prod.unit_price) > 0)
+        ? Number(prod.unit_price)
+        : Number(item.unit_price || 0);
+    const unitPrice = (item.unit_price !== undefined && item.unit_price !== null && Number(item.unit_price) > 0)
+      ? Number(item.unit_price)
+      : (prod?.unit_price !== undefined && prod?.unit_price !== null && Number(prod.unit_price) > 0)
+        ? Number(prod.unit_price)
+        : mrpPrice;
     const totalPrice = (boxQty * pcsPerBox) * unitPrice;
 
     return {

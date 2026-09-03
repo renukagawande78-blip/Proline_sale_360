@@ -1363,8 +1363,11 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
     if (!data || data.length === 0) return [];
     return data.map((p: any, idx: number) => {
       const pcsPerBox = Number(p.pcs_per_box || 1);
-      const mrp = Number(p.mrp_price || p.mrp || p.unit_price || 100);
-      const unit = Number(p.unit_price || p.price || p.mrp_price || 80);
+      const rawMrp = p.mrp_price !== undefined && p.mrp_price !== null ? p.mrp_price : (p.mrp !== undefined && p.mrp !== null ? p.mrp : null);
+      const rawUnit = p.unit_price !== undefined && p.unit_price !== null ? p.unit_price : (p.price !== undefined && p.price !== null ? p.price : null);
+
+      const mrp = rawMrp !== null ? Number(rawMrp) : (rawUnit !== null ? Number(rawUnit) : 100);
+      const unit = rawUnit !== null ? Number(rawUnit) : (rawMrp !== null ? Number(rawMrp) : 80);
 
       const compName = p.Product_Company_Name || p.company_name || '';
 
