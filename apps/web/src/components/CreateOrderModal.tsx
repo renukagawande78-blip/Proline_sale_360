@@ -991,12 +991,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     // Avoid multiple duplicate product selection
     const isAlreadySelected = items.some((item, i) => i !== index && item.product_id === productId);
     if (isAlreadySelected) {
-      alert('This product SKU is already added to this order. Please adjust box quantity on that row instead.');
+      alert('This product SKU is already added to this order. Please adjust quantity on that row instead.');
       return;
     }
 
     const prod = activeProductsPool.find(p => p.id === productId) || MOCK_PRODUCTS.find(p => p.id === productId);
     if (!prod) return;
+
+    const parentCompany = activeCompaniesPool.find(c => c.id === prod.company_id);
+    const prodSegment = (prod.segment || parentCompany?.segment || (selectedSegments.length === 1 ? selectedSegments[0] : 'FMCG')).toUpperCase();
+    const isFMCD = prodSegment.includes('FMCD') && !prodSegment.includes('FMCG');
 
     setItems(prev => {
       const updated = [...prev];
@@ -1005,11 +1009,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       updated[index] = {
         ...updated[index],
         product_id: prod.id,
-        pcs_per_box: prod.pcs_per_box || 1,
+        pcs_per_box: prod.pcs_per_box || (isFMCD ? 1 : 24),
         unit_price: prod.unit_price !== undefined && prod.unit_price !== null ? prod.unit_price : (prod.mrp_price || 0),
-        // If both box and loose pcs are 0, initialize to 1 box
-        box_qty: (currentBoxQty === 0 && currentLoosePcs === 0) ? 1 : currentBoxQty,
-        loose_pcs: currentLoosePcs
+        // For FMCD: strictly PCS, 0 box required
+        // For FMCG: default to 1 BOX if both are 0
+        box_qty: isFMCD ? 0 : ((currentBoxQty === 0 && currentLoosePcs === 0) ? 1 : currentBoxQty),
+        loose_pcs: isFMCD ? (currentLoosePcs > 0 ? currentLoosePcs : (currentBoxQty > 0 ? currentBoxQty : 1)) : currentLoosePcs
       };
       return updated;
     });
@@ -1064,23 +1069,52 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       ? (activeProductsPool.find(p => p.id === item.product_id || (p.product_name && p.product_name === rawItem.product_name)) || null)
       : null;
 
-    const boxQty = item.box_qty || 0;
-    const loosePcs = item.loose_pcs || 0;
+    const parentCompany = activeCompaniesPool.find(c => c.id === prod?.company_id);
+    const prodSegment = (prod?.segment || parentCompany?.segment || (selectedSegments.length === 1 ? selectedSegments[0] : 'FMCG')).toUpperCase();
+    const isFMCD = prodSegment.includes('FMCD') && !prodSegment.includes('FMCG');
+
+    const boxQty = isFMCD ? 0 : (item.box_qty || 0);
+    const loosePcs = isFMCD ? (item.loose_pcs || item.box_qty || 0) : (item.loose_pcs || 0);
     const freePcs = item.free_pcs || 0;
-    const pcsPerBox = prod?.pcs_per_box || item.pcs_per_box || 1;
-    const billableQtyPcs = item.product_id ? ((boxQty * pcsPerBox) + loosePcs) : 0;
-    const totalQtyPcs = item.product_id ? (billableQtyPcs + freePcs) : 0;
+    const pcsPerBox = isFMCD ? 1 : (prod?.pcs_per_box || item.pcs_per_box || 1);
+    
+    // For FMCG: billable pieces = (boxQty * pcsPerBox) + loosePcs
+    // For FMCD: billable pieces = loosePcs (only pcs, no box required)
+    const billableQtyPcs = isFMCD ? loosePcs : ((boxQty * pcsPerBox) + loosePcs);
+    const totalQtyPcs = billableQtyPcs + freePcs;
+
     const mrpPrice = (prod?.mrp_price !== undefined && prod?.mrp_price !== null && Number(prod.mrp_price) > 0)
       ? Number(prod.mrp_price)
       : (prod?.unit_price !== undefined && prod?.unit_price !== null && Number(prod.unit_price) > 0)
         ? Number(prod.unit_price)
         : Number(item.unit_price || 0);
+
     const unitPrice = (item.unit_price !== undefined && item.unit_price !== null && Number(item.unit_price) > 0)
       ? Number(item.unit_price)
       : (prod?.unit_price !== undefined && prod?.unit_price !== null && Number(prod.unit_price) > 0)
         ? Number(prod.unit_price)
         : mrpPrice;
+
     const totalPrice = billableQtyPcs * unitPrice;
+
+    let formattedQtyDisplay = '—';
+    if (item.product_id) {
+      if (isFMCD) {
+        // FMCD = only pcs no box required
+        formattedQtyDisplay = `${loosePcs} PCS`;
+      } else {
+        // FMCG = BOX AND PCS (NO AUTO CONVERT IN PCS)
+        if (boxQty > 0 && loosePcs > 0) {
+          formattedQtyDisplay = `${boxQty} BOX, ${loosePcs} PCS`;
+        } else if (boxQty > 0) {
+          formattedQtyDisplay = `${boxQty} BOX`;
+        } else if (loosePcs > 0) {
+          formattedQtyDisplay = `${loosePcs} PCS`;
+        } else {
+          formattedQtyDisplay = '0 Qty';
+        }
+      }
+    }
 
     return {
       id: `item-${idx + 1}`,
@@ -1088,10 +1122,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       product_name: prod?.product_name || rawItem.product_name || '',
       product_code: prod?.product_code || rawItem.product_code || '',
       pcs_per_box: pcsPerBox,
+      is_fmcd: isFMCD,
       box_qty: boxQty,
       loose_pcs: loosePcs,
       free_pcs: freePcs,
       total_qty_pcs: totalQtyPcs,
+      formatted_qty_display: formattedQtyDisplay,
       dispatched_qty_pcs: 0,
       pending_qty_pcs: totalQtyPcs,
       unit_price: unitPrice,
@@ -1400,10 +1436,10 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <table className="data-table" style={{ fontSize: '0.825rem' }}>
             <thead>
               <tr>
-                <th style={{ width: 280 }}>Product / SKU Selection</th>
+                <th style={{ width: selectedSegments.length === 1 && selectedSegments.includes('FMCD') ? 340 : 280 }}>Product / SKU Selection</th>
                 <th style={{ textAlign: 'center', width: 90 }}>MRP Price</th>
-                <th style={{ textAlign: 'center', width: 85 }}>BOX Qty</th>
-                <th style={{ textAlign: 'center', width: 85 }}>PCS Qty</th>
+                {!(selectedSegments.length === 1 && selectedSegments.includes('FMCD')) && <th style={{ textAlign: 'center', width: 85 }}>BOX Qty</th>}
+                <th style={{ textAlign: 'center', width: 85 }}>{selectedSegments.length === 1 && selectedSegments.includes('FMCD') ? 'Quantity (PCS)' : 'PCS Qty'}</th>
                 <th style={{ textAlign: 'center', width: 85 }}>Free PCS</th>
                 <th style={{ textAlign: 'center', width: 140 }}>Ordered Qty</th>
                 <th style={{ width: 140 }}>Remark</th>
@@ -1429,16 +1465,24 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                     {item.product_id ? `₹${item.mrp_price}` : '—'}
                     {item.product_id ? <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>/ Pc</span> : null}
                   </td>
-                  <td>
-                    <input 
-                      type="number" 
-                      min="0"
-                      value={item.box_qty || ''}
-                      placeholder="0"
-                      onChange={e => handleQuantityChange(index, 'box_qty', parseInt(e.target.value) || 0)}
-                      style={{ width: 65, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
-                    />
-                  </td>
+                  {!(selectedSegments.length === 1 && selectedSegments.includes('FMCD')) && (
+                    <td>
+                      {item.is_fmcd ? (
+                        <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#64748b', fontStyle: 'italic', fontWeight: 600 }}>
+                          — (FMCD)
+                        </div>
+                      ) : (
+                        <input 
+                          type="number" 
+                          min="0"
+                          value={item.box_qty || ''}
+                          placeholder="0"
+                          onChange={e => handleQuantityChange(index, 'box_qty', parseInt(e.target.value) || 0)}
+                          style={{ width: 65, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', margin: '0 auto', display: 'block' }}
+                        />
+                      )}
+                    </td>
+                  )}
                   <td>
                     <input 
                       type="number" 
@@ -1463,23 +1507,18 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                     {item.product_id ? (
                       <div>
                         <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.85rem' }}>
-                          {item.box_qty > 0 && item.loose_pcs > 0 
-                            ? `${item.box_qty} BOX, ${item.loose_pcs} PCS`
-                            : item.box_qty > 0 
-                              ? `${item.box_qty} BOX`
-                              : item.loose_pcs > 0 
-                                ? `${item.loose_pcs} PCS`
-                                : '0 Qty'
-                          }
+                          {item.formatted_qty_display}
                         </div>
                         {item.free_pcs > 0 && (
                           <span style={{ display: 'inline-block', fontSize: '0.65rem', color: '#fbbf24', background: 'rgba(251,191,36,0.15)', padding: '0.1rem 0.35rem', borderRadius: 4, marginTop: 2, fontWeight: 700 }}>
                             + {item.free_pcs} Free PCS
                           </span>
                         )}
-                        <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: 2 }}>
-                          ({item.pcs_per_box} pcs/box)
-                        </div>
+                        {!item.is_fmcd && item.pcs_per_box > 1 && (
+                          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: 2 }}>
+                            ({item.pcs_per_box} pcs/box)
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <span style={{ color: '#64748b', fontSize: '0.85rem' }}>—</span>
@@ -1528,13 +1567,15 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 700, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
               <span>Total Order Volume:</span>
               <strong style={{ color: '#38bdf8', fontSize: '0.95rem' }}>
-                {totalBoxQty > 0 && totalLoosePcs > 0
-                  ? `${totalBoxQty} BOX, ${totalLoosePcs} PCS`
-                  : totalBoxQty > 0
-                    ? `${totalBoxQty} BOX`
-                    : totalLoosePcs > 0
-                      ? `${totalLoosePcs} PCS`
-                      : '0 Quantity'
+                {selectedSegments.length === 1 && selectedSegments.includes('FMCD')
+                  ? `${totalLoosePcs || totalQtyPcs || 0} PCS`
+                  : totalBoxQty > 0 && totalLoosePcs > 0
+                    ? `${totalBoxQty} BOX, ${totalLoosePcs} PCS`
+                    : totalBoxQty > 0
+                      ? `${totalBoxQty} BOX`
+                      : totalLoosePcs > 0
+                        ? `${totalLoosePcs} PCS`
+                        : '0 Quantity'
                 }
               </strong>
               {totalFreePcs > 0 && (

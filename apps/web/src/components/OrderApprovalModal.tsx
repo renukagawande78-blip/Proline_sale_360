@@ -123,9 +123,14 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
             { label: 'TERRITORY', value: order.area_name || '—', color: '#94a3b8' },
             { label: 'SALESPERSON', value: order.salesperson_name || 'Sales Rep', color: '#34d399' },
             { label: 'DELIVERY', value: order.delivery_type || 'F.O.R', color: '#fbbf24' },
-            { label: 'TOTAL BOXES', value: order.total_box_qty + ' Boxes', color: '#f8fafc' },
-            { label: 'TOTAL PCS', value: order.total_qty_pcs + ' PCS', color: '#38bdf8' },
-            { label: 'LOOSE PCS', value: (order.total_loose_pcs || 0) + ' PCS', color: '#94a3b8' },
+            ...(order.total_box_qty === 0 && (order.total_loose_pcs || 0) > 0 ? [
+              { label: 'ORDER QUANTITY', value: `${order.total_loose_pcs || order.total_qty_pcs || 0} PCS`, color: '#38bdf8' },
+              { label: 'SEGMENT', value: 'FMCD (Pure PCS)', color: '#34d399' }
+            ] : [
+              { label: 'TOTAL BOXES', value: order.total_box_qty + ' Boxes', color: '#f8fafc' },
+              { label: 'LOOSE PCS', value: (order.total_loose_pcs || 0) + ' PCS', color: '#94a3b8' },
+              { label: 'ORDERED QTY', value: order.total_box_qty > 0 && (order.total_loose_pcs || 0) > 0 ? `${order.total_box_qty} BOX, ${order.total_loose_pcs} PCS` : `${order.total_box_qty} BOX`, color: '#38bdf8' }
+            ])
           ].map(function(item) {
             return (
               <div key={item.label}>
@@ -155,19 +160,22 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
               </thead>
               <tbody>
                 {(order.items || []).map(function(item, idx) {
-                  const qtyDisplay = (item.box_qty > 0 && (item.loose_pcs || 0) > 0)
-                    ? `${item.box_qty} BOX, ${item.loose_pcs} PCS`
-                    : item.box_qty > 0
-                      ? `${item.box_qty} BOX`
-                      : `${item.loose_pcs || 0} PCS`;
+                  const isFMCDItem = item.box_qty === 0 && (item.loose_pcs || item.total_qty_pcs || 0) > 0;
+                  const qtyDisplay = isFMCDItem
+                    ? `${item.loose_pcs || item.total_qty_pcs} PCS`
+                    : (item.box_qty > 0 && (item.loose_pcs || 0) > 0)
+                      ? `${item.box_qty} BOX, ${item.loose_pcs} PCS`
+                      : item.box_qty > 0
+                        ? `${item.box_qty} BOX`
+                        : `${item.loose_pcs || 0} PCS`;
 
                   return (
                     <tr key={idx}>
                       <td><strong style={{ color: '#f8fafc' }}>{item.product_name || 'Product'}</strong></td>
                       <td><span style={{ color: '#fbbf24', fontWeight: 700 }}>{order.company_name}</span></td>
-                      <td style={{ textAlign: 'center' }}>{item.pcs_per_box} pcs/box</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.box_qty}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#38bdf8' }}>{item.loose_pcs || 0}</td>
+                      <td style={{ textAlign: 'center' }}>{isFMCDItem ? '1 pc (Unit)' : `${item.pcs_per_box} pcs/box`}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700 }}>{isFMCDItem ? '—' : item.box_qty}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#38bdf8' }}>{item.loose_pcs || (isFMCDItem ? item.total_qty_pcs : 0)}</td>
                       <td style={{ textAlign: 'center', fontWeight: 800, color: '#34d399' }}>
                         {qtyDisplay}
                         {(item.free_pcs || 0) > 0 && (
