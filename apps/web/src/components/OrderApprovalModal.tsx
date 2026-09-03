@@ -149,18 +149,33 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                   <th>Brand</th>
                   <th style={{ textAlign: 'center' }}>Pack</th>
                   <th style={{ textAlign: 'center' }}>Boxes</th>
-                  <th style={{ textAlign: 'center' }}>Total PCS</th>
+                  <th style={{ textAlign: 'center' }}>Loose PCS</th>
+                  <th style={{ textAlign: 'center' }}>Ordered Qty</th>
                 </tr>
               </thead>
               <tbody>
                 {(order.items || []).map(function(item, idx) {
+                  const qtyDisplay = (item.box_qty > 0 && (item.loose_pcs || 0) > 0)
+                    ? `${item.box_qty} BOX, ${item.loose_pcs} PCS`
+                    : item.box_qty > 0
+                      ? `${item.box_qty} BOX`
+                      : `${item.loose_pcs || 0} PCS`;
+
                   return (
                     <tr key={idx}>
                       <td><strong style={{ color: '#f8fafc' }}>{item.product_name || 'Product'}</strong></td>
                       <td><span style={{ color: '#fbbf24', fontWeight: 700 }}>{order.company_name}</span></td>
                       <td style={{ textAlign: 'center' }}>{item.pcs_per_box} pcs/box</td>
-                      <td style={{ textAlign: 'center' }}>{item.box_qty}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 800, color: '#34d399' }}>{item.total_qty_pcs}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.box_qty}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#38bdf8' }}>{item.loose_pcs || 0}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 800, color: '#34d399' }}>
+                        {qtyDisplay}
+                        {(item.free_pcs || 0) > 0 && (
+                          <span style={{ display: 'block', fontSize: '0.65rem', color: '#fbbf24' }}>
+                            + {item.free_pcs} Free
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

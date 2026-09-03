@@ -334,7 +334,12 @@ export const HoldReasonDirectoryModal: React.FC<HoldReasonDirectoryModalProps> =
                             ₹{(order.total_amount || 0).toLocaleString()}
                           </span>
                           <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                            ({order.total_box_qty || 0} Boxes / {order.total_qty_pcs || 0} PCS)
+                            ({order.total_box_qty > 0 && (order.total_loose_pcs || 0) > 0
+                              ? `${order.total_box_qty} Boxes, ${order.total_loose_pcs} PCS`
+                              : order.total_box_qty > 0
+                                ? `${order.total_box_qty} Boxes`
+                                : `${order.total_loose_pcs || order.total_qty_pcs || 0} PCS`
+                            })
                           </span>
                         </div>
                       </div>

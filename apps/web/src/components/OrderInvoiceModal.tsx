@@ -705,7 +705,16 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                         {item.remark && <div style={{ fontSize: '0.65rem', color: '#475569' }}>Note: {item.remark}</div>}
                       </td>
                       {showMrp && <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 700 }}>₹{item.unit_price}</td>}
-                      {showBoxQty && <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 900, fontSize: '0.8rem' }}>{item.box_qty}</td>}
+                      {showBoxQty && (
+                        <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 900, fontSize: '0.8rem' }}>
+                          {item.box_qty > 0 && (item.loose_pcs || 0) > 0 
+                            ? `${item.box_qty} Box + ${item.loose_pcs} Pcs`
+                            : item.box_qty > 0 
+                              ? `${item.box_qty} Box`
+                              : `${item.loose_pcs || 0} Pcs`
+                          }
+                        </td>
+                      )}
                       {showIssuedQty && (
                         <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 900, fontSize: '0.8rem', color: '#15803d', background: '#f0fdf4' }}>
                           {itemIssuedBoxes} Box{itemIssuedPcs % (item.pcs_per_box || 1) > 0 ? ` + ${itemIssuedPcs % (item.pcs_per_box || 1)} Pcs` : ''}
@@ -736,7 +745,10 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                   {showMrp && <td style={{ borderRight: '1px solid #000000' }}></td>}
                   {showBoxQty && (
                     <td style={{ borderRight: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontSize: '0.825rem', fontWeight: 900 }}>
-                      {order.total_box_qty} Boxes
+                      {order.total_box_qty > 0 && (order.total_loose_pcs || 0) > 0
+                        ? `${order.total_box_qty} Boxes + ${order.total_loose_pcs} Pcs`
+                        : `${order.total_box_qty || 0} Boxes`
+                      }
                     </td>
                   )}
                   {showIssuedQty && (

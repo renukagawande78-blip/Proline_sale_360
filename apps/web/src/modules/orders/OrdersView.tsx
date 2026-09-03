@@ -840,8 +840,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                     </td>
 
                     {/* Quantity */}
-                    <td style={{ textAlign: 'right', fontWeight: 900, color: '#10b981', fontSize: '0.875rem' }}>
-                      {Number(order.total_qty_pcs || 0).toLocaleString('en-IN')}
+                    <td style={{ textAlign: 'right', fontWeight: 900, color: '#10b981', fontSize: '0.825rem', whiteSpace: 'nowrap' }}>
+                      {order.total_box_qty > 0 && (order.total_loose_pcs || 0) > 0
+                        ? `${order.total_box_qty} BOX, ${order.total_loose_pcs} PCS`
+                        : order.total_box_qty > 0
+                          ? `${order.total_box_qty} BOX`
+                          : `${order.total_loose_pcs || order.total_qty_pcs || 0} PCS`
+                      }
                     </td>
 
                     {/* Section 6: Accounts Approval Badge */}
@@ -1812,7 +1817,14 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Total Quantity:</span>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24' }}>{cancelModalOrder.total_box_qty} Boxes ({cancelModalOrder.total_qty_pcs} PCS)</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24' }}>
+                  {cancelModalOrder.total_box_qty > 0 && (cancelModalOrder.total_loose_pcs || 0) > 0
+                    ? `${cancelModalOrder.total_box_qty} Boxes, ${cancelModalOrder.total_loose_pcs} PCS`
+                    : cancelModalOrder.total_box_qty > 0
+                      ? `${cancelModalOrder.total_box_qty} Boxes`
+                      : `${cancelModalOrder.total_loose_pcs || cancelModalOrder.total_qty_pcs || 0} PCS`
+                  }
+                </span>
               </div>
             </div>
 
