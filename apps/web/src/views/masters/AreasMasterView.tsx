@@ -20,14 +20,15 @@ import {
   Compass,
   ArrowRight,
   ShieldAlert,
-  Zap
+  Zap,
+  Hash
 } from 'lucide-react';
 import { AreaMaster, Agency } from '../../types';
 import { 
   fetchAreasFromSupabaseTable, 
   saveAreaToSupabase, 
   deleteAreaFromSupabase, 
-  deduplicateAreas,
+  deduplicateAreas, 
   saveAgencyToSupabase,
   supabase
 } from '../../lib/supabase';
@@ -35,6 +36,7 @@ import {
   OFFICIAL_ZONE_DEFINITIONS, 
   RAW_OFFICIAL_AREAS, 
   OFFICIAL_AREAS_MASTER, 
+  OFFICIAL_PINCODE_MASTER,
   resolveOfficialZone,
   normalizeAreaName
 } from '../../data/officialAreasData';
@@ -57,10 +59,11 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   const [localAgencies, setLocalAgencies] = useState<Agency[]>(agencies);
   const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
 
-  // Main Tab Navigation: Localities, Zone-wise, City-wise, Region-wise, Mapping Errors
-  const [activeMainTab, setActiveMainTab] = useState<'LOCALITIES' | 'ZONE_WISE' | 'CITY_WISE' | 'REGION_WISE' | 'MAPPING_ERRORS'>('LOCALITIES');
+  // Main Tab Navigation: Pincodes, Localities, Zone-wise, City-wise, Region-wise, Mapping Errors
+  const [activeMainTab, setActiveMainTab] = useState<'PINCODES' | 'LOCALITIES' | 'ZONE_WISE' | 'CITY_WISE' | 'REGION_WISE' | 'MAPPING_ERRORS'>('PINCODES');
   const [activeRegionFilter, setActiveRegionFilter] = useState<'ALL' | 'City' | 'Rural'>('ALL');
   const [selectedZoneFilter, setSelectedZoneFilter] = useState<'ALL' | string>('ALL');
+  const [pincodeZoneFilter, setPincodeZoneFilter] = useState<'ALL' | string>('ALL');
   const [viewMode, setViewMode] = useState<'GRID' | 'TABLE'>('GRID');
 
   // Selected Area Drawer for inspecting mapped parties
@@ -226,6 +229,34 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
       (a.region || '').toLowerCase().includes(q)
     );
   });
+
+  // Filtered Pincodes for Pincode Master View
+  const filteredPincodes = useMemo(() => {
+    return OFFICIAL_PINCODE_MASTER.filter(p => {
+      if (pincodeZoneFilter !== 'ALL' && p.zone_name !== pincodeZoneFilter) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
+        p.pincode.includes(q) ||
+        p.zone_name.toLowerCase().includes(q) ||
+        p.region_type.toLowerCase().includes(q) ||
+        p.covered_areas.toLowerCase().includes(q) ||
+        (p.review_highlight || '').toLowerCase().includes(q)
+      );
+    });
+  }, [pincodeZoneFilter, searchQuery]);
+
+  // Helper to get agencies mapped to a pincode
+  const getAgenciesForPincode = (pin: string) => {
+    const clean = pin.trim();
+    return localAgencies.filter(ag => {
+      const agPin = (ag.pincode || ag.pin_code || '').trim();
+      if (agPin === clean) return true;
+      const agAddr = (ag.address || '').trim();
+      if (agAddr.includes(clean)) return true;
+      return false;
+    });
+  };
 
   // Flexible agency matcher for an area
   const getAgenciesForArea = (areaName: string, areaCity?: string) => {
@@ -770,6 +801,26 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         overflowX: 'auto'
       }}>
         <button
+          onClick={() => setActiveMainTab('PINCODES')}
+          style={{
+            padding: '0.55rem 1.1rem',
+            borderRadius: 10,
+            border: 'none',
+            background: activeMainTab === 'PINCODES' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+            color: activeMainTab === 'PINCODES' ? '#ffffff' : '#94a3b8',
+            fontWeight: 800,
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <Hash size={15} /> South Gujarat Pincodes ({OFFICIAL_PINCODE_MASTER.length})
+        </button>
+
+        <button
           onClick={() => setActiveMainTab('LOCALITIES')}
           style={{
             padding: '0.55rem 1.1rem',
@@ -883,8 +934,42 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         borderRadius: '14px',
         border: '1px solid #1e293b'
       }}>
-        {/* Region Filters (for Localities View) */}
-        {activeMainTab === 'LOCALITIES' ? (
+        {/* Region Filters (for Localities View or Pincode View) */}
+        {activeMainTab === 'PINCODES' ? (
+          <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', background: '#0b1329', padding: '0.3rem 0.65rem', borderRadius: '10px', border: '1px solid #1e293b' }}>
+            <span style={{ fontSize: '0.725rem', fontWeight: 800, color: '#94a3b8' }}>Filter Zone:</span>
+            <select
+              value={pincodeZoneFilter}
+              onChange={e => setPincodeZoneFilter(e.target.value)}
+              style={{
+                background: '#141f36',
+                color: pincodeZoneFilter !== 'ALL' ? '#38bdf8' : '#cbd5e1',
+                border: '1px solid #334155',
+                borderRadius: 8,
+                padding: '0.35rem 0.65rem',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="ALL">All South Gujarat Zones ({OFFICIAL_PINCODE_MASTER.length} PIN Codes)</option>
+              <optgroup label="Surat City Zones">
+                <option value="City-A">City-A (11 Pincodes · Varachha, Katargam, Amroli)</option>
+                <option value="City-B">City-B (5 Pincodes · Textile Market, Puna, Yogichowk)</option>
+                <option value="City-C">City-C (6 Pincodes · Old City, Adajan, Rander, Hazira)</option>
+                <option value="City-D">City-D (4 Pincodes · Udhna, Dindoli, Pandesara, Sachin)</option>
+                <option value="City-E">City-E (3 Pincodes · Vesu, VIP Road, Althan, Parle Point)</option>
+              </optgroup>
+              <optgroup label="South Gujarat Rural Zones">
+                <option value="Upper South">Upper South (18 Pincodes · Vapi, Valsad, Daman, Silvassa)</option>
+                <option value="South">South (22 Pincodes · Navsari, Bilimora, Chikhli, Kadodara)</option>
+                <option value="East">East (11 Pincodes · Bardoli, Vyara, Songadh, Mandvi)</option>
+                <option value="North">North (14 Pincodes · Bharuch, Ankleshwar, Kamrej, Kim)</option>
+              </optgroup>
+            </select>
+          </div>
+        ) : activeMainTab === 'LOCALITIES' ? (
           <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b' }}>
             <button
               onClick={() => setActiveRegionFilter('ALL')}
@@ -1091,6 +1176,138 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* VIEW 0: SOUTH GUJARAT 94 PINCODE MASTER & COVERED AREAS */}
+      {/* ========================================================================= */}
+      {activeMainTab === 'PINCODES' && (
+        <div style={{ background: '#141f36', borderRadius: '16px', border: '1px solid #1e293b', overflow: 'hidden' }}>
+          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Hash size={18} color="#38bdf8" /> South Gujarat Pincode Master & Zone Breakdown
+              </h3>
+              <p style={{ fontSize: '0.775rem', color: '#94a3b8', margin: '4px 0 0 0' }}>
+                Showing <strong>{filteredPincodes.length}</strong> of <strong>{OFFICIAL_PINCODE_MASTER.length}</strong> Official Pincodes mapped across Surat City & South Gujarat Rural Zones.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: '#38bdf8', background: 'rgba(56,189,248,0.12)', padding: '0.35rem 0.75rem', borderRadius: 8, border: '1px solid rgba(56,189,248,0.25)', fontWeight: 800 }}>
+                📍 94 Verified Pincodes
+              </span>
+            </div>
+          </div>
+
+          <div className="data-table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '120px' }}>PIN Code</th>
+                  <th style={{ width: '130px' }}>Zone</th>
+                  <th style={{ width: '150px' }}>Region Type</th>
+                  <th>Covered Localities & Areas</th>
+                  <th style={{ width: '150px', textAlign: 'center' }}>Mapped Parties</th>
+                  <th style={{ width: '160px' }}>Mapping Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPincodes.map(p => {
+                  const mappedAgencies = getAgenciesForPincode(p.pincode);
+                  const isSurat = p.region_type === 'Surat City' || p.region === 'City';
+                  return (
+                    <tr key={p.pincode}>
+                      <td>
+                        <code style={{
+                          color: '#fbbf24',
+                          fontWeight: 900,
+                          fontSize: '0.85rem',
+                          background: 'rgba(251, 191, 36, 0.12)',
+                          padding: '0.25rem 0.6rem',
+                          borderRadius: 6,
+                          border: '1px solid rgba(251, 191, 36, 0.3)',
+                          letterSpacing: '0.05em'
+                        }}>
+                          {p.pincode}
+                        </code>
+                      </td>
+                      <td>
+                        <span style={{
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: 800,
+                          background: isSurat ? 'rgba(245, 158, 11, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                          color: isSurat ? '#fbbf24' : '#38bdf8',
+                          border: isSurat ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
+                        }}>
+                          {p.zone_name}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          color: isSurat ? '#fbbf24' : '#34d399'
+                        }}>
+                          {p.region_type}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {p.covered_areas.split(',').map((area, aIdx) => (
+                            <span key={aIdx} style={{
+                              fontSize: '0.725rem',
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: 4,
+                              background: '#0b1329',
+                              color: '#cbd5e1',
+                              border: '1px solid #1e293b',
+                              fontWeight: 600
+                            }}>
+                              {area.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={{
+                          fontSize: '0.775rem',
+                          fontWeight: 900,
+                          padding: '0.2rem 0.65rem',
+                          borderRadius: 20,
+                          background: mappedAgencies.length > 0 ? 'rgba(52, 211, 153, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+                          color: mappedAgencies.length > 0 ? '#34d399' : '#64748b',
+                          border: mappedAgencies.length > 0 ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid #334155'
+                        }}>
+                          {mappedAgencies.length} Parties
+                        </span>
+                      </td>
+                      <td>
+                        {p.review_highlight ? (
+                          <span style={{
+                            fontSize: '0.675rem',
+                            fontWeight: 800,
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: 6,
+                            background: 'rgba(244, 63, 94, 0.15)',
+                            color: '#fb7185',
+                            border: '1px solid rgba(244, 63, 94, 0.3)',
+                            textTransform: 'uppercase'
+                          }}>
+                            {p.review_highlight}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.725rem', color: '#64748b' }}>Verified</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* VIEW 1: MAPPING ERRORS & UNMAPPED AUDIT (Data Not Matched) */}

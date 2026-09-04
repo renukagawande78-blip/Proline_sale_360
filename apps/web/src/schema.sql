@@ -105,6 +105,9 @@ CREATE TABLE IF NOT EXISTS public.agencies (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE IF EXISTS public.agencies ADD COLUMN IF NOT EXISTS pincode TEXT;
+ALTER TABLE IF EXISTS public.agencies ADD COLUMN IF NOT EXISTS pin_code TEXT;
+ALTER TABLE IF EXISTS public.agencies ADD COLUMN IF NOT EXISTS address TEXT;
 ALTER TABLE IF EXISTS public.agencies DROP CONSTRAINT IF EXISTS agencies_agency_name_key;
 ALTER TABLE IF EXISTS public.agencies DROP CONSTRAINT IF EXISTS "agencies_agency_name_key";
 
