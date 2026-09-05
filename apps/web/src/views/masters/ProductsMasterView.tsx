@@ -9,6 +9,7 @@ import {
   generateNewBarcodeSKUCode, 
   checkIsSuperAdmin, 
   deleteProductFromSupabase, 
+  saveProductToSupabase,
   fetchProductsFromSupabase, 
   fetchCompaniesFromSupabase,
   deduplicateProducts,
@@ -38,6 +39,7 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
   const [segmentsList, setSegmentsList] = useState<SegmentOption[]>([]);
   const [selectedSegmentFilter, setSelectedSegmentFilter] = useState<string>('ALL');
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState<string>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
@@ -86,6 +88,21 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
     }
   };
 
+  const handleToggleProductStatus = async (prod: Product) => {
+    const nextStatus = prod.active === false ? true : false;
+    setLocalProducts(prev => prev.map(p => p.id === prod.id ? { ...p, active: nextStatus } : p));
+    try {
+      const { error } = await supabase.from('products').update({ active: nextStatus }).eq('id', prod.id);
+      if (error) {
+        await saveProductToSupabase({ ...prod, active: nextStatus });
+      }
+    } catch {
+      await saveProductToSupabase({ ...prod, active: nextStatus });
+    }
+    setSuccessNotice(`Product SKU "${prod.product_name}" marked ${nextStatus ? 'ACTIVE' : 'INACTIVE'} successfully in Supabase!`);
+    setTimeout(() => setSuccessNotice(null), 3000);
+  };
+
   const handleRegenerateSingleBarcode = (prod: Product) => {
     const comp = localCompanies.find(c => c.id === prod?.company_id);
     const newBarcode = generateNewBarcodeSKUCode(comp?.company_code || comp?.company_name || prod?.company_id || 'SKU');
@@ -97,9 +114,12 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
     ? localCompanies
     : localCompanies.filter(c => (c.segment || 'FMCG').toUpperCase() === selectedSegmentFilter.toUpperCase());
 
-  // Filter products: Segment > Companies > Search
+  // Filter products: Status > Segment > Companies > Search
   const filteredProducts = localProducts.filter(p => {
     if (!p) return false;
+    if (selectedStatusFilter === 'ACTIVE' && p.active === false) return false;
+    if (selectedStatusFilter === 'INACTIVE' && p.active !== false) return false;
+
     const parentComp = localCompanies.find(c => 
       c.id === p.company_id || 
       c.company_name?.toLowerCase() === (p.company_name || p.Product_Company_Name || '').toLowerCase()
@@ -132,6 +152,9 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
 
     return true;
   });
+
+  const totalActiveCount = localProducts.filter(p => p.active !== false).length;
+  const totalInactiveCount = localProducts.filter(p => p.active === false).length;
 
   return (
     <>
@@ -173,12 +196,26 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
       />
 
       {successNotice && (
-        <div style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#34d399', padding: '0.85rem 1rem', borderRadius: 8, fontSize: '0.85rem', marginBottom: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <CheckCircle2 size={18} /> {successNotice}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem',
+          padding: '0.85rem 1.15rem',
+          background: 'rgba(52, 211, 153, 0.12)',
+          border: '1.5px solid rgba(52, 211, 153, 0.35)',
+          borderRadius: 12,
+          fontSize: '0.85rem',
+          color: '#34d399',
+          fontWeight: 800,
+          marginBottom: '1rem',
+          boxShadow: '0 4px 20px rgba(52, 211, 153, 0.1)'
+        }}>
+          <CheckCircle2 size={18} color="#34d399" />
+          <span>{successNotice}</span>
         </div>
       )}
 
-      {/* CASCADING FILTER BAR: Segment ➔ Company ➔ Actions */}
+      {/* CASCADING FILTER BAR: Status, Segment, Company, Actions */}
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -186,15 +223,61 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
         alignItems: 'center',
         gap: '0.75rem',
         background: '#141f36',
-        padding: '0.75rem 1rem',
+        padding: '0.65rem 0.85rem',
         borderRadius: '14px',
         border: '1px solid #1e293b',
-        marginBottom: '1.25rem'
+        marginBottom: '1rem'
       }}>
-        {/* Left: Cascading Filter Dropdowns */}
-        <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           
-          {/* 1. Segment Filter */}
+          <div style={{ display: 'flex', gap: '0.25rem', background: '#0b1329', padding: '0.2rem', borderRadius: '8px', border: '1px solid #1e293b' }}>
+            <button
+              onClick={() => setSelectedStatusFilter('ALL')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: selectedStatusFilter === 'ALL' ? '#38bdf8' : 'transparent',
+                color: selectedStatusFilter === 'ALL' ? '#090d16' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem'
+              }}
+            >
+              All ({localProducts.length})
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('ACTIVE')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: selectedStatusFilter === 'ACTIVE' ? '#10b981' : 'transparent',
+                color: selectedStatusFilter === 'ACTIVE' ? '#ffffff' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem'
+              }}
+            >
+              Active ({totalActiveCount})
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('INACTIVE')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: selectedStatusFilter === 'INACTIVE' ? '#f43f5e' : 'transparent',
+                color: selectedStatusFilter === 'INACTIVE' ? '#ffffff' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem'
+              }}
+            >
+              Inactive ({totalInactiveCount})
+            </button>
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>
               Segment:
@@ -203,7 +286,7 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
               value={selectedSegmentFilter}
               onChange={(e) => {
                 setSelectedSegmentFilter(e.target.value);
-                setSelectedCompanyFilter('ALL'); // Reset company filter on segment switch
+                setSelectedCompanyFilter('ALL');
               }}
               style={{
                 padding: '0.4rem 0.75rem',
@@ -223,7 +306,6 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
             </select>
           </div>
 
-          {/* 2. Company / Brand Filter (Cascading) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>
               Company:
@@ -250,71 +332,27 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
               ))}
             </select>
           </div>
-
-          <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, marginLeft: 4 }}>
-            ({filteredProducts.length} SKUs)
-          </span>
         </div>
 
-        {/* Right: Actions */}
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button
             onClick={() => setIsImportModalOpen(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.45rem 0.85rem',
-              background: '#1e293b',
-              color: '#cbd5e1',
-              border: '1px solid #334155',
-              fontWeight: 800,
-              fontSize: '0.75rem',
-              borderRadius: '8px',
-              cursor: 'pointer'
-            }}
+            style={{ padding: '0.45rem 0.85rem', background: '#1e293b', color: '#cbd5e1', border: '1px solid #334155', fontWeight: 800, fontSize: '0.75rem', borderRadius: '8px', cursor: 'pointer' }}
           >
-            Bulk Import SKUs
+            Bulk Import
           </button>
-
           <button
             onClick={handleSyncLiveProducts}
             disabled={isSyncing}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.45rem 0.85rem',
-              background: 'rgba(56, 189, 248, 0.1)',
-              color: '#38bdf8',
-              border: '1px solid rgba(56, 189, 248, 0.35)',
-              fontWeight: 800,
-              fontSize: '0.75rem',
-              borderRadius: '8px',
-              cursor: isSyncing ? 'not-allowed' : 'pointer'
-            }}
+            style={{ padding: '0.45rem 0.85rem', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.35)', fontWeight: 800, fontSize: '0.75rem', borderRadius: '8px', cursor: isSyncing ? 'not-allowed' : 'pointer' }}
           >
-            <RefreshCw size={13} className={isSyncing ? 'spin-anim' : ''} /> {isSyncing ? 'Syncing...' : 'Sync Live DB'}
+            <RefreshCw size={13} className={isSyncing ? 'spin-anim' : ''} /> {isSyncing ? 'Syncing...' : 'Sync'}
           </button>
-
           <button
             onClick={() => setIsAddModalOpen(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.45rem 0.95rem',
-              background: 'linear-gradient(135deg, #059669, #0d9488)',
-              color: '#ffffff',
-              border: 'none',
-              fontWeight: 800,
-              fontSize: '0.775rem',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
-            }}
+            style={{ padding: '0.45rem 0.95rem', background: 'linear-gradient(135deg, #059669, #0d9488)', color: '#ffffff', border: 'none', fontWeight: 800, fontSize: '0.775rem', borderRadius: '8px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
           >
-            <Plus size={14} /> Add Product SKU
+            <Plus size={14} /> Add Product
           </button>
         </div>
       </div>
@@ -332,20 +370,18 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
               <th>Category</th>
               <th>Pack Size</th>
               <th>MRP (₹)</th>
+              <th style={{ textAlign: 'center' }}>Status</th>
               <th style={{ textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
                   <Package size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
                   <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#94a3b8' }}>
                     No Product SKUs found in this filter
                   </div>
-                  <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
-                    Click "+ Add Product SKU" above or use Bulk Import to add products to your catalog.
-                  </p>
                 </td>
               </tr>
             ) : (
@@ -359,9 +395,10 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
                 const brandCode = p.Product_Company_Code || parentComp?.company_code || getGroupCode(displayBrand);
                 const currentMrp = p.mrp_price || (p.unit_price ? Math.round(p.unit_price * 1.15) : 100);
                 const mrpBox = currentMrp * (p.pcs_per_box || 1);
+                const isProdActive = p.active !== false;
 
                 return (
-                  <tr key={p?.id || idx}>
+                  <tr key={p?.id || idx} style={{ opacity: isProdActive ? 1 : 0.65 }}>
                     <td><strong style={{ color: '#38bdf8' }}>{idx + 1}</strong></td>
                     <td>
                       <span style={{
@@ -378,15 +415,7 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                        <span style={{
-                          fontSize: '0.675rem',
-                          fontWeight: 800,
-                          padding: '0.15rem 0.4rem',
-                          borderRadius: 4,
-                          background: currentSegment === 'FMCG' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(56, 189, 248, 0.15)',
-                          color: currentSegment === 'FMCG' ? '#34d399' : '#38bdf8',
-                          border: `1px solid ${currentSegment === 'FMCG' ? 'rgba(52, 211, 153, 0.3)' : 'rgba(56, 189, 248, 0.3)'}`
-                        }}>
+                        <span style={{ fontSize: '0.675rem', fontWeight: 800, padding: '0.15rem 0.4rem', borderRadius: 4, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
                           {brandCode}
                         </span>
                         <strong style={{ color: '#f8fafc', fontSize: '0.85rem', fontWeight: 800 }}>
@@ -411,6 +440,28 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
                           Box: ₹{mrpBox.toLocaleString()}
                         </div>
                       </div>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={() => handleToggleProductStatus(p)}
+                        title={`Click to mark product SKU as ${isProdActive ? 'INACTIVE (Close/Deactivate)' : 'ACTIVE'}`}
+                        style={{
+                          padding: '0.25rem 0.65rem',
+                          borderRadius: '6px',
+                          border: isProdActive ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(244, 63, 94, 0.4)',
+                          background: isProdActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                          color: isProdActive ? '#34d399' : '#fb7185',
+                          fontSize: '0.725rem',
+                          fontWeight: 900,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {isProdActive ? '● ACTIVE' : '○ INACTIVE'}
+                      </button>
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>

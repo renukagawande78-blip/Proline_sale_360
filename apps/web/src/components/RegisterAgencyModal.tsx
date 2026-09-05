@@ -8,17 +8,18 @@ import {
   Building2, 
   MapPin, 
   CheckCircle2, 
-  Sparkles,
-  Plus,
-  ShieldCheck,
-  CreditCard,
-  Layers,
-  Zap,
-  Globe,
-  RefreshCw
+  Sparkles, 
+  Plus, 
+  ShieldCheck, 
+  CreditCard, 
+  Layers, 
+  Zap, 
+  Globe, 
+  RefreshCw,
+  Briefcase
 } from 'lucide-react';
-import { Agency } from '../types';
-import { registerNewAgency, resolveZoneForAreaAndCity, MOCK_COMPANIES, generateNewAgencyCode, saveAgencyToSupabase, saveAreaToSupabase, saveZoneToSupabase, fetchAreasFromSupabaseTable, fetchZonesFromSupabaseAreasTable } from '../lib/supabase';
+import { Agency, Company } from '../types';
+import { registerNewAgency, resolveZoneForAreaAndCity, MOCK_COMPANIES, generateNewAgencyCode, saveAgencyToSupabase, saveAreaToSupabase, saveZoneToSupabase, fetchAreasFromSupabaseTable, fetchZonesFromSupabaseAreasTable, fetchCompaniesFromSupabase, fetchUsersFromSupabase } from '../lib/supabase';
 import { DEFAULT_AREAS_BY_CITY, normalizeAreaName } from '../data/officialAreasData';
 import { useAuth } from '../context/AuthContext';
 
@@ -38,7 +39,7 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
   // Form State - Firm Details
   const [agencyName, setAgencyName] = useState('');
   const [agencyCode, setAgencyCode] = useState('');
-  const [companyId] = useState(MOCK_COMPANIES[0]?.id || 'c01');
+  const [companyId, setCompanyId] = useState(MOCK_COMPANIES[0]?.id || 'c01');
   const [accountGroup, setAccountGroup] = useState('FMCG');
   const [gstin, setGstin] = useState('');
   
@@ -47,6 +48,9 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
   const [assignedSalesperson, setAssignedSalesperson] = useState('Chirag Patel');
+
+  const [companiesList, setCompaniesList] = useState<Company[]>([]);
+  const [salesTeamList, setSalesTeamList] = useState<{ id: string; name: string; role: string }[]>([]);
 
   // Location & Territory
   const [city, setCity] = useState('Surat');
@@ -187,7 +191,7 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
       }
     });
 
-    fetchZonesFromSupabaseAreasTable().then(sbZones => {
+        fetchZonesFromSupabaseAreasTable().then(sbZones => {
       if (sbZones && sbZones.length > 0) {
         const formattedZones = sbZones.map(z => ({
           code: z.zone_code,
@@ -199,6 +203,31 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
           const additions = formattedZones.filter(fz => !names.has(fz.name));
           return [...prev, ...additions];
         });
+      }
+    });
+
+    // Fetch live Brands from Supabase
+    fetchCompaniesFromSupabase().then(comps => {
+      if (comps && comps.length > 0) {
+        setCompaniesList(comps);
+        if (!companyId) setCompanyId(comps[0].id);
+      }
+    });
+
+    // Fetch live Salespersons from Supabase
+    fetchUsersFromSupabase().then(users => {
+      if (users && users.length > 0) {
+        const salesUsers = users
+          .filter(u => u.active !== false)
+          .map(u => ({
+            id: u.id,
+            name: u.full_name || u.name || 'Sales User',
+            role: u.role_name || u.role || 'Sales'
+          }));
+        setSalesTeamList(salesUsers);
+        if (salesUsers.length > 0 && (!assignedSalesperson || assignedSalesperson === 'Chirag Patel')) {
+          setAssignedSalesperson(salesUsers[0].name);
+        }
       }
     });
   }, [isOpen]);
@@ -1199,6 +1228,128 @@ export const RegisterAgencyModal: React.FC<RegisterAgencyModalProps> = ({
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 4: Brand & Sales Representative Assignment */}
+          <div style={{
+            background: '#070e20',
+            border: '1px solid #1e293b',
+            borderRadius: 14,
+            padding: '1.15rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem'
+          }}>
+            <div style={{
+              fontSize: '0.825rem',
+              fontWeight: 800,
+              color: '#fbbf24',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              paddingBottom: '0.5rem',
+              borderBottom: '1px solid #1e293b'
+            }}>
+              <Briefcase size={16} />
+              <span>4. Brand & Sales Representative Assignment</span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Assigned Brand / Principal Company
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <select
+                    value={companyId}
+                    onChange={(e) => setCompanyId(e.target.value)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.825rem',
+                      fontWeight: 700,
+                      width: '100%',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="" style={{ background: '#0f172a', color: '#fff' }}>-- All Assigned Brands (Multi-Brand) --</option>
+                    {companiesList.map(c => (
+                      <option key={c.id} value={c.id} style={{ background: '#0f172a', color: '#fff' }}>
+                        {c.company_name} ({c.company_code || 'BRAND'}) • {c.segment || 'FMCG'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, display: 'block' }}>
+                  Primary brand mapped for product line access & ordering.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Assigned Salesperson / Field Exec
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 10,
+                  padding: '0.6rem 0.8rem',
+                  gap: '0.6rem'
+                }}>
+                  <User size={16} color="#64748b" />
+                  <input
+                    type="text"
+                    placeholder="e.g. Chirag Patel"
+                    value={assignedSalesperson}
+                    onChange={(e) => setAssignedSalesperson(e.target.value)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f8fafc',
+                      fontSize: '0.825rem',
+                      fontWeight: 700,
+                      width: '100%'
+                    }}
+                  />
+                </div>
+                {salesTeamList.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                    {salesTeamList.slice(0, 4).map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setAssignedSalesperson(s.name)}
+                        style={{
+                          fontSize: '0.675rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: 6,
+                          border: assignedSalesperson === s.name ? '1px solid #38bdf8' : '1px solid #334155',
+                          background: assignedSalesperson === s.name ? 'rgba(56, 189, 248, 0.2)' : '#0b1329',
+                          color: assignedSalesperson === s.name ? '#38bdf8' : '#94a3b8',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

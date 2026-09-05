@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Truck, Check, PackageCheck } from 'lucide-react';
+import { X, Truck, Check, PackageCheck, Layers, Boxes } from 'lucide-react';
 import { Order } from '../types';
 
 interface DispatchModalProps {
@@ -28,7 +28,9 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   const [dispatchRemark, setDispatchRemark] = useState('');
   const [validationError, setValidationError] = useState('');
   
-  // Item-wise dispatch quantity state
+  // Item-wise dispatch box, loose, and total pcs state
+  const [dispatchBoxes, setDispatchBoxes] = useState<Record<string, number>>({});
+  const [dispatchLoose, setDispatchLoose] = useState<Record<string, number>>({});
   const [dispatchItems, setDispatchItems] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -44,13 +46,52 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     setFreightAmount(order.freight_amount || 0);
     setDispatchRemark(order.dispatch_remark || '');
     setValidationError('');
+
+    const initialBoxes: Record<string, number> = {};
+    const initialLoose: Record<string, number> = {};
+    const initialItems: Record<string, number> = {};
+
+    (order.items || []).forEach(item => {
+      const pcsPerBox = item.pcs_per_box && item.pcs_per_box > 0 ? item.pcs_per_box : 1;
+      const isFMCD = pcsPerBox === 1;
+      const targetQty = (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) ? item.issued_qty_pcs : (item.total_qty_pcs || 0);
+
+      let dBox = 0;
+      let dLoose = 0;
+      if (!isFMCD) {
+        dBox = Math.floor(targetQty / pcsPerBox);
+        dLoose = targetQty % pcsPerBox;
+      } else {
+        dBox = 0;
+        dLoose = targetQty;
+      }
+
+      initialBoxes[item.id] = dBox;
+      initialLoose[item.id] = dLoose;
+      initialItems[item.id] = targetQty;
+    });
+
+    setDispatchBoxes(initialBoxes);
+    setDispatchLoose(initialLoose);
+    setDispatchItems(initialItems);
   }, [order, isOpen]);
 
   if (!isOpen || !order) return null;
 
-  const handleDispatchQtyChange = (itemId: string, qty: number, maxPending: number) => {
-    const validQty = Math.max(0, Math.min(qty, maxPending));
-    setDispatchItems(prev => ({ ...prev, [itemId]: validQty }));
+  const handleDispatchBoxChange = (itemId: string, boxVal: number, pcsPerBox: number) => {
+    const validBox = Math.max(0, boxVal);
+    const currentLoose = dispatchLoose[itemId] ?? 0;
+    const newTotalPcs = (validBox * pcsPerBox) + currentLoose;
+    setDispatchBoxes(prev => ({ ...prev, [itemId]: validBox }));
+    setDispatchItems(prev => ({ ...prev, [itemId]: newTotalPcs }));
+  };
+
+  const handleDispatchLooseChange = (itemId: string, looseVal: number, pcsPerBox: number) => {
+    const validLoose = Math.max(0, looseVal);
+    const currentBox = dispatchBoxes[itemId] ?? 0;
+    const newTotalPcs = (currentBox * pcsPerBox) + validLoose;
+    setDispatchLoose(prev => ({ ...prev, [itemId]: validLoose }));
+    setDispatchItems(prev => ({ ...prev, [itemId]: newTotalPcs }));
   };
 
   const handleConfirm = () => {
@@ -87,9 +128,55 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     onClose();
   };
 
+  // Calculations for bottom totals
+  const itemsList = order.items || [];
+  let totalOrderedBoxes = 0;
+  let totalOrderedLoose = 0;
+  let totalOrderedFree = 0;
+  let totalOrderedPcs = 0;
+
+  let totalBilledBoxes = 0;
+  let totalBilledLoose = 0;
+  let totalBilledPcs = 0;
+
+  let totalDispatchBoxes = 0;
+  let totalDispatchLoose = 0;
+  let totalDispatchPcs = 0;
+
+  itemsList.forEach(item => {
+    const pcsPerBox = item.pcs_per_box && item.pcs_per_box > 0 ? item.pcs_per_box : 1;
+    const isFMCD = pcsPerBox === 1;
+
+    // Ordered
+    const ordBox = item.box_qty || 0;
+    const ordLoose = item.loose_pcs || 0;
+    const ordFree = item.free_pcs || 0;
+    const ordPcs = item.total_qty_pcs || ((ordBox * pcsPerBox) + ordLoose + ordFree) || 0;
+    totalOrderedBoxes += ordBox;
+    totalOrderedLoose += ordLoose;
+    totalOrderedFree += ordFree;
+    totalOrderedPcs += ordPcs;
+
+    // Billed
+    const billedPcs = (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) ? item.issued_qty_pcs : (item.total_qty_pcs || 0);
+    const bBox = !isFMCD ? Math.floor(billedPcs / pcsPerBox) : 0;
+    const bLoose = !isFMCD ? (billedPcs % pcsPerBox) : billedPcs;
+    totalBilledBoxes += bBox;
+    totalBilledLoose += bLoose;
+    totalBilledPcs += billedPcs;
+
+    // Dispatch
+    const dBox = dispatchBoxes[item.id] ?? bBox;
+    const dLoose = dispatchLoose[item.id] ?? bLoose;
+    const dPcs = dispatchItems[item.id] ?? billedPcs;
+    totalDispatchBoxes += dBox;
+    totalDispatchLoose += dLoose;
+    totalDispatchPcs += dPcs;
+  });
+
   return (
     <div className="modal-overlay">
-      <div className="modal-card" style={{ maxWidth: 920, width: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
+      <div className="modal-card" style={{ maxWidth: 960, width: '95vw', maxHeight: '92vh', overflowY: 'auto' }}>
         
         {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
@@ -236,52 +323,224 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
           {validationError && <div style={{ marginTop: '0.75rem', color: '#fb7185', fontSize: '0.75rem', fontWeight: 800 }}>{validationError}</div>}
         </div>
 
-        {/* Item-level Dispatch Allocation Table */}
+        {/* Item-level Dispatch Allocation Table with Box, Loose PCS, Free PCS and Bottom Totals */}
         <div style={{ marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: 6 }}>
             <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <PackageCheck size={16} color="#34d399" /> Order Items for Dispatch
             </h3>
             <span style={{ fontSize: '0.725rem', color: '#94a3b8' }}>
-              Verify quantities to load and deliver
+              Verify quantities in Boxes, Loose PCS &amp; Free PCS
             </span>
           </div>
 
-          <div className="data-table-container">
-            <table className="data-table" style={{ fontSize: '0.8rem' }}>
+          <div className="data-table-container" style={{ border: '1px solid #334155', borderRadius: 8, overflow: 'hidden' }}>
+            <table className="data-table" style={{ fontSize: '0.8rem', width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Product SKU</th>
-                  <th style={{ textAlign: 'center' }}>Total Ordered (PCS)</th>
-                  <th style={{ textAlign: 'center' }}>Billing Qty (PCS)</th>
-                  <th style={{ textAlign: 'center' }}>Dispatch Qty (PCS)</th>
+                  <th style={{ minWidth: 160 }}>Product SKU</th>
+                  <th style={{ textAlign: 'center', minWidth: 120 }}>Ordered Qty</th>
+                  <th style={{ textAlign: 'center', minWidth: 130 }}>Billing Qty</th>
+                  <th style={{ textAlign: 'center', minWidth: 180 }}>Dispatch Allocation</th>
                 </tr>
               </thead>
               <tbody>
-                {order.items?.map(item => {
-                  const targetQty = (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) ? item.issued_qty_pcs : item.total_qty_pcs;
-                  const currentVal = dispatchItems[item.id] !== undefined ? dispatchItems[item.id] : targetQty;
+                {itemsList.map(item => {
+                  const pcsPerBox = item.pcs_per_box && item.pcs_per_box > 0 ? item.pcs_per_box : 1;
+                  const isFMCD = pcsPerBox === 1;
+
+                  // Ordered breakdown
+                  const ordBox = item.box_qty || 0;
+                  const ordLoose = item.loose_pcs || 0;
+                  const ordFree = item.free_pcs || 0;
+                  const ordTotalPcs = item.total_qty_pcs || ((ordBox * pcsPerBox) + ordLoose + ordFree) || 0;
+
+                  // Billed breakdown
+                  const billedPcs = (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) ? item.issued_qty_pcs : (item.total_qty_pcs || 0);
+                  const bBox = !isFMCD ? Math.floor(billedPcs / pcsPerBox) : 0;
+                  const bLoose = !isFMCD ? (billedPcs % pcsPerBox) : billedPcs;
+
+                  // Dispatch state
+                  const curBox = dispatchBoxes[item.id] ?? bBox;
+                  const curLoose = dispatchLoose[item.id] ?? bLoose;
+                  const curRowTotalPcs = (curBox * pcsPerBox) + curLoose;
 
                   return (
                     <tr key={item.id}>
-                      <td><strong style={{ color: '#f8fafc' }}>{item?.product_name || 'Product SKU'}</strong></td>
-                      <td style={{ textAlign: 'center', color: '#94a3b8' }}>{item.total_qty_pcs || 0} PCS</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <strong style={{ color: '#38bdf8' }}>{item.issued_qty_pcs || item.total_qty_pcs || 0} PCS</strong>
+                      <td>
+                        <strong style={{ color: '#f8fafc', display: 'block', fontSize: '0.825rem' }}>{item?.product_name || item?.product_code || 'Product SKU'}</strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                          {!isFMCD ? (
+                            <span style={{ fontSize: '0.675rem', color: '#94a3b8', background: '#1e293b', padding: '1px 5px', borderRadius: 4 }}>
+                              Pack: {pcsPerBox} pcs/box
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.675rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '1px 5px', borderRadius: 4 }}>
+                              FMCD Unit
+                            </span>
+                          )}
+                          {ordFree > 0 && (
+                            <span style={{ fontSize: '0.675rem', color: '#fbbf24', background: 'rgba(251, 191, 36, 0.15)', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>
+                              🎁 {ordFree} Free PCS
+                            </span>
+                          )}
+                        </div>
                       </td>
+
+                      {/* Ordered Qty */}
                       <td style={{ textAlign: 'center' }}>
-                        <input 
-                          type="number"
-                          value={currentVal}
-                          onChange={e => handleDispatchQtyChange(item.id, parseInt(e.target.value) || 0, item.total_qty_pcs || 999999)}
-                          style={{ width: 110, padding: '0.4rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#38bdf8', fontWeight: 900, textAlign: 'center', fontSize: '0.85rem' }}
-                        />
+                        <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.8rem' }}>
+                          {!isFMCD ? (
+                            <>
+                              {ordBox > 0 ? `${ordBox} BOX` : ''}
+                              {ordBox > 0 && ordLoose > 0 ? ', ' : ''}
+                              {ordLoose > 0 ? `${ordLoose} PCS` : ''}
+                              {ordBox === 0 && ordLoose === 0 ? `${ordTotalPcs} PCS` : ''}
+                            </>
+                          ) : (
+                            `${ordTotalPcs} PCS`
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 1 }}>
+                          ({ordTotalPcs.toLocaleString()} PCS Total)
+                        </div>
+                      </td>
+
+                      {/* Billing Qty */}
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#38bdf8', fontWeight: 800, fontSize: '0.825rem' }}>
+                          {!isFMCD ? (
+                            <>
+                              {bBox > 0 ? `${bBox} BOX` : ''}
+                              {bBox > 0 && bLoose > 0 ? ', ' : ''}
+                              {bLoose > 0 ? `${bLoose} PCS` : ''}
+                              {bBox === 0 && bLoose === 0 ? '0 PCS' : ''}
+                            </>
+                          ) : (
+                            `${billedPcs} PCS`
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#38bdf8', opacity: 0.8, marginTop: 1 }}>
+                          ({billedPcs.toLocaleString()} PCS Total)
+                        </div>
+                      </td>
+
+                      {/* Dispatch Allocation Inputs */}
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {!isFMCD && (
+                            <div>
+                              <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8', marginBottom: 1, fontWeight: 700 }}>Boxes</span>
+                              <input 
+                                type="number"
+                                min="0"
+                                value={curBox}
+                                onChange={e => handleDispatchBoxChange(item.id, parseInt(e.target.value) || 0, pcsPerBox)}
+                                style={{ width: 65, padding: '0.35rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#38bdf8', fontWeight: 800, textAlign: 'center', fontSize: '0.825rem' }}
+                                aria-label="Dispatch box quantity"
+                              />
+                            </div>
+                          )}
+                          <div>
+                            <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8', marginBottom: 1, fontWeight: 700 }}>{isFMCD ? 'Dispatch (PCS)' : 'Loose PCS'}</span>
+                            <input 
+                              type="number"
+                              min="0"
+                              value={curLoose}
+                              onChange={e => handleDispatchLooseChange(item.id, parseInt(e.target.value) || 0, pcsPerBox)}
+                              style={{ width: isFMCD ? 95 : 65, padding: '0.35rem', background: '#0f172a', border: '1px solid #34d399', borderRadius: 6, color: '#34d399', fontWeight: 800, textAlign: 'center', fontSize: '0.825rem' }}
+                              aria-label="Dispatch loose quantity"
+                            />
+                          </div>
+                          <div style={{ minWidth: 65, textAlign: 'right' }}>
+                            <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8', marginBottom: 1 }}>Total</span>
+                            <strong style={{ fontSize: '0.8rem', color: '#34d399' }}>{curRowTotalPcs} PCS</strong>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
+
+              {/* TABLE FOOTER WITH TOTAL BOX, TOTAL PCS, TOTAL FREE PCS */}
+              <tfoot style={{ background: '#0b1329', borderTop: '2px solid #38bdf8' }}>
+                <tr>
+                  <td style={{ padding: '0.75rem', fontWeight: 800, color: '#f8fafc' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Boxes size={16} color="#38bdf8" />
+                      <span>TOTAL SUMMARY</span>
+                    </div>
+                  </td>
+
+                  {/* Total Ordered */}
+                  <td style={{ textAlign: 'center', padding: '0.75rem' }}>
+                    <div style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.825rem' }}>
+                      {totalOrderedBoxes > 0 ? `${totalOrderedBoxes} BOX` : ''}
+                      {totalOrderedBoxes > 0 && totalOrderedLoose > 0 ? ', ' : ''}
+                      {totalOrderedLoose > 0 ? `${totalOrderedLoose} PCS` : ''}
+                      {totalOrderedBoxes === 0 && totalOrderedLoose === 0 ? `${totalOrderedPcs} PCS` : ''}
+                    </div>
+                    {totalOrderedFree > 0 && (
+                      <div style={{ fontSize: '0.7rem', color: '#fbbf24', fontWeight: 700 }}>
+                        + {totalOrderedFree} Free PCS
+                      </div>
+                    )}
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                      ({totalOrderedPcs.toLocaleString()} PCS Total)
+                    </div>
+                  </td>
+
+                  {/* Total Billed */}
+                  <td style={{ textAlign: 'center', padding: '0.75rem' }}>
+                    <div style={{ color: '#38bdf8', fontWeight: 800, fontSize: '0.825rem' }}>
+                      {totalBilledBoxes > 0 ? `${totalBilledBoxes} BOX` : ''}
+                      {totalBilledBoxes > 0 && totalBilledLoose > 0 ? ', ' : ''}
+                      {totalBilledLoose > 0 ? `${totalBilledLoose} PCS` : ''}
+                      {totalBilledBoxes === 0 && totalBilledLoose === 0 ? '0 PCS' : ''}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#38bdf8', opacity: 0.8 }}>
+                      ({totalBilledPcs.toLocaleString()} PCS Total)
+                    </div>
+                  </td>
+
+                  {/* Total Dispatched */}
+                  <td style={{ textAlign: 'center', padding: '0.75rem' }}>
+                    <div style={{ color: '#34d399', fontWeight: 900, fontSize: '0.875rem' }}>
+                      {totalDispatchBoxes > 0 ? `${totalDispatchBoxes} BOX` : ''}
+                      {totalDispatchBoxes > 0 && totalDispatchLoose > 0 ? ', ' : ''}
+                      {totalDispatchLoose > 0 ? `${totalDispatchLoose} PCS` : ''}
+                      {totalDispatchBoxes === 0 && totalDispatchLoose === 0 ? '0 PCS' : ''}
+                    </div>
+                    <div style={{ fontSize: '0.725rem', color: '#34d399', fontWeight: 800 }}>
+                      ({totalDispatchPcs.toLocaleString()} PCS Total)
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>
             </table>
+          </div>
+
+          {/* Quick Total KPI Badges */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.65rem', marginTop: '0.75rem' }}>
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.5rem 0.65rem', textAlign: 'center' }}>
+              <span style={{ fontSize: '0.675rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>TOTAL BOXES</span>
+              <strong style={{ fontSize: '0.9rem', color: '#38bdf8' }}>{totalDispatchBoxes} BOX</strong>
+            </div>
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.5rem 0.65rem', textAlign: 'center' }}>
+              <span style={{ fontSize: '0.675rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>TOTAL LOOSE PCS</span>
+              <strong style={{ fontSize: '0.9rem', color: '#34d399' }}>{totalDispatchLoose} PCS</strong>
+            </div>
+            {totalOrderedFree > 0 && (
+              <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.5rem 0.65rem', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.675rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>TOTAL FREE PCS</span>
+                <strong style={{ fontSize: '0.9rem', color: '#fbbf24' }}>{totalOrderedFree} PCS</strong>
+              </div>
+            )}
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.5rem 0.65rem', textAlign: 'center' }}>
+              <span style={{ fontSize: '0.675rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>GRAND TOTAL PCS</span>
+              <strong style={{ fontSize: '0.9rem', color: '#f8fafc' }}>{totalDispatchPcs.toLocaleString()} PCS</strong>
+            </div>
           </div>
         </div>
 
@@ -289,10 +548,11 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.85rem', borderTop: '1px solid #334155', paddingTop: '1rem' }}>
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button className="btn btn-success" onClick={handleConfirm} style={{ fontWeight: 800 }}>
-            <Check size={16} /> Confirm Dispatch & Assign Vehicle
+            <Check size={16} /> Confirm Dispatch &amp; Assign Vehicle
           </button>
         </div>
       </div>
     </div>
   );
 };
+

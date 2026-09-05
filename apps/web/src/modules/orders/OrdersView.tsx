@@ -4,12 +4,13 @@ import {
   RefreshCw, Edit, PauseCircle, CheckCircle, Clock, AlertTriangle,
   Truck, Receipt, CheckCircle2, User, Building2, Phone, CreditCard,
   Package, MapPin, MessageSquare, Send, ChevronRight, Zap, Shield,
-  XCircle, Lock
+  XCircle, Lock, Upload
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { fetchCompaniesFromSupabase, isCompanyAllowedForUser, getOrderAccessPermission, MOCK_COMPANIES } from '../../lib/supabase';
 import { Order, Company, PermissionControl } from '../../types';
 import { PermissionDeniedModal } from '../../components/PermissionDeniedModal';
+import { BulkImportModal } from '../../components/BulkImportModal';
 
 interface OrdersViewProps {
   orders: Order[];
@@ -26,6 +27,7 @@ interface OrdersViewProps {
   onRequestAccountsApproval?: (orderId: string, message: string) => void;
   onAccountsApprovalResponse?: (orderId: string, status: 'APPROVED' | 'HOLD' | 'REJECTED', remark: string) => void;
   onOpenPODModal?: (order: Order) => void;
+  onBulkImportOrders?: (newOrders: Order[]) => void;
 }
 
 export const OrdersView: React.FC<OrdersViewProps> = ({
@@ -41,10 +43,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   onDeleteOrder,
   onOpenReturnRequestModal,
   onRequestAccountsApproval,
-  onAccountsApprovalResponse
-  , onOpenPODModal
+  onAccountsApprovalResponse,
+  onOpenPODModal,
+  onBulkImportOrders
 }) => {
   const { currentUser, hasPermission } = useAuth();
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const role = currentUser?.role_name || 'SALES_PERSON';
   const isSuperAdmin = role === 'SUPER_ADMIN'
     || (currentUser?.full_name || '').toLowerCase().includes('chirag')
@@ -52,11 +56,14 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const isSalesAdmin = role === 'SALES_ADMIN';
   const isManagement = isSuperAdmin || isSalesAdmin;
   const isAccounts = role === 'ACCOUNTS' || isSuperAdmin;
+  const isBillingOrAccounts = role === 'BILLING' || role === 'ACCOUNTS';
+  const isDispatchUser = role === 'DISPATCH_MANAGER' || (role as string) === 'DISPATCH';
   const isSalesPerson = (role as string) === 'SALES_PERSON' || (role as string) === 'SALESPERSON';
+  const canEditOriginalOrder = (isSuperAdmin || isSalesAdmin || role === 'AREA_SALES_MANAGER' || isSalesPerson) && !isBillingOrAccounts && !isDispatchUser;
   // Stage 2 uses the Details panel as the single Sales Admin table action.
   const showLegacyTableActions = false;
 
-  const canAddOrder = hasPermission('add_order') || hasPermission('order_entry');
+  const canAddOrder = (hasPermission('add_order') || hasPermission('order_entry')) && !isBillingOrAccounts && !isDispatchUser;
 
   // Active tab for filtering
   type Stage2Tab = 'ALL' | 'NEW' | 'REVIEW_REQUIRED' | 'APPROVAL_NEEDED' | 'HARSHAD_APPROVED' | 'ON_HOLD' | 'REJECTED' | 'COMPLETED';
@@ -543,10 +550,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   ];
 
   return (
-    <div style={{ display: 'flex', height: '100%', gap: 0, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', gap: 0, overflow: 'hidden' }}>
 
       {/* ── LEFT MAIN COLUMN ──────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', minWidth: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', minWidth: 0, minHeight: 0 }}>
 
         {/* Page Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -571,9 +578,31 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               📅 Today: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
             </span>
             {canAddOrder && (
-              <button className="btn btn-primary" onClick={onOpenCreateOrder} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, fontSize: '0.85rem' }}>
-                <Plus size={15} /> Create Order
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsBulkImportOpen(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontWeight: 800,
+                    fontSize: '0.825rem',
+                    padding: '0.45rem 0.75rem',
+                    borderRadius: 8,
+                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    color: '#38bdf8',
+                    cursor: 'pointer'
+                  }}
+                  title="Bulk register multiple sales orders via CSV upload or paste"
+                >
+                  <Upload size={14} /> Bulk Import CSV
+                </button>
+                <button className="btn btn-primary" onClick={onOpenCreateOrder} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, fontSize: '0.85rem' }}>
+                  <Plus size={15} /> Create Order
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -939,10 +968,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         )}
 
                         {/* 1. View PDF */}
-                        {onViewInvoice && showLegacyTableActions && (
+                        {onViewInvoice && (
                           <button
                             onClick={e => { e.stopPropagation(); onViewInvoice(order); }}
-                            style={{ background: '#1e293b', border: '1px solid #334155', color: '#fbbf24', padding: '0.3rem 0.45rem', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', fontWeight: 700 }}
+                            style={{ background: '#1e293b', border: '1px solid #334155', color: '#fbbf24', padding: '0.3rem 0.5rem', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', fontWeight: 700 }}
                             title="View PDF / Print Invoice"
                           >
                             <Receipt size={13} /> PDF
@@ -950,13 +979,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         )}
 
                         {/* 2. Edit Order */}
-                        {onOpenEditOrder && showLegacyTableActions && (isSalesAdmin || isSuperAdmin) && order.status !== 'CANCELLED' && (
+                        {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && (
                           <button
                             onClick={e => { e.stopPropagation(); onOpenEditOrder(order); }}
-                            style={{ background: '#1e293b', border: '1px solid #334155', color: '#38bdf8', padding: '0.3rem 0.45rem', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', fontWeight: 700 }}
+                            style={{ background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.35)', color: '#38bdf8', padding: '0.3rem 0.55rem', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', fontWeight: 800 }}
                             title="Edit Order"
                           >
-                            <Edit size={13} />
+                            <Edit size={13} /> Edit
                           </button>
                         )}
 
@@ -981,7 +1010,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         )}
 
                         {/* 3. Cancel Order */}
-                        {onCancelOrder && showLegacyTableActions && (isSalesAdmin || isSuperAdmin) && order.status !== 'CANCELLED' && (
+                        {onCancelOrder && (isSalesAdmin || isSuperAdmin) && order.status !== 'CANCELLED' && (
                           <button
                             onClick={e => {
                               e.stopPropagation();
@@ -1341,12 +1370,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             )}
 
             {/* 2. Edit Order */}
-            {onOpenEditOrder && (isSalesAdmin || isSuperAdmin) && selectedOrder.status !== 'CANCELLED' && (
+            {onOpenEditOrder && canEditOriginalOrder && selectedOrder.status !== 'CANCELLED' && (
               <button
+                type="button"
                 onClick={() => onOpenEditOrder(selectedOrder)}
-                style={{ width: '100%', padding: '0.55rem', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.25)', borderRadius: 8, color: '#38bdf8', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+                style={{ width: '100%', padding: '0.6rem', background: 'linear-gradient(135deg, rgba(56,189,248,0.15), rgba(14,165,233,0.25))', border: '1px solid #38bdf8', borderRadius: 8, color: '#38bdf8', cursor: 'pointer', fontWeight: 800, fontSize: '0.825rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem', boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)' }}
               >
-                <Edit size={14} /> 2. Edit Order
+                <Edit size={15} /> 2. Edit Order
               </button>
             )}
 
@@ -1944,6 +1974,18 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
         actionName={deniedModal.actionName}
         requiredPermissionKey={deniedModal.key}
         onClose={() => setDeniedModal({ ...deniedModal, isOpen: false })}
+      />
+
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        masterType="orders"
+        onImportSuccess={(newRows) => {
+          if (onBulkImportOrders && newRows && newRows.length > 0) {
+            onBulkImportOrders(newRows as Order[]);
+          }
+          setIsBulkImportOpen(false);
+        }}
       />
     </div>
   );

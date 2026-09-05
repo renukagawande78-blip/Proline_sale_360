@@ -11,6 +11,7 @@ import {
   checkIsSuperAdmin, 
   fetchAgenciesFromSupabaseTable, 
   deleteAgencyFromSupabase, 
+  saveAgencyToSupabase,
   deduplicateAgencies, 
   supabase 
 } from '../../lib/supabase';
@@ -96,6 +97,8 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
     };
   }, []);
 
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+
   const handleDeleteAgency = async (agencyId: string, agencyName: string) => {
     if (window.confirm(`Are you sure you want to delete sales agency "${agencyName}"? This action is restricted to Super Admin authority.`)) {
       await deleteAgencyFromSupabase(agencyId);
@@ -105,17 +108,43 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
     }
   };
 
+  const handleToggleAgencyStatus = async (ag: Agency) => {
+    const nextStatus = ag.active === false ? true : false;
+    setLocalAgencies(prev => prev.map(a => a.id === ag.id ? { ...a, active: nextStatus } : a));
+    
+    try {
+      const { error } = await supabase.from('agencies').update({ active: nextStatus }).eq('id', ag.id);
+      if (error) {
+        console.warn('Error toggling agency status via direct update, using saveAgencyToSupabase:', error.message);
+        await saveAgencyToSupabase({ ...ag, active: nextStatus });
+      }
+    } catch {
+      await saveAgencyToSupabase({ ...ag, active: nextStatus });
+    }
+
+    setSuccessNotice(`Party "${ag.agency_name}" marked ${nextStatus ? 'ACTIVE' : 'INACTIVE'} successfully in Supabase!`);
+    setTimeout(() => setSuccessNotice(null), 3000);
+  };
+
   const activeAgencyList = localAgencies;
 
-  const filteredAgencies = activeAgencyList.filter(a => 
-    a.agency_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (a.city || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (a.agency_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (a.zone_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (a.pincode || a.pin_code || '').includes(searchQuery) ||
-    (a.assigned_salesperson || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (a.contact_person || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredAgencies = activeAgencyList.filter(a => {
+    if (selectedStatusFilter === 'ACTIVE' && a.active === false) return false;
+    if (selectedStatusFilter === 'INACTIVE' && a.active !== false) return false;
+
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      a.agency_name.toLowerCase().includes(q) || 
+      (a.city || '').toLowerCase().includes(q) ||
+      (a.agency_code || '').toLowerCase().includes(q) ||
+      (a.zone_name || '').toLowerCase().includes(q) ||
+      (a.pincode || a.pin_code || '').includes(q) ||
+      (a.assigned_salesperson || '').toLowerCase().includes(q) ||
+      (a.contact_person || '').toLowerCase().includes(q) ||
+      (a.account_group || '').toLowerCase().includes(q)
+    );
+  });
 
   return (
     <>
@@ -175,7 +204,44 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Status Filter Pills */}
+          <div style={{ display: 'flex', gap: '0.25rem', background: '#0b1329', padding: '0.25rem', borderRadius: 10, border: '1px solid #1e293b' }}>
+            <button
+              onClick={() => setSelectedStatusFilter('ALL')}
+              style={{
+                padding: '0.35rem 0.75rem', borderRadius: 7, border: 'none', cursor: 'pointer',
+                background: selectedStatusFilter === 'ALL' ? '#38bdf8' : 'transparent',
+                color: selectedStatusFilter === 'ALL' ? '#090d16' : '#94a3b8',
+                fontWeight: 800, fontSize: '0.75rem'
+              }}
+            >
+              All ({activeAgencyList.length})
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('ACTIVE')}
+              style={{
+                padding: '0.35rem 0.75rem', borderRadius: 7, border: 'none', cursor: 'pointer',
+                background: selectedStatusFilter === 'ACTIVE' ? '#10b981' : 'transparent',
+                color: selectedStatusFilter === 'ACTIVE' ? '#ffffff' : '#94a3b8',
+                fontWeight: 800, fontSize: '0.75rem'
+              }}
+            >
+              Active ({activeAgencyList.filter(a => a.active !== false).length})
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('INACTIVE')}
+              style={{
+                padding: '0.35rem 0.75rem', borderRadius: 7, border: 'none', cursor: 'pointer',
+                background: selectedStatusFilter === 'INACTIVE' ? '#ef4444' : 'transparent',
+                color: selectedStatusFilter === 'INACTIVE' ? '#ffffff' : '#94a3b8',
+                fontWeight: 800, fontSize: '0.75rem'
+              }}
+            >
+              Inactive ({activeAgencyList.filter(a => a.active === false).length})
+            </button>
+          </div>
+
           <button 
             className="btn btn-outline"
             onClick={() => setIsBulkImportOpen(true)}
@@ -248,7 +314,7 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
           </thead>
           <tbody>
             {filteredAgencies.map(a => {
-              const isSurat = a.zone_region === 'Surat City Zone';
+              const isSurat = (a.zone_region || '').toLowerCase().includes('city');
               return (
                 <tr key={a.id}>
                   <td><code style={{ color: '#38bdf8', fontWeight: 800 }}>{a.agency_code || 'N/A'}</code></td>
@@ -330,7 +396,29 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
                       ₹{(Number(a.credit_limit) || 0).toLocaleString()}
                     </span>
                   </td>
-                  <td><span className="status-badge status-APPROVED">MAPPED</span></td>
+                  <td>
+                    <button
+                      onClick={() => handleToggleAgencyStatus(a)}
+                      style={{
+                        padding: '0.25rem 0.65rem',
+                        borderRadius: 8,
+                        border: (a.active !== false) ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
+                        background: (a.active !== false) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                        color: (a.active !== false) ? '#34d399' : '#f87171',
+                        fontSize: '0.725rem',
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title={`Click to ${a.active !== false ? 'Deactivate (mark Inactive)' : 'Activate (mark Active)'}`}
+                    >
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: (a.active !== false) ? '#34d399' : '#f87171' }} />
+                      {(a.active !== false) ? 'ACTIVE' : 'INACTIVE'}
+                    </button>
+                  </td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
                       {onOpenCreateOrderForAgency && (

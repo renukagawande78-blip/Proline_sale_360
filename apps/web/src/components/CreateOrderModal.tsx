@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare, UserCheck, Layers } from 'lucide-react';
 import { 
   MOCK_COMPANIES, 
@@ -32,7 +32,7 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const activeAgencies = (agencies && agencies.length > 0) ? agencies : MOCK_AGENCIES;
+  const activeAgencies = ((agencies && agencies.length > 0) ? agencies : MOCK_AGENCIES).filter(a => a.active !== false);
   const selectedAgency = activeAgencies.find(a => a.id === selectedAgencyId) || activeAgencies[0] || null;
 
   useEffect(() => {
@@ -222,13 +222,10 @@ export const SearchableBrandRadioSelect: React.FC<SearchableBrandRadioSelectProp
   });
 
   const selectedBrand = availableCompanies.find(c => selectedCompanyIds.includes(c.id));
-  const isAllSelected = selectedCompanyIds.length === 0;
 
   const displayText = selectedBrand 
     ? selectedBrand.company_name 
-    : isAllSelected 
-      ? `All Assigned Brands (${availableCompanies.length})` 
-      : '-- Select Brand --';
+    : (availableCompanies[0]?.company_name || '-- Select Brand --');
 
   return (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
@@ -278,7 +275,7 @@ export const SearchableBrandRadioSelect: React.FC<SearchableBrandRadioSelectProp
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>Choose 1 Brand ({availableCompanies.length} available)</span>
+            <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>Select 1 Brand ({availableCompanies.length} available)</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.35rem 0.55rem', marginBottom: '0.4rem', gap: '0.4rem' }}>
@@ -294,59 +291,14 @@ export const SearchableBrandRadioSelect: React.FC<SearchableBrandRadioSelectProp
           </div>
 
           <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-            {availableCompanies.length > 1 && (
-              <div 
-                onClick={() => {
-                  onChangeCompanyIds([]);
-                  setIsOpen(false);
-                }}
-                style={{
-                  padding: '0.45rem 0.6rem',
-                  borderRadius: 6,
-                  background: isAllSelected ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '0.3rem',
-                  borderBottom: '1px dashed #334155',
-                  paddingBottom: '0.45rem'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                  <div style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: '50%',
-                    border: isAllSelected ? '2px solid #38bdf8' : '1.5px solid #64748b',
-                    background: 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    {isAllSelected && (
-                      <div style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: '#38bdf8'
-                      }} />
-                    )}
-                  </div>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: isAllSelected ? '#38bdf8' : '#94a3b8' }}>
-                    All Assigned Brands ({availableCompanies.length})
-                  </span>
-                </div>
-              </div>
-            )}
-
             {filteredCompanies.map(c => {
               const isSelected = selectedCompanyIds.length === 1 && selectedCompanyIds[0] === c.id;
               const isFmcd = (c.segment || '').toUpperCase() === 'FMCD';
               return (
                 <div 
                   key={c.id}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     onChangeCompanyIds([c.id]);
                     setIsOpen(false);
                   }}
@@ -438,13 +390,25 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
   const activeProducts = (products && products.length > 0) ? products : MOCK_PRODUCTS;
   const activeCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES;
 
-  const rawSelectedProduct = selectedProductId ? activeProducts.find(p => p.id === selectedProductId) : null;
-  const isSelectedProductInScope = rawSelectedProduct && (
-    selectedCompanyIds.length === 0 || 
-    selectedCompanyIds.includes('ALL') || 
-    selectedCompanyIds.includes(rawSelectedProduct.company_id)
-  );
-  const selectedProduct = isSelectedProductInScope ? rawSelectedProduct : null;
+  const rawSelectedProduct = selectedProductId 
+    ? (
+        activeProducts.find(p => p.id === selectedProductId) ||
+        activeProducts.find(p => p.product_name?.toLowerCase() === selectedProductId.toLowerCase()) ||
+        activeProducts.find(p => p.product_code?.toLowerCase() === selectedProductId.toLowerCase()) ||
+        MOCK_PRODUCTS.find(p => p.id === selectedProductId) ||
+        MOCK_PRODUCTS.find(p => p.product_name?.toLowerCase() === selectedProductId.toLowerCase())
+      )
+    : null;
+
+  const selectedProduct = rawSelectedProduct || (selectedProductId ? { 
+    id: selectedProductId, 
+    product_name: selectedProductId, 
+    product_code: '', 
+    company_id: '', 
+    pcs_per_box: 1, 
+    unit_price: 0, 
+    mrp_price: 0 
+  } as Product : null);
 
   const updatePosition = () => {
     if (dropdownRef.current) {
@@ -665,11 +629,13 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   const mergedUsers = liveUsers.length > 0 ? liveUsers : users;
 
   const salesTeamMembers = mergedUsers.filter(u => 
-    u.role_name === 'SALES_PERSON' || 
-    (u.role_name as string) === 'SALES_EXECUTIVE' ||
-    u.role_name === 'AREA_SALES_MANAGER' || 
-    u.role_name === 'SALES_ADMIN' ||
-    u.role_name === 'SUPER_ADMIN'
+    u.active !== false && (
+      u.role_name === 'SALES_PERSON' || 
+      (u.role_name as string) === 'SALES_EXECUTIVE' ||
+      u.role_name === 'AREA_SALES_MANAGER' || 
+      u.role_name === 'SALES_ADMIN' ||
+      u.role_name === 'SUPER_ADMIN'
+    )
   );
 
   const isAdminOrASM = currentUser?.role_name === 'SUPER_ADMIN' || 
@@ -677,7 +643,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                        currentUser?.role_name === 'AREA_SALES_MANAGER';
 
   const activeUserSegment = resolveSegmentForUser(currentUser);
-  const initialSegments = activeUserSegment === 'ALL' ? ['FMCG', 'FMCD'] : [activeUserSegment];
+  const initialSegments = [activeUserSegment === 'FMCD' ? 'FMCD' : 'FMCG'];
   const [selectedSegments, setSelectedSegments] = useState<string[]>(initialSegments);
   const [salespersonId, setSalespersonId] = useState(currentUser?.id || salesTeamMembers[0]?.id || 'u12');
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
@@ -693,16 +659,22 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     currentUser?.company_handle || 
     'All';
 
-  // Toggle Segment function (Multi-Select)
-  const toggleSegment = (seg: 'FMCG' | 'FMCD') => {
-    setSelectedSegments(prev => {
-      if (prev.includes(seg)) {
-        if (prev.length === 1) return prev; // Keep at least one selected
-        return prev.filter(s => s !== seg);
-      } else {
-        return [...prev, seg];
+  // Select Segment function (Strictly Single Select: 1 at a time)
+  const selectSegment = (seg: 'FMCG' | 'FMCD') => {
+    setSelectedSegments([seg]);
+    // Check if current selected company matches this segment
+    const currentCompany = activeCompaniesPool.find(c => selectedCompanyIds.includes(c.id));
+    const currentCompSeg = (currentCompany?.segment || 'FMCG').toUpperCase();
+    if (!currentCompSeg.includes(seg)) {
+      const matchingBrands = activeCompaniesPool.filter(c => {
+        const matchesBrand = isCompanyAllowedForUser(c.company_name, activeSalespersonHandle, c.company_code);
+        const bSeg = (c.segment || 'FMCG').toUpperCase();
+        return matchesBrand && bSeg.includes(seg);
+      });
+      if (matchingBrands.length > 0) {
+        setSelectedCompanyIds([matchingBrands[0].id]);
       }
-    });
+    }
   };
 
   useEffect(() => {
@@ -730,27 +702,70 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     return () => { isMounted = false; };
   }, [isOpen]);
 
-  const activeCompaniesPool = (liveCompanies && liveCompanies.length > 0) ? liveCompanies : [];
-  const activeAgenciesPool = (liveAgencies && liveAgencies.length > 0) ? liveAgencies : [];
-  const activeProductsPool = (liveProducts && liveProducts.length > 0) ? liveProducts : [];
+  const activeCompaniesPool = useMemo(() => {
+    const pool = (liveCompanies && liveCompanies.length > 0) ? liveCompanies : MOCK_COMPANIES;
+    return pool.filter(c => c.active !== false);
+  }, [liveCompanies]);
+
+  const activeAgenciesPool = useMemo(() => {
+    const pool = (liveAgencies && liveAgencies.length > 0) ? liveAgencies : MOCK_AGENCIES;
+    return pool.filter(a => a.active !== false);
+  }, [liveAgencies]);
+
+  const activeProductsPool = useMemo(() => {
+    const pool = (liveProducts && liveProducts.length > 0) ? liveProducts : MOCK_PRODUCTS;
+    return pool.filter(p => p.active !== false);
+  }, [liveProducts]);
 
   // Segment-wise Agencies Pool (Multi-Segment Filter)
-  const allowedAgenciesForSegment = activeAgenciesPool.filter(a => {
-    const group = (a.account_group || 'FMCG').toUpperCase();
-    return selectedSegments.some(seg => group.includes(seg));
-  });
+  const allowedAgenciesForSegment = useMemo(() => {
+    return activeAgenciesPool.filter(a => {
+      const group = (a.account_group || 'FMCG').toUpperCase();
+      return selectedSegments.some(seg => group.includes(seg));
+    });
+  }, [activeAgenciesPool, selectedSegments]);
 
-  // Brands allowed for active salesperson & segment filter
-  const allowedBrandsForActiveSalesperson = activeCompaniesPool.filter(c => {
-    const matchesBrand = isCompanyAllowedForUser(c.company_name, activeSalespersonHandle, c.company_code);
-    const seg = (c.segment || 'FMCG').toUpperCase();
-    const matchesSegment = selectedSegments.length === 0 || selectedSegments.some(s => seg.includes(s));
-    return matchesBrand && matchesSegment;
-  });
+  // Brands allowed for active salesperson & current active segment
+  const allowedBrandsForActiveSalesperson = useMemo(() => {
+    return activeCompaniesPool.filter(c => {
+      const matchesBrand = isCompanyAllowedForUser(c.company_name, activeSalespersonHandle, c.company_code);
+      const seg = (c.segment || 'FMCG').toUpperCase();
+      const matchesSegment = selectedSegments.length === 0 || selectedSegments.some(s => seg.includes(s));
+      return matchesBrand && matchesSegment;
+    });
+  }, [activeCompaniesPool, activeSalespersonHandle, selectedSegments]);
 
-  const [agencyId, setAgencyId] = useState(allowedAgenciesForSegment[0]?.id || activeAgenciesPool[0]?.id || '');
+  const [agencyId, setAgencyId] = useState('');
 
-  // 1. Auto-fill logged-in user segment, assigned brands, and self-salesperson on modal open
+  // Handle explicit salesperson change
+  const handleSalespersonChange = (newSpId: string) => {
+    setSalespersonId(newSpId);
+    const sp = mergedUsers.find(u => u.id === newSpId) || salesTeamMembers.find(u => u.id === newSpId);
+    const spHandle = sp?.company_handle || 'All';
+    const allowed = activeCompaniesPool.filter(c => isCompanyAllowedForUser(c.company_name, spHandle, c.company_code));
+    if (allowed.length > 0) {
+      const firstBrand = allowed[0];
+      setSelectedCompanyIds([firstBrand.id]);
+      const brandSeg = (firstBrand.segment || 'FMCG').toUpperCase();
+      if (brandSeg === 'FMCG' || brandSeg === 'FMCD') {
+        setSelectedSegments([brandSeg]);
+      }
+    }
+  };
+
+  // Handle explicit brand selection
+  const handleSelectBrand = (brandId: string) => {
+    setSelectedCompanyIds([brandId]);
+    const chosen = activeCompaniesPool.find(c => c.id === brandId) || liveCompanies.find(c => c.id === brandId);
+    if (chosen?.segment) {
+      const bSeg = chosen.segment.toUpperCase();
+      if (bSeg === 'FMCG' || bSeg === 'FMCD') {
+        setSelectedSegments([bSeg]);
+      }
+    }
+  };
+
+  // 1. Auto-fill initial values on modal open
   useEffect(() => {
     if (!isOpen || orderToEdit) return;
     const effectiveUser = (currentUser?.id && mergedUsers.find(u => u.id === currentUser.id)) || currentUser;
@@ -766,61 +781,24 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
     const spHandle = effectiveUser?.company_handle || 'All';
     const allowed = activeCompaniesPool.filter(c => isCompanyAllowedForUser(c.company_name, spHandle, c.company_code));
-    if (allowed.length === 1) {
-      setSelectedCompanyIds([allowed[0].id]);
-      const bSeg = (allowed[0].segment || 'FMCG').toUpperCase();
+    if (allowed.length > 0) {
+      const brand = allowed[0];
+      setSelectedCompanyIds([brand.id]);
+      const bSeg = (brand.segment || 'FMCG').toUpperCase();
       if (bSeg === 'FMCG' || bSeg === 'FMCD') {
         setSelectedSegments([bSeg]);
       }
-    } else {
-      setSelectedCompanyIds([]);
     }
-  }, [isOpen, orderToEdit, currentUser, mergedUsers, activeCompaniesPool]);
+  }, [isOpen]);
 
-  // 2. Keep agency selection valid when selectedSegments changes
+  // 2. Keep agency selection valid when selectedSegments / agencies pool changes
   useEffect(() => {
     if (!isOpen || orderToEdit) return;
     const isCurrentAgencyValid = allowedAgenciesForSegment.some(a => a.id === agencyId);
     if (!isCurrentAgencyValid && allowedAgenciesForSegment.length > 0) {
       setAgencyId(allowedAgenciesForSegment[0].id);
     }
-  }, [selectedSegments, allowedAgenciesForSegment, isOpen, orderToEdit]);
-
-  // 3. Auto-sync company/brand selection to user's assigned brands
-  useEffect(() => {
-    if (!isOpen || orderToEdit) return;
-    if (allowedBrandsForActiveSalesperson.length === 1) {
-      setSelectedCompanyIds([allowedBrandsForActiveSalesperson[0].id]);
-    } else {
-      setSelectedCompanyIds(prev => {
-        const valid = prev.filter(id => allowedBrandsForActiveSalesperson.some(c => c.id === id));
-        return valid;
-      });
-    }
-  }, [allowedBrandsForActiveSalesperson, isOpen, orderToEdit]);
-
-  // 4. Auto-select assigned salesperson when an agency is picked
-  useEffect(() => {
-    if (!agencyId || orderToEdit) return;
-    const selectedAgency = activeAgenciesPool.find(a => a.id === agencyId);
-    if (selectedAgency?.assigned_salesperson) {
-      const assignedNames = selectedAgency.assigned_salesperson
-        .split(',')
-        .map(s => s.trim().toLowerCase())
-        .filter(Boolean);
-
-      const matchedUser = salesTeamMembers.find(u => 
-        assignedNames.some(name => 
-          (u.full_name || '').toLowerCase().includes(name) || 
-          name.includes((u.full_name || '').toLowerCase())
-        )
-      );
-
-      if (matchedUser) {
-        setSalespersonId(matchedUser.id);
-      }
-    }
-  }, [agencyId, activeAgenciesPool, salesTeamMembers, orderToEdit]);
+  }, [allowedAgenciesForSegment, isOpen]);
 
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
   const [remarks, setRemarks] = useState('');
@@ -844,72 +822,32 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     }
   ]);
 
-  // Auto-sync company brand dropdown and product item list whenever selected Salesperson changes
-  useEffect(() => {
-    if (!isOpen || orderToEdit) return;
-
-    const activeSp = mergedUsers.find(u => u.id === salespersonId) || currentUser;
-    if (!activeSp) return;
-
-    const spHandle = activeSp.company_handle || 'All';
-    const spSegment = resolveSegmentForUser(activeSp, activeCompaniesPool);
-
-    // 1. Determine allowed companies for this salesperson
-    const allowedCompanies = activeCompaniesPool.filter(c => 
-      isCompanyAllowedForUser(c.company_name, spHandle, c.company_code)
-    );
-
-    // If single brand mapped to salesperson (e.g. Keyur -> Hell [FMCD]), auto-select that single brand & its segment!
-    if (allowedCompanies.length === 1) {
-      setSelectedCompanyIds([allowedCompanies[0].id]);
-      const brandSeg = (allowedCompanies[0].segment || 'FMCG').toUpperCase();
-      if (brandSeg === 'FMCG' || brandSeg === 'FMCD') {
-        setSelectedSegments([brandSeg]);
+  // Determine if the selected brand/segment is strictly FMCD
+  const isSelectedBrandFMCD = useMemo(() => {
+    // 1. If a specific brand is selected in the brand selector
+    if (selectedCompanyIds.length === 1 && selectedCompanyIds[0] !== 'ALL') {
+      const brand = activeCompaniesPool.find(c => c.id === selectedCompanyIds[0]) || liveCompanies.find(c => c.id === selectedCompanyIds[0]);
+      if (brand?.segment) {
+        const seg = brand.segment.toUpperCase();
+        return seg.includes('FMCD') && !seg.includes('FMCG');
       }
-    } else if (spSegment !== 'ALL') {
-      setSelectedSegments([spSegment]);
-      setSelectedCompanyIds([]);
-    } else {
-      setSelectedCompanyIds([]);
     }
-
-    // 2. Auto-sync agency selector if current agency is not allowed for this salesperson
-    const allowedAgencies = activeAgenciesPool.filter(a => {
-      const spName = (activeSp.full_name || '').toLowerCase();
-      const assignedSp = (a.assigned_salesperson || '').toLowerCase();
-      const matchesSp = assignedSp && (assignedSp.includes(spName) || spName.includes(assignedSp));
-      const matchesBrand = isCompanyAllowedForUser(a.account_group || a.agency_name, spHandle);
-      return matchesSp || matchesBrand || spHandle === 'All';
-    });
-
-    if (allowedAgencies.length > 0 && !allowedAgencies.some(a => a.id === agencyId)) {
-      setAgencyId(allowedAgencies[0].id);
+    // 2. If single segment is explicitly selected
+    if (selectedSegments.length === 1 && selectedSegments[0].toUpperCase() === 'FMCD') {
+      return true;
     }
-
-    // 3. Clear any line items that do not belong to the allowed brands & segments
-    const allowedCompanyIds = allowedCompanies.map(c => c.id);
-    setItems(prev => prev.map(item => {
-      if (!item.product_id) return item;
-      const prod = activeProductsPool.find(p => p.id === item.product_id);
-      const parentComp = activeCompaniesPool.find(c => c.id === prod?.company_id);
-      const prodSeg = (prod?.segment || parentComp?.segment || 'FMCG').toUpperCase();
-      const isProdValid = prod && 
-        (allowedCompanyIds.length === 0 || allowedCompanyIds.includes(prod.company_id) || isCompanyAllowedForUser(prod.product_name, spHandle)) &&
-        (selectedSegments.length === 0 || selectedSegments.some(s => prodSeg.includes(s)));
-
-      if (!isProdValid) {
-        return {
-          ...item,
-          product_id: '',
-          pcs_per_box: 1,
-          unit_price: 0,
-          box_qty: 0,
-          free_pcs: 0
-        };
-      }
-      return item;
-    }));
-  }, [salespersonId, selectedSegments, isOpen, orderToEdit, mergedUsers, currentUser, activeCompaniesPool, liveProducts]);
+    // 3. Fallback check on all added valid items
+    const validAddedItems = items.filter(i => i.product_id);
+    if (validAddedItems.length > 0) {
+      return validAddedItems.every(item => {
+        const prod = activeProductsPool.find(p => p.id === item.product_id);
+        const parentCompany = activeCompaniesPool.find(c => c.id === prod?.company_id);
+        const prodSegment = (prod?.segment || parentCompany?.segment || '').toUpperCase();
+        return prodSegment.includes('FMCD') && !prodSegment.includes('FMCG');
+      });
+    }
+    return false;
+  }, [selectedCompanyIds, selectedSegments, activeCompaniesPool, liveCompanies, items, activeProductsPool]);
 
   // When selected brand/company filter changes (e.g. user selects Whirlpool), clear any products not belonging to the chosen brand(s)
   useEffect(() => {
@@ -957,23 +895,72 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       return;
     }
     if (orderToEdit) {
-      setSelectedCompanyIds(orderToEdit.company_id && orderToEdit.company_id !== 'ALL' && orderToEdit.company_id !== 'c01' ? [orderToEdit.company_id] : []);
-      setAgencyId(orderToEdit.agency_id || MOCK_AGENCIES[0]?.id || '');
+      // 1. Auto-detect brand and segment (FMCD or FMCG) for edited order
+      const orderCompany = (activeCompaniesPool || []).find(c => c.id === orderToEdit.company_id || (orderToEdit.company_name && c.company_name?.toLowerCase() === orderToEdit.company_name?.toLowerCase())) || 
+                           (liveCompanies || []).find(c => c.id === orderToEdit.company_id || (orderToEdit.company_name && c.company_name?.toLowerCase() === orderToEdit.company_name?.toLowerCase())) ||
+                           MOCK_COMPANIES.find(c => c.id === orderToEdit.company_id || (orderToEdit.company_name && c.company_name?.toLowerCase() === orderToEdit.company_name?.toLowerCase()));
+
+      let detectedSegment = 'FMCG';
+      if (orderCompany?.segment) {
+        const seg = orderCompany.segment.toUpperCase();
+        if (seg.includes('FMCD') && !seg.includes('FMCG')) {
+          detectedSegment = 'FMCD';
+        } else {
+          detectedSegment = 'FMCG';
+        }
+      } else if (orderToEdit.items && orderToEdit.items.length > 0 && orderToEdit.items[0]) {
+        const firstItem = orderToEdit.items[0];
+        const firstProd = (activeProductsPool || []).find(p => p.id === firstItem.product_id || (firstItem.product_name && p.product_name?.toLowerCase() === firstItem.product_name?.toLowerCase())) || 
+                          MOCK_PRODUCTS.find(p => p.id === firstItem.product_id || (firstItem.product_name && p.product_name?.toLowerCase() === firstItem.product_name?.toLowerCase()));
+        if (firstProd?.segment?.toUpperCase().includes('FMCD')) {
+          detectedSegment = 'FMCD';
+        }
+      }
+      setSelectedSegments([detectedSegment]);
+
+      if (orderCompany) {
+        setSelectedCompanyIds([orderCompany.id]);
+      } else if (orderToEdit.company_id && orderToEdit.company_id !== 'ALL') {
+        setSelectedCompanyIds([orderToEdit.company_id]);
+      } else {
+        setSelectedCompanyIds([]);
+      }
+
+      setAgencyId(orderToEdit.agency_id || (activeAgenciesPool[0]?.id || MOCK_AGENCIES[0]?.id || ''));
       setDeliveryType(orderToEdit.delivery_type || 'F.O.R');
       setRemarks(orderToEdit.remarks || '');
       if (orderToEdit.salesperson_id) {
         setSalespersonId(orderToEdit.salesperson_id);
       }
+
       if (orderToEdit.items && orderToEdit.items.length > 0) {
-        setItems(orderToEdit.items.map(item => ({
-          product_id: item.product_id,
-          pcs_per_box: item.pcs_per_box || 24,
-          box_qty: item.box_qty || 0,
-          loose_pcs: item.loose_pcs || 0,
-          free_pcs: item.free_pcs || 0,
-          unit_price: item.unit_price || 100,
-          remark: item.remark || ''
-        })));
+        setItems(orderToEdit.items.map(item => {
+          const foundProd = (activeProductsPool || []).find(p => 
+            p.id === item.product_id || 
+            (item.product_name && p.product_name?.toLowerCase() === item.product_name?.toLowerCase()) ||
+            (item.product_code && p.product_code?.toLowerCase() === item.product_code?.toLowerCase())
+          ) || (liveProducts || []).find(p => 
+            p.id === item.product_id || 
+            (item.product_name && p.product_name?.toLowerCase() === item.product_name?.toLowerCase()) ||
+            (item.product_code && p.product_code?.toLowerCase() === item.product_code?.toLowerCase())
+          ) || MOCK_PRODUCTS.find(p => 
+            p.id === item.product_id || 
+            (item.product_name && p.product_name?.toLowerCase() === item.product_name?.toLowerCase()) ||
+            (item.product_code && p.product_code?.toLowerCase() === item.product_code?.toLowerCase())
+          );
+
+          const resolvedProdId = foundProd?.id || item.product_id || item.product_name || '';
+
+          return {
+            product_id: resolvedProdId,
+            pcs_per_box: item.pcs_per_box || foundProd?.pcs_per_box || 24,
+            box_qty: item.box_qty || 0,
+            loose_pcs: item.loose_pcs || 0,
+            free_pcs: item.free_pcs || 0,
+            unit_price: item.unit_price || foundProd?.unit_price || 100,
+            remark: item.remark || ''
+          };
+        }));
       }
     } else {
       // New Order: Always clear all previous order data from form
@@ -982,7 +969,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         setAgencyId(initialAgencyId);
       }
     }
-  }, [orderToEdit, initialAgencyId, isOpen]);
+  }, [orderToEdit, initialAgencyId, isOpen, activeCompaniesPool, activeProductsPool, liveCompanies, liveProducts]);
 
 
   if (!isOpen) return null;
@@ -998,9 +985,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     const prod = activeProductsPool.find(p => p.id === productId) || MOCK_PRODUCTS.find(p => p.id === productId);
     if (!prod) return;
 
-    const parentCompany = activeCompaniesPool.find(c => c.id === prod.company_id);
+    const parentCompany = activeCompaniesPool.find(c => c.id === prod.company_id) || liveCompanies.find(c => c.id === prod.company_id);
     const prodSegment = (prod.segment || parentCompany?.segment || (selectedSegments.length === 1 ? selectedSegments[0] : 'FMCG')).toUpperCase();
-    const isFMCD = prodSegment.includes('FMCD') && !prodSegment.includes('FMCG');
+    const isFMCD = isSelectedBrandFMCD || (prodSegment.includes('FMCD') && !prodSegment.includes('FMCG'));
 
     setItems(prev => {
       const updated = [...prev];
@@ -1011,7 +998,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         product_id: prod.id,
         pcs_per_box: prod.pcs_per_box || (isFMCD ? 1 : 24),
         unit_price: prod.unit_price !== undefined && prod.unit_price !== null ? prod.unit_price : (prod.mrp_price || 0),
-        // For FMCD: strictly PCS, 0 box required
+        // For FMCD: strictly PCS (0 box, default 1 PCS)
         // For FMCG: default to 1 BOX if both are 0
         box_qty: isFMCD ? 0 : ((currentBoxQty === 0 && currentLoosePcs === 0) ? 1 : currentBoxQty),
         loose_pcs: isFMCD ? (currentLoosePcs > 0 ? currentLoosePcs : (currentBoxQty > 0 ? currentBoxQty : 1)) : currentLoosePcs
@@ -1049,7 +1036,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         product_id: '',
         pcs_per_box: 1,
         box_qty: 0,
-        loose_pcs: 0,
+        loose_pcs: isSelectedBrandFMCD ? 1 : 0,
         free_pcs: 0,
         unit_price: 0,
         remark: ''
@@ -1066,16 +1053,21 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   const processedItems = items.map((item, idx) => {
     const rawItem = item as any;
     const prod = item.product_id 
-      ? (activeProductsPool.find(p => p.id === item.product_id || (p.product_name && p.product_name === rawItem.product_name)) || null)
+      ? (
+          activeProductsPool.find(p => p.id === item.product_id || p.product_name?.toLowerCase() === item.product_id.toLowerCase() || (rawItem.product_name && p.product_name?.toLowerCase() === rawItem.product_name.toLowerCase())) ||
+          (liveProducts || []).find(p => p.id === item.product_id || p.product_name?.toLowerCase() === item.product_id.toLowerCase() || (rawItem.product_name && p.product_name?.toLowerCase() === rawItem.product_name.toLowerCase())) ||
+          MOCK_PRODUCTS.find(p => p.id === item.product_id || p.product_name?.toLowerCase() === item.product_id.toLowerCase() || (rawItem.product_name && p.product_name?.toLowerCase() === rawItem.product_name.toLowerCase())) ||
+          null
+        )
       : null;
 
-    const parentCompany = activeCompaniesPool.find(c => c.id === prod?.company_id);
+    const parentCompany = activeCompaniesPool.find(c => c.id === prod?.company_id) || liveCompanies.find(c => c.id === prod?.company_id);
     const prodSegment = (prod?.segment || parentCompany?.segment || (selectedSegments.length === 1 ? selectedSegments[0] : 'FMCG')).toUpperCase();
-    const isFMCD = prodSegment.includes('FMCD') && !prodSegment.includes('FMCG');
+    const isFMCD = isSelectedBrandFMCD || (prodSegment.includes('FMCD') && !prodSegment.includes('FMCG'));
 
     const boxQty = isFMCD ? 0 : (item.box_qty || 0);
-    const loosePcs = isFMCD ? (item.loose_pcs || item.box_qty || 0) : (item.loose_pcs || 0);
-    const freePcs = item.free_pcs || 0;
+    const loosePcs = isFMCD ? (item.loose_pcs > 0 ? item.loose_pcs : (item.box_qty > 0 ? item.box_qty : 1)) : (item.loose_pcs || 0);
+    const freePcs = isFMCD ? 0 : (item.free_pcs || 0);
     const pcsPerBox = isFMCD ? 1 : (prod?.pcs_per_box || item.pcs_per_box || 1);
     
     // For FMCG: billable pieces = (boxQty * pcsPerBox) + loosePcs
@@ -1266,8 +1258,8 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-card" style={{ maxWidth: 1150, width: '95vw', paddingBottom: '5rem' }}>
+    <div className="modal-overlay" style={{ zIndex: 1100, overflowX: 'hidden' }}>
+      <div className="modal-card" style={{ maxWidth: 1150, width: '96vw', paddingBottom: '3.5rem', overflowX: 'hidden', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
@@ -1291,22 +1283,22 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         {/* Form Fields Grid: Segment (Multi-Select), Salesperson, Company/Brand (Multi-Select), Agency (Single Select), Delivery */}
         <div className="create-order-grid">
           
-          {/* 1. SEGMENTS (MULTI-SELECT TOGGLE PILLS) */}
+          {/* 1. SEGMENTS (RADIO / SINGLE SELECT TOGGLE PILLS) */}
           <div>
             <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>
-              SEGMENTS (MULTI-SELECT)
+              SEGMENT (SELECT 1)
             </label>
             <div style={{ display: 'flex', gap: '0.35rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.25rem', height: 38, alignItems: 'center' }}>
               <button
                 type="button"
-                onClick={() => toggleSegment('FMCG')}
+                onClick={() => selectSegment('FMCG')}
                 style={{
                   flex: 1,
                   height: '100%',
                   borderRadius: 6,
-                  border: selectedSegments.includes('FMCG') ? '1px solid #34d399' : '1px solid transparent',
-                  background: selectedSegments.includes('FMCG') ? 'rgba(52, 211, 153, 0.2)' : 'transparent',
-                  color: selectedSegments.includes('FMCG') ? '#34d399' : '#64748b',
+                  border: selectedSegments[0] === 'FMCG' ? '1px solid #34d399' : '1px solid transparent',
+                  background: selectedSegments[0] === 'FMCG' ? 'rgba(52, 211, 153, 0.2)' : 'transparent',
+                  color: selectedSegments[0] === 'FMCG' ? '#34d399' : '#64748b',
                   fontWeight: 800,
                   fontSize: '0.775rem',
                   cursor: 'pointer',
@@ -1317,18 +1309,18 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                   transition: 'all 0.15s ease'
                 }}
               >
-                {selectedSegments.includes('FMCG') && <Check size={12} strokeWidth={3} />} FMCG
+                {selectedSegments[0] === 'FMCG' && <Check size={12} strokeWidth={3} />} FMCG
               </button>
               <button
                 type="button"
-                onClick={() => toggleSegment('FMCD')}
+                onClick={() => selectSegment('FMCD')}
                 style={{
                   flex: 1,
                   height: '100%',
                   borderRadius: 6,
-                  border: selectedSegments.includes('FMCD') ? '1px solid #38bdf8' : '1px solid transparent',
-                  background: selectedSegments.includes('FMCD') ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-                  color: selectedSegments.includes('FMCD') ? '#38bdf8' : '#64748b',
+                  border: selectedSegments[0] === 'FMCD' ? '1px solid #38bdf8' : '1px solid transparent',
+                  background: selectedSegments[0] === 'FMCD' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+                  color: selectedSegments[0] === 'FMCD' ? '#38bdf8' : '#64748b',
                   fontWeight: 800,
                   fontSize: '0.775rem',
                   cursor: 'pointer',
@@ -1339,21 +1331,18 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                   transition: 'all 0.15s ease'
                 }}
               >
-                {selectedSegments.includes('FMCD') && <Check size={12} strokeWidth={3} />} FMCD
+                {selectedSegments[0] === 'FMCD' && <Check size={12} strokeWidth={3} />} FMCD
               </button>
             </div>
           </div>
 
-          {/* 2. SALESPERSON / FIELD EXEC */}
+          {/* 2. SALESPERSON / EXEC */}
           <div>
             <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>SALESPERSON / EXEC</label>
             {isAdminOrASM ? (
               <select
                 value={salespersonId}
-                onChange={e => {
-                  setSalespersonId(e.target.value);
-                  setSelectedCompanyIds([]);
-                }}
+                onChange={e => handleSalespersonChange(e.target.value)}
                 style={{ width: '100%', padding: '0.55rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#34d399', fontWeight: 700, fontSize: '0.825rem', height: 38 }}
               >
                 {salesTeamMembers.map(u => {
@@ -1377,8 +1366,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           <div>
             <SearchableBrandRadioSelect 
               selectedCompanyIds={selectedCompanyIds}
-              onChangeCompanyIds={setSelectedCompanyIds}
-              availableCompanies={allowedBrandsForActiveSalesperson}
+              onChangeCompanyIds={(ids) => {
+                if (ids && ids.length > 0) {
+                  handleSelectBrand(ids[0]);
+                }
+              }}
+              availableCompanies={allowedBrandsForActiveSalesperson.length > 0 ? allowedBrandsForActiveSalesperson : activeCompaniesPool}
               userCompanyHandle={activeSalespersonHandle}
             />
           </div>
@@ -1409,7 +1402,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Salesperson Assigned Brands & Segments Banner */}
-        <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.5rem 0.85rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.775rem' }}>
+        <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.5rem 0.85rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.775rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
             <span style={{ color: '#94a3b8' }}>Mapped Scope for <strong>{activeSalesperson?.full_name}</strong>: </span>
             <strong style={{ color: '#34d399' }}>{activeSalespersonHandle}</strong>
@@ -1417,7 +1410,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <strong style={{ color: '#38bdf8' }}>{selectedSegments.join(' & ')}</strong>
           </div>
           <div style={{ color: '#38bdf8', fontWeight: 600 }}>
-            Selected Brand: <strong style={{ color: '#34d399' }}>{selectedCompanyIds.length === 1 ? (allowedBrandsForActiveSalesperson.find(c => c.id === selectedCompanyIds[0])?.company_name || '1 Brand') : `All (${allowedBrandsForActiveSalesperson.length})`}</strong>
+            Selected Brand: <strong style={{ color: '#34d399' }}>{activeCompaniesPool.find(c => selectedCompanyIds.includes(c.id))?.company_name || allowedBrandsForActiveSalesperson.find(c => selectedCompanyIds.includes(c.id))?.company_name || '1 Brand'}</strong>
             <span style={{ color: '#64748b', marginLeft: 8 }}>| Agencies Available: </span>
             <strong style={{ color: '#f8fafc' }}>{allowedAgenciesForSegment.length}</strong>
           </div>
@@ -1425,23 +1418,41 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
         {/* Order Items Table */}
         <div style={{ marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 700 }}>Order Line Items</h3>
-            <button onClick={addItemRow} className="btn btn-outline" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
-              <Plus size={14} /> Add Product Line
+          <div style={{ marginBottom: '0.75rem' }}>
+            <button 
+              type="button"
+              onClick={addItemRow} 
+              className="btn btn-primary" 
+              style={{ 
+                padding: '0.6rem 1.4rem', 
+                fontSize: '0.9rem', 
+                fontWeight: 800, 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                gap: '0.5rem',
+                background: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%)',
+                boxShadow: '0 4px 14px rgba(14, 165, 233, 0.4)',
+                border: '1px solid #38bdf8',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                color: '#ffffff',
+                minHeight: '40px'
+              }}
+            >
+              <Plus size={18} strokeWidth={2.5} /> Add Product
             </button>
           </div>
 
-          <div className="data-table-container" style={{ overflow: 'visible', minHeight: 120 }}>
-            <table className="data-table" style={{ fontSize: '0.825rem' }}>
+          <div className="data-table-container" style={{ overflowX: 'auto', overflowY: 'visible', minHeight: 120, width: '100%', boxSizing: 'border-box' }}>
+            <table className="data-table" style={{ width: '100%', minWidth: isSelectedBrandFMCD ? 780 : 860, fontSize: '0.825rem' }}>
             <thead>
               <tr>
-                <th style={{ width: selectedSegments.length === 1 && selectedSegments.includes('FMCD') ? 340 : 280 }}>Product / SKU Selection</th>
+                <th style={{ minWidth: isSelectedBrandFMCD ? 300 : 230 }}>Product / SKU Selection</th>
                 <th style={{ textAlign: 'center', width: 90 }}>MRP Price</th>
-                {!(selectedSegments.length === 1 && selectedSegments.includes('FMCD')) && <th style={{ textAlign: 'center', width: 85 }}>BOX Qty</th>}
-                <th style={{ textAlign: 'center', width: 85 }}>{selectedSegments.length === 1 && selectedSegments.includes('FMCD') ? 'Quantity (PCS)' : 'PCS Qty'}</th>
-                <th style={{ textAlign: 'center', width: 85 }}>Free PCS</th>
-                <th style={{ textAlign: 'center', width: 140 }}>Ordered Qty</th>
+                {!isSelectedBrandFMCD && <th style={{ textAlign: 'center', width: 85 }}>BOX Qty</th>}
+                <th style={{ textAlign: 'center', width: 85 }}>{isSelectedBrandFMCD ? 'Quantity (PCS)' : 'PCS Qty'}</th>
+                {!isSelectedBrandFMCD && <th style={{ textAlign: 'center', width: 85 }}>Free PCS</th>}
+                <th style={{ textAlign: 'center', width: 130 }}>Ordered Qty</th>
                 <th style={{ width: 140 }}>Remark</th>
                 <th style={{ textAlign: 'center', width: 50 }}>Action</th>
               </tr>
@@ -1465,7 +1476,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                     {item.product_id ? `₹${item.mrp_price}` : '—'}
                     {item.product_id ? <span style={{ display: 'block', fontSize: '0.65rem', color: '#94a3b8' }}>/ Pc</span> : null}
                   </td>
-                  {!(selectedSegments.length === 1 && selectedSegments.includes('FMCD')) && (
+                  {!isSelectedBrandFMCD && (
                     <td>
                       {item.is_fmcd ? (
                         <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#64748b', fontStyle: 'italic', fontWeight: 600 }}>
@@ -1488,33 +1499,41 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                       type="number" 
                       min="0"
                       value={item.loose_pcs || ''}
-                      placeholder="0"
+                      placeholder={isSelectedBrandFMCD ? "1" : "0"}
                       onChange={e => handleQuantityChange(index, 'loose_pcs', parseInt(e.target.value) || 0)}
                       style={{ width: 65, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 4, color: '#38bdf8', fontWeight: 700, margin: '0 auto', display: 'block' }}
                     />
                   </td>
-                  <td>
-                    <input 
-                      type="number" 
-                      min="0"
-                      value={item.free_pcs ? item.free_pcs : ''}
-                      placeholder="0"
-                      onChange={e => handleQuantityChange(index, 'free_pcs', parseInt(e.target.value) || 0)}
-                      style={{ width: 65, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #fbbf24', borderRadius: 4, color: '#fbbf24', fontWeight: 800, margin: '0 auto', display: 'block' }}
-                    />
-                  </td>
+                  {!isSelectedBrandFMCD && (
+                    <td>
+                      {item.is_fmcd ? (
+                        <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#64748b', fontStyle: 'italic', fontWeight: 600 }}>
+                          —
+                        </div>
+                      ) : (
+                        <input 
+                          type="number" 
+                          min="0"
+                          value={item.free_pcs || ''}
+                          placeholder="0"
+                          onChange={e => handleQuantityChange(index, 'free_pcs', parseInt(e.target.value) || 0)}
+                          style={{ width: 65, padding: '0.35rem', textAlign: 'center', background: '#0f172a', border: '1px solid #fbbf24', borderRadius: 4, color: '#fbbf24', fontWeight: 800, margin: '0 auto', display: 'block' }}
+                        />
+                      )}
+                    </td>
+                  )}
                   <td style={{ textAlign: 'center' }}>
                     {item.product_id ? (
                       <div>
                         <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.85rem' }}>
                           {item.formatted_qty_display}
                         </div>
-                        {item.free_pcs > 0 && (
+                        {!isSelectedBrandFMCD && item.free_pcs > 0 && (
                           <span style={{ display: 'inline-block', fontSize: '0.65rem', color: '#fbbf24', background: 'rgba(251,191,36,0.15)', padding: '0.1rem 0.35rem', borderRadius: 4, marginTop: 2, fontWeight: 700 }}>
                             + {item.free_pcs} Free PCS
                           </span>
                         )}
-                        {!item.is_fmcd && item.pcs_per_box > 1 && (
+                        {!item.is_fmcd && !isSelectedBrandFMCD && item.pcs_per_box > 1 && (
                           <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: 2 }}>
                             ({item.pcs_per_box} pcs/box)
                           </div>
@@ -1567,7 +1586,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 700, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
               <span>Total Order Volume:</span>
               <strong style={{ color: '#38bdf8', fontSize: '0.95rem' }}>
-                {selectedSegments.length === 1 && selectedSegments.includes('FMCD')
+                {isSelectedBrandFMCD
                   ? `${totalLoosePcs || totalQtyPcs || 0} PCS`
                   : totalBoxQty > 0 && totalLoosePcs > 0
                     ? `${totalBoxQty} BOX, ${totalLoosePcs} PCS`
@@ -1578,7 +1597,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                         : '0 Quantity'
                 }
               </strong>
-              {totalFreePcs > 0 && (
+              {!isSelectedBrandFMCD && totalFreePcs > 0 && (
                 <span style={{ color: '#fbbf24', fontWeight: 700, fontSize: '0.775rem', background: 'rgba(251,191,36,0.15)', padding: '0.15rem 0.45rem', borderRadius: 4 }}>
                   + {totalFreePcs} Free PCS
                 </span>

@@ -26,6 +26,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
   const [billingAmountInput, setBillingAmountInput] = useState<number>(0);
   const [invoiceRemark, setInvoiceRemark] = useState('');
   const [billedQtyByItem, setBilledQtyByItem] = useState<Record<string, number>>({});
+  const [billedBoxesByItem, setBilledBoxesByItem] = useState<Record<string, number>>({});
+  const [billedLooseByItem, setBilledLooseByItem] = useState<Record<string, number>>({});
   const [selectedGrnOrder, setSelectedGrnOrder] = useState<Order | null>(null);
   const [grnNumberInput, setGrnNumberInput] = useState('');
   const [grnValueInput, setGrnValueInput] = useState(0);
@@ -58,24 +60,118 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
       return weightB - weightA;
     });
 
+  const formatBilledQtyDisplay = (order: Order) => {
+    if (!order.invoice_number && (order.billing_total_qty == null || order.billing_total_qty === 0)) return '—';
+    
+    const items = order.items || [];
+    let totalBilledBoxes = 0;
+    let totalBilledLoose = 0;
+    let totalBilledPcs = 0;
+
+    items.forEach(it => {
+      const issued = it.issued_qty_pcs != null && it.issued_qty_pcs > 0 ? it.issued_qty_pcs : (it.total_qty_pcs || 0);
+      const pcsPerBox = it.pcs_per_box && it.pcs_per_box > 0 ? it.pcs_per_box : 1;
+      if (pcsPerBox > 1) {
+        const boxes = Math.floor(issued / pcsPerBox);
+        const loose = issued % pcsPerBox;
+        totalBilledBoxes += boxes;
+        totalBilledLoose += loose;
+      } else {
+        totalBilledLoose += issued;
+      }
+      totalBilledPcs += issued;
+    });
+
+    if (totalBilledPcs === 0 && order.billing_total_qty) {
+      return `${order.billing_total_qty.toLocaleString()} PCS`;
+    }
+
+    if (totalBilledBoxes > 0 && totalBilledLoose > 0) {
+      return `${totalBilledBoxes} BOX, ${totalBilledLoose} PCS (${totalBilledPcs.toLocaleString()} PCS)`;
+    } else if (totalBilledBoxes > 0) {
+      return `${totalBilledBoxes} BOX (${totalBilledPcs.toLocaleString()} PCS)`;
+    } else {
+      return `${totalBilledPcs.toLocaleString()} PCS`;
+    }
+  };
+
   const handleOpenInvoiceModal = (order: Order) => {
     setSelectedOrderForInvoice(order);
     const autoInv = order.invoice_number || `BILL-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     setInvoiceNumberInput(autoInv);
     setCreditDaysInput(order.payment_type === 'ADVANCE' ? 0 : (order.credit_days || 30));
-    const initialBilledQty = Object.fromEntries(
-      (order.items || []).map(item => {
-        const defaultQty = (item.issued_qty_pcs != null && item.issued_qty_pcs > 0)
-          ? item.issued_qty_pcs
-          : (item.total_qty_pcs || ((item.box_qty || 0) * (item.pcs_per_box || 1) + (item.loose_pcs || 0)) || 0);
-        return [item.id, defaultQty];
-      })
-    );
-    setBilledQtyByItem(initialBilledQty);
-    const sumQty = Object.values(initialBilledQty).reduce((sum, qty) => sum + qty, 0) || order.total_qty_pcs || 0;
+
+    const initialBoxes: Record<string, number> = {};
+    const initialLoose: Record<string, number> = {};
+    const initialQty: Record<string, number> = {};
+
+    (order.items || []).forEach(item => {
+      const pcsPerBox = item.pcs_per_box && item.pcs_per_box > 0 ? item.pcs_per_box : 1;
+      let bBox = 0;
+      let bLoose = 0;
+
+      if (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) {
+        if (pcsPerBox > 1) {
+          bBox = Math.floor(item.issued_qty_pcs / pcsPerBox);
+          bLoose = item.issued_qty_pcs % pcsPerBox;
+        } else {
+          bBox = 0;
+          bLoose = item.issued_qty_pcs;
+        }
+      } else {
+        bBox = item.box_qty || 0;
+        bLoose = item.loose_pcs || 0;
+        if (bBox === 0 && bLoose === 0 && (item.total_qty_pcs || 0) > 0) {
+          if (pcsPerBox > 1) {
+            bBox = Math.floor(item.total_qty_pcs / pcsPerBox);
+            bLoose = item.total_qty_pcs % pcsPerBox;
+          } else {
+            bLoose = item.total_qty_pcs;
+          }
+        }
+      }
+
+      initialBoxes[item.id] = bBox;
+      initialLoose[item.id] = bLoose;
+      initialQty[item.id] = (bBox * pcsPerBox) + bLoose;
+    });
+
+    setBilledBoxesByItem(initialBoxes);
+    setBilledLooseByItem(initialLoose);
+    setBilledQtyByItem(initialQty);
+
+    const sumQty = Object.values(initialQty).reduce((sum, qty) => sum + qty, 0) || order.total_qty_pcs || 0;
     setBillingTotalQtyInput(order.billing_total_qty && order.billing_total_qty > 0 ? order.billing_total_qty : sumQty);
     setBillingAmountInput(order.invoice_amount && order.invoice_amount > 0 ? order.invoice_amount : (order.total_amount || 0));
     setInvoiceRemark(order.remarks || '');
+  };
+
+  const handleItemBoxChange = (itemId: string, val: number, pcsPerBox: number) => {
+    const nextBox = Math.max(0, val);
+    const currentLoose = billedLooseByItem[itemId] ?? 0;
+    const nextTotalPcs = (nextBox * pcsPerBox) + currentLoose;
+
+    setBilledBoxesByItem(prev => ({ ...prev, [itemId]: nextBox }));
+    setBilledQtyByItem(prev => {
+      const updated = { ...prev, [itemId]: nextTotalPcs };
+      const sum = Object.values(updated).reduce((s, q) => s + q, 0);
+      setBillingTotalQtyInput(sum);
+      return updated;
+    });
+  };
+
+  const handleItemLooseChange = (itemId: string, val: number, pcsPerBox: number) => {
+    const nextLoose = Math.max(0, val);
+    const currentBox = billedBoxesByItem[itemId] ?? 0;
+    const nextTotalPcs = (currentBox * pcsPerBox) + nextLoose;
+
+    setBilledLooseByItem(prev => ({ ...prev, [itemId]: nextLoose }));
+    setBilledQtyByItem(prev => {
+      const updated = { ...prev, [itemId]: nextTotalPcs };
+      const sum = Object.values(updated).reduce((s, q) => s + q, 0);
+      setBillingTotalQtyInput(sum);
+      return updated;
+    });
   };
 
   const handleConfirmInvoice = () => {
@@ -250,7 +346,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                         <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Pending Bill</span>
                       )}
                     </td>
-                    <td>{order.invoice_number ? `${((order.billing_total_qty != null && order.billing_total_qty > 0) ? order.billing_total_qty : ((order.items || []).reduce((sum, it) => sum + (it.issued_qty_pcs || it.total_qty_pcs || 0), 0) || order.total_qty_pcs || 0)).toLocaleString()} PCS` : (order.billing_total_qty != null ? `${order.billing_total_qty.toLocaleString()} PCS` : '—')}</td>
+                    <td><strong style={{ color: '#38bdf8' }}>{formatBilledQtyDisplay(order)}</strong></td>
                     <td>{order.invoice_amount != null ? `₹${order.invoice_amount.toLocaleString()}` : '—'}</td>
                     <td>{order.invoice_number ? `${order.payment_type === 'ADVANCE' ? 0 : (order.credit_days || 0)} Days` : '—'}</td>
                     <td>
@@ -281,6 +377,14 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                           >
                             <Truck size={14} /> Delivery Challan
                           </button>
+                          <button
+                            className="btn"
+                            onClick={() => handleOpenInvoiceModal(order)}
+                            style={{ background: 'rgba(56, 189, 248, 0.12)', border: '1px solid #38bdf8', color: '#38bdf8', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                            title="Edit Invoice details on this order"
+                          >
+                            <Receipt size={14} /> Edit Invoice
+                          </button>
                         </div>
                       )}
                     </td>
@@ -295,15 +399,23 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
       {/* Tax Invoice Generation Modal */}
       {selectedOrderForInvoice && (
         <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: 520 }}>
+          <div className="modal-card" style={{ maxWidth: 580 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.65rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Receipt size={20} color="#34d399" />
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>Stage 4: Issue B2B Bill & Credit Lock</h3>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>
+                  {selectedOrderForInvoice.invoice_number 
+                    ? `Update Invoice — ${selectedOrderForInvoice.order_number}` 
+                    : 'Stage 4: Issue B2B Bill & Credit Lock'}
+                </h3>
               </div>
               <button onClick={() => setSelectedOrderForInvoice(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
                 <X size={18} />
               </button>
+            </div>
+
+            <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: 8, padding: '0.65rem 0.85rem', marginBottom: '1rem', fontSize: '0.75rem', color: '#38bdf8' }}>
+              ℹ️ <strong>Order Reference:</strong> {selectedOrderForInvoice.order_number} &bull; Directly modifies billing details for this existing order. <em>No duplicate or new order will be created.</em>
             </div>
 
             <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.85rem', marginBottom: '1rem', fontSize: '0.8rem' }}>
@@ -316,41 +428,112 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
               </div>
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', marginBottom: 6 }}>ORDERED ITEMS &amp; BILLING QUANTITY</label>
-              <div style={{ border: '1px solid #334155', borderRadius: 7, overflow: 'hidden' }}>
-                {(selectedOrderForInvoice.items || []).map(item => {
-                  const orderedQty = item.total_qty_pcs || 0;
-                  const billedQty = billedQtyByItem[item.id] || 0;
+            {/* ORDERED ITEMS & BILLING QUANTITY WITH BOX & LOOSE PCS */}
+            <div style={{ marginBottom: '1.15rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8' }}>ORDERED ITEMS &amp; BILLING QUANTITY</label>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Enter Boxes &amp; Loose PCS</span>
+              </div>
+
+              <div style={{ border: '1px solid #334155', borderRadius: 8, overflow: 'hidden', background: '#0b1120' }}>
+                {(selectedOrderForInvoice.items || []).map((item, idx) => {
+                  const pcsPerBox = item.pcs_per_box && item.pcs_per_box > 0 ? item.pcs_per_box : 1;
+                  const isFmcd = pcsPerBox === 1;
+                  const ordBox = item.box_qty || 0;
+                  const ordLoose = item.loose_pcs || 0;
+                  const ordFree = item.free_pcs || 0;
+                  const ordTotalPcs = item.total_qty_pcs || ((ordBox * pcsPerBox) + ordLoose + ordFree) || 0;
+
+                  const curBox = billedBoxesByItem[item.id] ?? 0;
+                  const curLoose = billedLooseByItem[item.id] ?? 0;
+                  const curRowTotalPcs = (curBox * pcsPerBox) + curLoose;
+
                   return (
-                    <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 105px', gap: 10, alignItems: 'center', padding: '0.65rem', borderBottom: '1px solid #1e293b' }}>
-                      <div>
-                        <strong style={{ color: '#f8fafc', fontSize: '0.78rem' }}>{item.product_name || item.product_code || 'Product'}</strong>
-                        <div style={{ color: '#94a3b8', fontSize: '0.72rem', marginTop: 2 }}>Ordered Qty: <strong style={{ color: '#fbbf24' }}>{orderedQty} PCS</strong></div>
+                    <div key={item.id || idx} style={{ padding: '0.75rem 0.85rem', borderBottom: idx !== (selectedOrderForInvoice.items || []).length - 1 ? '1px solid #1e293b' : 'none' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.45rem', flexWrap: 'wrap', gap: 6 }}>
+                        <div>
+                          <strong style={{ color: '#f8fafc', fontSize: '0.825rem' }}>{item.product_name || item.product_code || 'Product SKU'}</strong>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.72rem', color: '#fbbf24', fontWeight: 700 }}>
+                              Approved Qty: {ordBox > 0 ? `${ordBox} BOX` : ''}{ordBox > 0 && ordLoose > 0 ? ', ' : ''}{ordLoose > 0 ? `${ordLoose} PCS` : ''}{ordBox === 0 && ordLoose === 0 ? `${ordTotalPcs} PCS` : ''}{ordFree > 0 ? ` (+${ordFree} Free)` : ''} ({ordTotalPcs.toLocaleString()} PCS Total)
+                            </span>
+                            {!isFmcd && (
+                              <span style={{ fontSize: '0.675rem', color: '#94a3b8', background: '#1e293b', padding: '1px 6px', borderRadius: 4 }}>
+                                Pack: {pcsPerBox} PCS/Box
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '2px 8px', borderRadius: 6 }}>
+                            Billed: {!isFmcd && curBox > 0 ? `${curBox} BOX` : ''}{!isFmcd && curBox > 0 && curLoose > 0 ? ', ' : ''}{curLoose > 0 || (isFmcd && curBox === 0) ? `${curLoose} PCS` : ''}{!isFmcd && curBox === 0 && curLoose === 0 ? '0 PCS' : ''} ({curRowTotalPcs.toLocaleString()} PCS)
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.65rem', marginBottom: 3 }}>Billing Qty</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max={orderedQty}
-                          value={billedQty}
-                          onChange={event => {
-                            const nextQty = Math.max(0, Math.min(orderedQty, Number(event.target.value) || 0));
-                            setBilledQtyByItem(current => {
-                              const updated = { ...current, [item.id]: nextQty };
-                              setBillingTotalQtyInput(Object.values(updated).reduce((sum, qty) => sum + qty, 0));
-                              return updated;
-                            });
-                          }}
-                          style={{ width: '100%', padding: '0.45rem', background: '#0b1120', color: '#38bdf8', border: '1px solid #475569', borderRadius: 5, fontWeight: 800 }}
-                          aria-label={`Billing quantity for ${item.product_name || 'product'}`}
-                        />
+
+                      {/* Inputs Grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: isFmcd ? '1fr' : '1fr 1fr', gap: '0.65rem' }}>
+                        {!isFmcd && (
+                          <div>
+                            <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, marginBottom: 2 }}>Billing Boxes</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={curBox}
+                              onChange={e => handleItemBoxChange(item.id, Number(e.target.value) || 0, pcsPerBox)}
+                              style={{ width: '100%', padding: '0.45rem 0.6rem', background: '#0f172a', color: '#38bdf8', border: '1px solid #475569', borderRadius: 6, fontWeight: 800, fontSize: '0.85rem' }}
+                              aria-label={`Billing box quantity for ${item.product_name || 'product'}`}
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, marginBottom: 2 }}>
+                            {isFmcd ? 'Billing Quantity (PCS)' : 'Billing Loose PCS'}
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={curLoose}
+                            onChange={e => handleItemLooseChange(item.id, Number(e.target.value) || 0, pcsPerBox)}
+                            style={{ width: '100%', padding: '0.45rem 0.6rem', background: '#0f172a', color: '#38bdf8', border: '1px solid #475569', borderRadius: 6, fontWeight: 800, fontSize: '0.85rem' }}
+                            aria-label={`Billing loose quantity for ${item.product_name || 'product'}`}
+                          />
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
+
+              {/* Bottom Totals KPI Strip for Billing Modal */}
+              {(() => {
+                const totalBilledBoxes = Object.values(billedBoxesByItem).reduce((a, b) => a + b, 0);
+                const totalBilledLoose = Object.values(billedLooseByItem).reduce((a, b) => a + b, 0);
+                const totalOrderedFreePcs = (selectedOrderForInvoice.items || []).reduce((s, it) => s + (it.free_pcs || 0), 0);
+
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>BILLED BOXES</span>
+                      <strong style={{ fontSize: '0.825rem', color: '#38bdf8' }}>{totalBilledBoxes} BOX</strong>
+                    </div>
+                    <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>BILLED LOOSE PCS</span>
+                      <strong style={{ fontSize: '0.825rem', color: '#34d399' }}>{totalBilledLoose} PCS</strong>
+                    </div>
+                    {totalOrderedFreePcs > 0 && (
+                      <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>FREE PCS</span>
+                        <strong style={{ fontSize: '0.825rem', color: '#fbbf24' }}>{totalOrderedFreePcs} PCS</strong>
+                      </div>
+                    )}
+                    <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>TOTAL PCS</span>
+                      <strong style={{ fontSize: '0.825rem', color: '#f8fafc' }}>{billingTotalQtyInput.toLocaleString()} PCS</strong>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div style={{ marginBottom: '1rem' }}>
@@ -364,18 +547,26 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>TOTAL BILLING QTY (Mandatory)*</label>
-                <input type="number" min="1" value={billingTotalQtyInput} readOnly style={{ width: '100%', padding: '0.6rem', background: '#1e293b', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', fontWeight: 800 }} />
-                <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Calculated from item billing quantities.</span>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>TOTAL BILL AMOUNT (₹)</label>
-                <input type="number" min="0" step="0.01" value={billingAmountInput} onChange={event => setBillingAmountInput(Math.max(0, Number(event.target.value) || 0))} placeholder="Enter bill amount" style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', fontWeight: 800 }} />
-                <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Entered manually; price is not calculated.</span>
-              </div>
-            </div>
+            {(() => {
+              const totalBilledBoxes = Object.values(billedBoxesByItem).reduce((a, b) => a + b, 0);
+              const totalBilledLoose = Object.values(billedLooseByItem).reduce((a, b) => a + b, 0);
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>TOTAL BILLING QUANTITY</label>
+                    <div style={{ background: '#1e293b', border: '1px solid #475569', borderRadius: 6, padding: '0.55rem 0.75rem', color: '#34d399', fontWeight: 800, fontSize: '0.85rem' }}>
+                      {totalBilledBoxes > 0 ? `${totalBilledBoxes} BOX` : ''}{totalBilledBoxes > 0 && totalBilledLoose > 0 ? ', ' : ''}{totalBilledLoose > 0 ? `${totalBilledLoose} PCS` : ''}{totalBilledBoxes === 0 && totalBilledLoose === 0 ? '0 PCS' : ''} ({billingTotalQtyInput.toLocaleString()} PCS Total)
+                    </div>
+                    <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 2, display: 'block' }}>Calculated from item billing box &amp; loose quantities.</span>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>TOTAL BILL AMOUNT (₹)</label>
+                    <input type="number" min="0" step="0.01" value={billingAmountInput} onChange={event => setBillingAmountInput(Math.max(0, Number(event.target.value) || 0))} placeholder="Enter bill amount" style={{ width: '100%', padding: '0.55rem 0.65rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', fontWeight: 800, fontSize: '0.85rem' }} />
+                    <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 2, display: 'block' }}>Entered manually or auto-filled.</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div style={{ marginBottom: '1.25rem' }}>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#a855f7', marginBottom: 4 }}>CREDIT DAYS LOCK (0 for Advance Orders)</label>
@@ -400,7 +591,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
               <button className="btn btn-outline" onClick={() => setSelectedOrderForInvoice(null)}>Cancel</button>
               <button className="btn btn-success" onClick={handleConfirmInvoice} style={{ fontWeight: 800 }}>
-                <CheckCircle2 size={16} /> Confirm Bill & Lock Credit
+                <CheckCircle2 size={16} /> {selectedOrderForInvoice.invoice_number ? 'Update & Save Invoice' : 'Confirm Bill & Lock Credit'}
               </button>
             </div>
           </div>

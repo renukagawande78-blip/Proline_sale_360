@@ -14,11 +14,15 @@ import {
   Mail,
   Hash,
   BadgeIndianRupee,
-  ShieldCheck
+  ShieldCheck,
+  Briefcase,
+  Tag,
+  Layers,
+  Award
 } from 'lucide-react';
-import { Agency } from '../types';
+import { Agency, Company } from '../types';
 import { Plus } from 'lucide-react';
-import { updateAgencyDetails, resolveZoneForAreaAndCity, MOCK_COMPANIES, saveAgencyToSupabase, saveAreaToSupabase, saveZoneToSupabase, fetchAreasFromSupabaseTable } from '../lib/supabase';
+import { updateAgencyDetails, resolveZoneForAreaAndCity, MOCK_COMPANIES, saveAgencyToSupabase, saveAreaToSupabase, saveZoneToSupabase, fetchAreasFromSupabaseTable, fetchCompaniesFromSupabase, fetchUsersFromSupabase } from '../lib/supabase';
 import { DEFAULT_AREAS_BY_CITY, normalizeAreaName } from '../data/officialAreasData';
 
 interface UpdateAgencyModalProps {
@@ -132,6 +136,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
   const [branchName, setBranchName] = useState('');
   const [creditLimit, setCreditLimit] = useState<number>(0);
 
+  const [isActive, setIsActive] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
@@ -184,6 +189,9 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
     setShowAddArea(false);
   };
 
+  const [companiesList, setCompaniesList] = useState<Company[]>([]);
+  const [salesTeamList, setSalesTeamList] = useState<{ id: string; name: string; role: string }[]>([]);
+
   useEffect(() => {
     if (agency) {
       setAgencyName(agency.agency_name || '');
@@ -203,7 +211,29 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
       setIfscCode(agency.ifsc_code || '');
       setBranchName(agency.branch_name || '');
       setCreditLimit(agency.credit_limit !== undefined ? Number(agency.credit_limit) : 0);
+      setIsActive(agency.active !== false);
       setSuccessNotice(null);
+
+      // Fetch live Brands/Companies from Supabase
+      fetchCompaniesFromSupabase().then(comps => {
+        if (comps && comps.length > 0) {
+          setCompaniesList(comps);
+        }
+      });
+
+      // Fetch live Sales Representatives from Supabase
+      fetchUsersFromSupabase().then(users => {
+        if (users && users.length > 0) {
+          const salesUsers = users
+            .filter(u => u.active !== false)
+            .map(u => ({
+              id: u.id,
+              name: u.full_name || u.name || 'Sales User',
+              role: u.role_name || u.role || 'Sales'
+            }));
+          setSalesTeamList(salesUsers);
+        }
+      });
 
       // Fetch live Areas from Supabase `public.areas`
       fetchAreasFromSupabaseTable().then(sbAreas => {
@@ -263,7 +293,8 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
       account_number: accountNumber.trim(),
       ifsc_code: ifscCode.trim(),
       branch_name: branchName.trim(),
-      credit_limit: Number(creditLimit)
+      credit_limit: Number(creditLimit),
+      active: isActive
     });
 
     const res = await saveAgencyToSupabase(updated);
@@ -274,7 +305,7 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
     }
 
     setIsSubmitting(false);
-    setSuccessNotice(`Party details for "${agencyName}" updated successfully in Supabase!`);
+    setSuccessNotice(`Party details for "${agencyName}" updated successfully (${isActive ? 'ACTIVE' : 'INACTIVE'}) in Supabase!`);
     if (onSuccess) onSuccess(updated);
     setTimeout(() => onClose(), 1400);
   };
@@ -369,7 +400,29 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
 
           {/* ── SECTION 1: Firm & Account Identification ── */}
           <section style={{ background: '#0a1525', border: '1px solid #1e293b', borderRadius: 14, padding: '1.15rem' }}>
-            <SectionHeader icon={Building2} label="1 · Firm & Account Identification" color="56,189,248" />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+              <SectionHeader icon={Building2} label="1 · Firm & Account Identification" color="56,189,248" />
+              <button
+                type="button"
+                onClick={() => setIsActive(!isActive)}
+                style={{
+                  padding: '0.35rem 0.85rem',
+                  borderRadius: 8,
+                  border: isActive ? '1px solid #10b981' : '1px solid #64748b',
+                  background: isActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+                  color: isActive ? '#34d399' : '#94a3b8',
+                  fontSize: '0.775rem',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  transition: 'all 0.15s'
+                }}
+              >
+                <span>{isActive ? '● ACTIVE MASTER' : '○ INACTIVE (CLOSED)'}</span>
+              </button>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
               <div>
                 <FieldLabel required>Agency / Firm Name</FieldLabel>
@@ -585,6 +638,63 @@ export const UpdateAgencyModal: React.FC<UpdateAgencyModalProps> = ({
                 <span style={{ fontSize: '0.85rem', fontWeight: 900, color: '#38bdf8' }}>
                   ₹{Number(creditLimit).toLocaleString('en-IN')}
                 </span>
+              </div>
+            </div>
+          </section>
+
+          {/* ── SECTION 4: Brand & Sales Representative Assignment ── */}
+          <section style={{ background: '#0a1525', border: '1px solid #1e293b', borderRadius: 14, padding: '1.15rem' }}>
+            <SectionHeader icon={Briefcase} label="4 · Brand & Sales Representative Assignment" color="251,191,36" />
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.85rem' }}>
+              <div>
+                <FieldLabel>Assigned Brand / Company</FieldLabel>
+                <FieldSelect value={companyId} onChange={setCompanyId}>
+                  <option value="">-- All Assigned Brands (Multi-Brand Agency) --</option>
+                  {companiesList.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.company_name} ({c.company_code || 'BRAND'}) • {c.segment || 'FMCG'}
+                    </option>
+                  ))}
+                </FieldSelect>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4 }}>
+                  Mapped brand for product catalog ordering, billing & stock dispatch.
+                </div>
+              </div>
+
+              <div>
+                <FieldLabel>Assigned Salesperson / Field Exec</FieldLabel>
+                <FieldInput
+                  value={assignedSalesperson}
+                  onChange={setAssignedSalesperson}
+                  placeholder="e.g. Chirag Patel"
+                />
+                {salesTeamList.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                    {salesTeamList.slice(0, 4).map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setAssignedSalesperson(s.name)}
+                        style={{
+                          fontSize: '0.675rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: 6,
+                          border: assignedSalesperson === s.name ? '1px solid #38bdf8' : '1px solid #334155',
+                          background: assignedSalesperson === s.name ? 'rgba(56, 189, 248, 0.2)' : '#0b1329',
+                          color: assignedSalesperson === s.name ? '#38bdf8' : '#94a3b8',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4 }}>
+                  Responsible field sales representative for visits & order booking.
+                </div>
               </div>
             </div>
           </section>

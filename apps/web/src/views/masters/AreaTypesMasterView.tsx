@@ -24,7 +24,7 @@ import { DEFAULT_AREA_TYPES, RAW_OFFICIAL_AREAS } from '../../data/officialAreas
 interface AreaTypesMasterViewProps {
   agencies?: Agency[];
   searchQuery?: string;
-  onNavigateToAreas?: (regionFilter: 'City' | 'Rural' | 'Other') => void;
+  onNavigateToAreas?: (regionFilter?: any) => void;
 }
 
 export const AreaTypesMasterView: React.FC<AreaTypesMasterViewProps> = ({

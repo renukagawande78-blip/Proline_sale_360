@@ -63,7 +63,8 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
       setIsLoadingAgencies(true);
       fetchAgenciesFromSupabaseTable()
         .then(({ agencies }) => {
-          const availableAgencies = agencies.length > 0 ? agencies : MOCK_AGENCIES;
+          const raw = agencies.length > 0 ? agencies : MOCK_AGENCIES;
+          const availableAgencies = raw.filter(a => a.active !== false);
           setAgencyOptions(availableAgencies);
           const requestedAgencyExists = availableAgencies.some(agency => agency.id === initialAgencyId);
           const defaultId = requestedAgencyExists ? initialAgencyId! : (availableAgencies[0]?.id || '');
@@ -71,8 +72,9 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
           loadAgencyFinancials(defaultId);
         })
         .catch(() => {
-          setAgencyOptions(MOCK_AGENCIES);
-          const defaultId = initialAgencyId || MOCK_AGENCIES[0]?.id || '';
+          const availableAgencies = MOCK_AGENCIES.filter(a => a.active !== false);
+          setAgencyOptions(availableAgencies);
+          const defaultId = initialAgencyId || availableAgencies[0]?.id || '';
           setSelectedAgencyId(defaultId);
           loadAgencyFinancials(defaultId);
         })

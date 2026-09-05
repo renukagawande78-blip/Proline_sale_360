@@ -21,7 +21,8 @@ import {
   saveProductToSupabase,
   saveCompanyToSupabase,
   saveUserToSupabase,
-  saveAreaToSupabase, 
+  saveAreaToSupabase,
+  saveOrderToSupabase,
   generateNewAgencyCode, 
   generateNewBarcodeSKUCode,
   resolveZoneForAreaAndCity,
@@ -29,7 +30,7 @@ import {
   supabase,
   generateUuid
 } from '../lib/supabase';
-import { Agency, Product } from '../types';
+import { Agency, Product, Order } from '../types';
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -133,6 +134,13 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
     // Common aliases for each schema key
     const ALIAS_MAP: Record<string, string[]> = {
+      order_number: ['ordernumber', 'order_number', 'orderno', 'order_no', 'sono', 'so_number', 'salesordernumber', 'sales_order_number', 'order'],
+      salesperson_name: ['salespersonname', 'salesperson_name', 'salesperson', 'salesrep', 'sales_rep', 'assignedsalesperson', 'sales_person', 'rep', 'employee'],
+      box_qty: ['boxqty', 'box_qty', 'boxes', 'boxcount', 'totalboxes', 'box_quantity', 'qty_boxes'],
+      loose_pcs: ['loosepcs', 'loose_pcs', 'loosequantity', 'loose_quantity', 'loose', 'pcs'],
+      free_pcs: ['freepcs', 'free_pcs', 'freescheme', 'scheme_pcs', 'free', 'bonus'],
+      delivery_type: ['deliverymode', 'delivery_mode', 'deliverytype', 'delivery_type', 'mode', 'shippingmode', 'shipping_type'],
+      remarks: ['orderremarks', 'order_remarks', 'remarks', 'remark', 'notes', 'comments', 'instruction'],
       product_code: ['productcode', 'product_code', 'skucode', 'sku_code', 'sku', 'barcode', 'itemcode', 'item_code', 'code', 'modelcode'],
       product_name: ['productname', 'product_name', 'itemname', 'item_name', 'modelname', 'model', 'title', 'description', 'product', 'producttitle', 'item'],
       company_name: ['productcompanyname', 'companyname', 'company_name', 'brandname', 'brand_name', 'brand', 'company', 'manufacturer'],
@@ -227,13 +235,24 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     setErrorMsg(null);
     setTotalCount(rawRows.length);
 
-    // Fetch live companies for accurate ID linking
+    // Fetch live reference data for accurate ID and code linking
     let liveCompanies: any[] = [];
+    let liveAgencies: any[] = [];
+    let liveProducts: any[] = [];
+    let liveUsers: any[] = [];
     try {
-      const { data: compData } = await supabase.from('companies').select('id, company_name, company_code, segment');
-      if (compData) liveCompanies = compData;
+      const [compRes, agRes, prodRes, userRes] = await Promise.all([
+        supabase.from('companies').select('id, company_name, company_code, segment'),
+        supabase.from('agencies').select('id, agency_name, agency_code, area_name, city, zone_name, zone_region'),
+        supabase.from('products').select('id, product_name, product_code, segment, pcs_per_box, unit_price, mrp_price, company_id'),
+        supabase.from('users').select('id, full_name, email, role_name')
+      ]);
+      if (compRes.data) liveCompanies = compRes.data;
+      if (agRes.data) liveAgencies = agRes.data;
+      if (prodRes.data) liveProducts = prodRes.data;
+      if (userRes.data) liveUsers = userRes.data;
     } catch (e) {
-      console.warn('Could not pre-fetch companies for import mapping', e);
+      console.warn('Could not pre-fetch live references for import mapping', e);
     }
 
     const importedItems: any[] = [];
@@ -350,6 +369,106 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         const res = await saveUserToSupabase(userRecord);
         if (!res.success && res.error) {
           console.error(`User row ${i + 1} error:`, res.error);
+        }
+
+      } else if (masterType === 'orders') {
+        const orderNum = getVal('order_number') || `SO-BULK-${Date.now().toString().slice(-4)}-${i + 1}`;
+        const agencyName = getVal('agency_name') || 'Agency';
+        const brandName = getVal('company_name') || 'Priyagold';
+        const salesName = getVal('salesperson_name') || 'Sales Rep';
+        const prodName = getVal('product_name') || 'Product SKU';
+        const boxQty = Number(getVal('box_qty') || 0);
+        const loosePcs = Number(getVal('loose_pcs') || 0);
+        const freePcs = Number(getVal('free_pcs') || 0);
+        const unitPrice = Number(getVal('unit_price') || 100);
+        const deliveryType = getVal('delivery_type') || 'F.O.R';
+        const remarks = getVal('remarks') || 'Bulk CSV Import Order';
+
+        const matchedAg = liveAgencies.find(a =>
+          a.agency_name?.toLowerCase() === agencyName.toLowerCase() ||
+          a.agency_code?.toLowerCase() === agencyName.toLowerCase() ||
+          agencyName.toLowerCase().includes(a.agency_name?.toLowerCase() || '___')
+        ) || liveAgencies[0] || { id: generateUuid(), agency_name: agencyName, area_name: 'Surat Central', city: 'Surat' };
+
+        const matchedComp = liveCompanies.find(c =>
+          c.company_name?.toLowerCase() === brandName.toLowerCase() ||
+          c.company_code?.toLowerCase() === brandName.toLowerCase() ||
+          brandName.toLowerCase().includes(c.company_name?.toLowerCase() || '___')
+        ) || liveCompanies[0] || { id: generateUuid(), company_name: brandName, company_code: 'PRG', segment: 'FMCG' };
+
+        const matchedProd = liveProducts.find(p =>
+          p.product_name?.toLowerCase() === prodName.toLowerCase() ||
+          p.product_code?.toLowerCase() === prodName.toLowerCase() ||
+          prodName.toLowerCase().includes(p.product_name?.toLowerCase() || '___')
+        ) || liveProducts[0] || { id: generateUuid(), product_name: prodName, product_code: 'SKU-001', pcs_per_box: 24, unit_price: unitPrice };
+
+        const matchedUser = liveUsers.find(u =>
+          u.full_name?.toLowerCase() === salesName.toLowerCase() ||
+          salesName.toLowerCase().includes(u.full_name?.toLowerCase() || '___')
+        ) || liveUsers.find(u => u.role_name === 'SALES_PERSON') || liveUsers[0] || { id: generateUuid(), full_name: salesName };
+
+        const pcsPerBox = matchedProd?.pcs_per_box || (matchedComp?.segment === 'FMCD' ? 1 : 24);
+        const totalPcs = (boxQty * pcsPerBox) + loosePcs + freePcs;
+        const totalAmount = (boxQty * pcsPerBox + loosePcs) * (unitPrice || matchedProd?.unit_price || 100);
+
+        setCurrentExecutingItem(`Order ${orderNum} — ${matchedAg?.agency_name || agencyName}`);
+
+        const orderId = generateUuid();
+        const orderRecord: Order = {
+          id: orderId,
+          order_number: orderNum,
+          order_date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+          company_id: matchedComp?.id || 'c_default',
+          company_name: matchedComp?.company_name || brandName,
+          agency_id: matchedAg?.id || 'a_default',
+          agency_name: matchedAg?.agency_name || agencyName,
+          salesperson_id: matchedUser?.id || 'u_default',
+          salesperson_name: matchedUser?.full_name || salesName,
+          area_id: matchedAg?.area_name || 'Surat Central',
+          area_name: matchedAg?.area_name || 'Surat Central',
+          status: 'SUBMITTED',
+          delivery_type: (deliveryType.toLowerCase().includes('pickup') ? 'Self Pickup' : 'F.O.R') as any,
+          remarks: remarks,
+          total_box_qty: boxQty,
+          total_loose_pcs: loosePcs,
+          total_free_pcs: freePcs,
+          total_qty_pcs: totalPcs,
+          total_amount: totalAmount,
+          items: [
+            {
+              id: generateUuid(),
+              order_id: orderId,
+              product_id: matchedProd?.id || 'p_default',
+              product_code: matchedProd?.product_code || 'SKU-001',
+              product_name: matchedProd?.product_name || prodName,
+              pcs_per_box: pcsPerBox,
+              box_qty: boxQty,
+              loose_pcs: loosePcs,
+              free_pcs: freePcs,
+              total_qty_pcs: totalPcs,
+              unit_price: unitPrice || matchedProd?.unit_price || 100,
+              total_price: totalAmount,
+              dispatched_qty_pcs: 0,
+              pending_qty_pcs: totalPcs,
+              remark: remarks
+            }
+          ],
+          order_history: [
+            {
+              id: generateUuid(),
+              order_id: orderId,
+              performed_at: new Date().toISOString(),
+              action: 'ORDER_BULK_IMPORTED',
+              performed_by: 'Bulk CSV Import',
+              remarks: `Bulk registered with ${boxQty} Boxes, ${loosePcs} Loose, ${freePcs} Free PCS`
+            }
+          ]
+        };
+
+        importedItems.push(orderRecord);
+        const res = await saveOrderToSupabase(orderRecord);
+        if (!res.success && res.error) {
+          console.error(`Order row ${i + 1} error:`, res.error);
         }
 
       } else {
@@ -869,7 +988,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                   Bulk Registration Complete!
                 </h3>
                 <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: 4 }}>
-                  All {totalCount} agency records were validated, mapped, and inserted into live Supabase.
+                  All {totalCount} {schema.title || masterType} record(s) were validated, mapped, and saved to live database.
                 </p>
               </div>
 
@@ -888,7 +1007,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                   cursor: 'pointer'
                 }}
               >
-                Close & Refresh Master View
+                Close & Refresh View
               </button>
             </div>
           )}

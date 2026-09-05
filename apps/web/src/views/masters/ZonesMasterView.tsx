@@ -162,11 +162,11 @@ export const ZonesMasterView: React.FC<ZonesMasterViewProps> = ({ agencies, sear
   const selectedZoneAgencies = selectedZone ? getAgenciesForZone(selectedZone.zone_name) : [];
 
   // Regional Stats
-  const cityZones = zonesList.filter(z => z.region === 'Surat City Zone');
-  const ruralZones = zonesList.filter(z => z.region === 'South Gujarat Rural Zone');
+  const cityZones = zonesList.filter(z => (z.region || '').toLowerCase().includes('city'));
+  const ruralZones = zonesList.filter(z => (z.region || '').toLowerCase().includes('rural'));
 
-  const cityAgenciesCount = activeAgencies.filter(a => a.zone_region === 'Surat City Zone').length;
-  const ruralAgenciesCount = activeAgencies.filter(a => a.zone_region === 'South Gujarat Rural Zone').length;
+  const cityAgenciesCount = activeAgencies.filter(a => (a.zone_region || '').toLowerCase().includes('city')).length;
+  const ruralAgenciesCount = activeAgencies.filter(a => (a.zone_region || '').toLowerCase().includes('rural')).length;
 
   const totalCityAreas = cityZones.reduce((acc, z) => acc + z.major_areas.length, 0);
   const totalRuralAreas = ruralZones.reduce((acc, z) => acc + z.major_areas.length, 0);

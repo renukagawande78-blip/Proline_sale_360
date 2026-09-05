@@ -50,6 +50,7 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
   const { currentUser, updateUser } = useAuth();
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const [selectedSegment, setSelectedSegment] = useState<string>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [localCompanies, setLocalCompanies] = useState<Company[]>([]);
   const [segmentsList, setSegmentsList] = useState<SegmentOption[]>([]);
@@ -59,8 +60,9 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
   const [isSyncing, setIsSyncing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
-  // Add Company modal state
+  // Add / Edit Company modal state
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [addCode, setAddCode] = useState('');
   const [addName, setAddName] = useState('');
   const [addHandle, setAddHandle] = useState('');
@@ -132,15 +134,38 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
     showFeedback(`Deleted "${companyName}" from Supabase.`);
   };
 
-  const handleEditBrand = async (c: Company) => {
-    const newName = window.prompt(`Update Company Name for [${c.company_code}]:`, c.company_name);
-    if (newName === null) return;
-    const updated: Company = { ...c, company_name: newName.trim() || c.company_name };
-    setLocalCompanies(prev => prev.map(item => item.id === c.id ? updated : item));
-    const res = await saveCompanyToSupabase(updated);
-    showFeedback(res.success
-      ? `✅ Updated "${updated.company_name}" in Supabase!`
-      : `Updated locally. (Supabase: ${res.error})`);
+  const handleToggleBrandStatus = async (c: Company) => {
+    const nextStatus = c.active === false ? true : false;
+    setLocalCompanies(prev => prev.map(item => item.id === c.id ? { ...item, active: nextStatus } : item));
+    try {
+      const { error } = await supabase.from('companies').update({ active: nextStatus }).eq('id', c.id);
+      if (error) {
+        await saveCompanyToSupabase({ ...c, active: nextStatus });
+      }
+    } catch {
+      await saveCompanyToSupabase({ ...c, active: nextStatus });
+    }
+    showFeedback(`Company "${c.company_name}" marked ${nextStatus ? 'ACTIVE' : 'INACTIVE'} in Supabase!`);
+  };
+
+  const handleOpenAddModal = () => {
+    setEditingCompany(null);
+    setAddCode('');
+    setAddName('');
+    setAddHandle('');
+    setAddSegment(segmentsList[0]?.segment_code || 'FMCG');
+    setAddColor('#38bdf8');
+    setIsAddOpen(true);
+  };
+
+  const handleEditBrand = (c: Company) => {
+    setEditingCompany(c);
+    setAddCode(c.company_code || '');
+    setAddName(c.company_name || '');
+    setAddHandle(c.handle || c.company_name || '');
+    setAddSegment(c.segment || segmentsList[0]?.segment_code || 'FMCG');
+    setAddColor(c.brand_color || '#38bdf8');
+    setIsAddOpen(true);
   };
 
   const handleSegmentChange = async (c: Company, newSegment: string) => {
@@ -152,51 +177,68 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
       : `Segment updated locally. (Supabase: ${res.error})`);
   };
 
-  const handleAddCompany = async () => {
+  const handleSaveCompany = async () => {
     if (!addCode.trim() || !addName.trim()) return;
     setIsSavingNew(true);
-    const newCompany: Company = {
-      id: generateUuid(),
-      company_code: addCode.trim().toUpperCase(),
-      company_name: addName.trim(),
-      handle: addHandle.trim() || addName.trim(),
-      segment: addSegment as any,
-      brand_color: addColor,
-      active: true,
-    };
-    setLocalCompanies(prev => [newCompany, ...prev]);
-    const res = await saveCompanyToSupabase(newCompany);
-    setIsAddOpen(false);
-    setAddCode(''); setAddName(''); setAddHandle(''); setAddSegment(segmentsList[0]?.segment_code || 'FMCG'); setAddColor('#38bdf8');
+
+    if (editingCompany) {
+      const updatedCompany: Company = {
+        ...editingCompany,
+        company_code: addCode.trim().toUpperCase(),
+        company_name: addName.trim(),
+        handle: addHandle.trim() || addName.trim(),
+        segment: addSegment as any,
+        brand_color: addColor,
+      };
+      setLocalCompanies(prev => prev.map(item => item.id === editingCompany.id ? updatedCompany : item));
+      const res = await saveCompanyToSupabase(updatedCompany);
+      if (res.success) {
+        showFeedback(`✅ Company "${updatedCompany.company_name}" (${updatedCompany.company_code}) updated in Supabase!`);
+      } else {
+        showFeedback(`Updated locally. Supabase sync notice: ${res.error}`);
+      }
+    } else {
+      const newCompany: Company = {
+        id: generateUuid(),
+        company_code: addCode.trim().toUpperCase(),
+        company_name: addName.trim(),
+        handle: addHandle.trim() || addCode.trim().toUpperCase(),
+        segment: addSegment as any,
+        brand_color: addColor,
+        active: true,
+      };
+      setLocalCompanies(prev => deduplicateCompanies([newCompany, ...prev]));
+      const res = await saveCompanyToSupabase(newCompany);
+      if (res.success) {
+        showFeedback(`✅ Company "${newCompany.company_name}" (${newCompany.company_code}) saved to Supabase!`);
+      } else {
+        showFeedback(`Saved locally. Supabase sync notice: ${res.error}`);
+      }
+    }
+
+    setAddCode('');
+    setAddName('');
+    setAddHandle('');
+    setAddSegment(segmentsList[0]?.segment_code || 'FMCG');
+    setAddColor('#38bdf8');
+    setEditingCompany(null);
     setIsSavingNew(false);
-    showFeedback(res.success
-      ? `✅ Company "${newCompany.company_name}" (${newCompany.segment}) saved to Supabase!`
-      : `Company added locally. (Supabase: ${res.error})`);
+    setIsAddOpen(false);
   };
 
   // Check if a user belongs to a specific company
   const isUserAssignedToCompany = (user: User, company: Company): boolean => {
-    if (user.role_name === 'SUPER_ADMIN') return true;
-    const nameLower = (user.full_name || '').toLowerCase();
-    if (nameLower.includes('chirag') || nameLower.includes('harshad')) return true;
-    const handle = (user.company_handle || '').trim().toLowerCase();
-    if (handle === 'all' || !handle) return true;
-    const cName = company.company_name.toLowerCase();
-    const cCode = company.company_code.toLowerCase();
-    return handle.includes(cName) || handle.includes(cCode);
+    if (!user.company_handle || user.company_handle.trim().toLowerCase() === 'all') return true;
+    const handles = user.company_handle.split(',').map(s => s.trim().toLowerCase());
+    return handles.includes(company.company_name.toLowerCase()) || handles.includes(company.company_code.toLowerCase()) || handles.includes((company.handle || '').toLowerCase());
   };
 
   // Toggle assigning/unassigning a user to a company
   const handleToggleUserCompany = async (user: User, company: Company) => {
-    if (user.role_name === 'SUPER_ADMIN' || (user.full_name || '').toLowerCase().includes('chirag') || (user.full_name || '').toLowerCase().includes('harshad')) {
-      showFeedback(`👑 ${user.full_name} is Super Admin with universal access to ALL companies.`);
-      return;
-    }
     const currentHandle = user.company_handle || 'All';
     let newHandle = '';
 
-    if (currentHandle === 'All') {
-      // If currently all, restricting to this company specifically
+    if (currentHandle.toLowerCase() === 'all') {
       newHandle = company.company_name;
     } else {
       const handles = currentHandle.split(',').map(s => s.trim()).filter(Boolean);
@@ -218,6 +260,9 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
   };
 
   const filteredCompanies = localCompanies.filter(c => {
+    if (selectedStatusFilter === 'ACTIVE' && c.active === false) return false;
+    if (selectedStatusFilter === 'INACTIVE' && c.active !== false) return false;
+
     if (selectedSegment !== 'ALL' && (c.segment || '').toUpperCase() !== selectedSegment.toUpperCase()) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -228,6 +273,9 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
       (c.handle || '').toLowerCase().includes(q)
     );
   });
+
+  const totalActiveCompanies = localCompanies.filter(c => c.active !== false).length;
+  const totalInactiveCompanies = localCompanies.filter(c => c.active === false).length;
 
   if (isLoading) {
     return (
@@ -244,42 +292,93 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
       {/* Header Bar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', background: '#141f36', padding: '0.65rem 0.85rem', borderRadius: '14px', border: '1px solid #1e293b' }}>
 
-        {/* Dynamic Segment Filter Pills */}
-        <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setSelectedSegment('ALL')}
-            style={{
-              padding: '0.4rem 0.9rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
-              background: selectedSegment === 'ALL' ? '#38bdf8' : 'transparent',
-              color: selectedSegment === 'ALL' ? '#090d16' : '#94a3b8',
-              fontWeight: 800, fontSize: '0.775rem', transition: 'all 0.15s ease',
-            }}
-          >
-            All Brands ({localCompanies.length})
-          </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Active / Inactive Status Filter */}
+          <div style={{ display: 'flex', gap: '0.25rem', background: '#0b1329', padding: '0.2rem', borderRadius: '8px', border: '1px solid #1e293b' }}>
+            <button
+              onClick={() => setSelectedStatusFilter('ALL')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: selectedStatusFilter === 'ALL' ? '#38bdf8' : 'transparent',
+                color: selectedStatusFilter === 'ALL' ? '#090d16' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem'
+              }}
+            >
+              All ({localCompanies.length})
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('ACTIVE')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: selectedStatusFilter === 'ACTIVE' ? '#10b981' : 'transparent',
+                color: selectedStatusFilter === 'ACTIVE' ? '#ffffff' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem'
+              }}
+            >
+              Active ({totalActiveCompanies})
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('INACTIVE')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: selectedStatusFilter === 'INACTIVE' ? '#f43f5e' : 'transparent',
+                color: selectedStatusFilter === 'INACTIVE' ? '#ffffff' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem'
+              }}
+            >
+              Inactive ({totalInactiveCompanies})
+            </button>
+          </div>
 
-          {segmentsList.map(seg => {
-            const count = localCompanies.filter(c => (c.segment || '').toUpperCase() === seg.segment_code.toUpperCase()).length;
-            const theme = SEGMENT_THEME_COLORS[seg.segment_code] || DEFAULT_SEGMENT_THEME;
-            const isSelected = selectedSegment === seg.segment_code;
+          {/* Dynamic Segment Filter Pills */}
+          <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setSelectedSegment('ALL')}
+              style={{
+                padding: '0.4rem 0.9rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                background: selectedSegment === 'ALL' ? '#38bdf8' : 'transparent',
+                color: selectedSegment === 'ALL' ? '#090d16' : '#94a3b8',
+                fontWeight: 800, fontSize: '0.775rem', transition: 'all 0.15s ease',
+              }}
+            >
+              All Segments
+            </button>
 
-            return (
-              <button
-                key={seg.id}
-                onClick={() => setSelectedSegment(seg.segment_code)}
-                style={{
-                  padding: '0.4rem 0.9rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                  background: isSelected ? theme.pillColor : 'transparent',
-                  color: isSelected ? '#090d16' : '#94a3b8',
-                  fontWeight: 800, fontSize: '0.775rem', transition: 'all 0.15s ease',
-                  display: 'flex', alignItems: 'center', gap: '0.35rem'
-                }}
-              >
-                <Layers size={12} />
-                {seg.segment_code} ({count})
-              </button>
-            );
-          })}
+            {segmentsList.map(seg => {
+              const count = localCompanies.filter(c => (c.segment || '').toUpperCase() === seg.segment_code.toUpperCase()).length;
+              const theme = SEGMENT_THEME_COLORS[seg.segment_code] || DEFAULT_SEGMENT_THEME;
+              const isSelected = selectedSegment === seg.segment_code;
+
+              return (
+                <button
+                  key={seg.id}
+                  onClick={() => setSelectedSegment(seg.segment_code)}
+                  style={{
+                    padding: '0.4rem 0.9rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                    background: isSelected ? theme.pillColor : 'transparent',
+                    color: isSelected ? '#090d16' : '#94a3b8',
+                    fontWeight: 800, fontSize: '0.775rem', transition: 'all 0.15s ease',
+                    display: 'flex', alignItems: 'center', gap: '0.35rem'
+                  }}
+                >
+                  <Layers size={12} />
+                  {seg.segment_code} ({count})
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Right Actions */}
@@ -293,7 +392,7 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
           </button>
           {isSuperAdmin && (
             <button
-              onClick={() => setIsAddOpen(true)}
+              onClick={handleOpenAddModal}
               style={{ padding: '0.4rem 0.85rem', borderRadius: '8px', border: '1px solid #10b981', background: 'rgba(16,185,129,0.12)', color: '#34d399', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
             >
               <Plus size={13} /> Add Company
@@ -430,13 +529,15 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
         </div>
       )}
 
-      {/* Add Company Modal */}
+      {/* Add / Edit Company Modal */}
       {isAddOpen && (
         <div className="modal-overlay">
           <div className="modal-card" style={{ maxWidth: 520 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.75rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#f8fafc' }}>➕ Add New Company / Brand</h3>
-              <button onClick={() => setIsAddOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={18} /></button>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#f8fafc' }}>
+                {editingCompany ? `✏️ Edit Company / Brand [${editingCompany.company_code}]` : '➕ Add New Company / Brand'}
+              </h3>
+              <button onClick={() => { setIsAddOpen(false); setEditingCompany(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={18} /></button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.25rem' }}>
@@ -507,14 +608,14 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              <button className="btn btn-outline" onClick={() => setIsAddOpen(false)}>Cancel</button>
+              <button className="btn btn-outline" onClick={() => { setIsAddOpen(false); setEditingCompany(null); }}>Cancel</button>
               <button
                 className="btn btn-primary"
-                onClick={handleAddCompany}
+                onClick={handleSaveCompany}
                 disabled={isSavingNew || !addCode.trim() || !addName.trim()}
                 style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
               >
-                {isSavingNew ? 'Saving...' : '✓ Save to Supabase'}
+                {isSavingNew ? 'Saving...' : editingCompany ? '✓ Update Company' : '✓ Save to Supabase'}
               </button>
             </div>
           </div>
@@ -533,6 +634,7 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
               <th>Products (SKUs)</th>
               <th>Assigned Company Team (Hierarchy)</th>
               <th style={{ textAlign: 'center' }}>Team Assignment</th>
+              <th style={{ textAlign: 'center' }}>Status</th>
               <th style={{ textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
@@ -557,9 +659,10 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
               const companySales = allUsersList.filter(u => u.role_name === 'SALES_PERSON' && isUserAssignedToCompany(u, c));
               const companyDispatch = allUsersList.filter(u => u.role_name === 'DISPATCH_MANAGER' && isUserAssignedToCompany(u, c));
               const companyBilling = allUsersList.filter(u => u.role_name === 'BILLING' && isUserAssignedToCompany(u, c));
+              const isBrandActive = c.active !== false;
 
               return (
-                <tr key={c.id}>
+                <tr key={c.id} style={{ opacity: isBrandActive ? 1 : 0.65 }}>
                   <td><strong style={{ color: '#38bdf8' }}>{idx + 1}</strong></td>
                   
                   <td>
@@ -664,6 +767,30 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
                       }}
                     >
                       <Users size={13} /> Manage Team
+                    </button>
+                  </td>
+
+                  {/* Status Toggle Button */}
+                  <td style={{ textAlign: 'center' }}>
+                    <button
+                      onClick={() => handleToggleBrandStatus(c)}
+                      title={`Click to mark brand company as ${isBrandActive ? 'INACTIVE (Close/Deactivate)' : 'ACTIVE'}`}
+                      style={{
+                        padding: '0.25rem 0.65rem',
+                        borderRadius: '6px',
+                        border: isBrandActive ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(244, 63, 94, 0.4)',
+                        background: isBrandActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                        color: isBrandActive ? '#34d399' : '#fb7185',
+                        fontSize: '0.725rem',
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {isBrandActive ? '● ACTIVE' : '○ INACTIVE'}
                     </button>
                   </td>
 

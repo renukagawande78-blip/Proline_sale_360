@@ -33,8 +33,8 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
   products
 }) => {
   const { users } = useAuth();
-  const salesTeamMembers = users.filter(u => u.role_name === 'SALES_PERSON' || u.role_name === 'AREA_SALES_MANAGER');
-  const dispatchManagers = users.filter(u => u.role_name === 'DISPATCH_MANAGER');
+  const salesTeamMembers = users.filter(u => (u.role_name === 'SALES_PERSON' || u.role_name === 'AREA_SALES_MANAGER') && u.active !== false);
+  const dispatchManagers = users.filter(u => u.role_name === 'DISPATCH_MANAGER' && u.active !== false);
 
   // Live master data state
   const [liveCompanies, setLiveCompanies] = useState<Company[]>(companies || []);
@@ -42,6 +42,19 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
   const [liveProducts, setLiveProducts] = useState<Product[]>(products || []);
   const [agencySearchText, setAgencySearchText] = useState('');
   const [productSearchText, setProductSearchText] = useState('');
+
+  // Synchronize master data props if parent updates them
+  useEffect(() => {
+    if (companies && companies.length > 0) setLiveCompanies(companies);
+  }, [companies]);
+
+  useEffect(() => {
+    if (agencies && agencies.length > 0) setLiveAgencies(agencies);
+  }, [agencies]);
+
+  useEffect(() => {
+    if (products && products.length > 0) setLiveProducts(products);
+  }, [products]);
 
   // Fetch live master data on open if needed
   useEffect(() => {
@@ -88,26 +101,48 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
   const uniqueCities = Array.from(new Set(liveAgencies.map(a => a.city).filter(Boolean))).sort() as string[];
 
   // Local Filter Form State
-  const [segment, setSegment] = useState<'ALL' | 'FMCG' | 'FMCD'>(filterState.segment);
-  const [companyId, setCompanyId] = useState(filterState.companyId);
-  const [status, setStatus] = useState(filterState.status);
-  const [salespersonId, setSalespersonId] = useState(filterState.salespersonId);
-  const [agencyId, setAgencyId] = useState(filterState.agencyId);
-  const [areaId, setAreaId] = useState(filterState.areaId);
-  const [city, setCity] = useState(filterState.city);
+  const [segment, setSegment] = useState<'ALL' | 'FMCG' | 'FMCD'>(filterState.segment || 'ALL');
+  const [companyId, setCompanyId] = useState(filterState.companyId || 'ALL');
+  const [status, setStatus] = useState(filterState.status || 'ALL');
+  const [salespersonId, setSalespersonId] = useState(filterState.salespersonId || 'ALL');
+  const [agencyId, setAgencyId] = useState(filterState.agencyId || 'ALL');
+  const [areaId, setAreaId] = useState(filterState.areaId || 'ALL');
+  const [city, setCity] = useState(filterState.city || 'ALL');
   const [zoneId, setZoneId] = useState(filterState.zoneId || 'ALL');
   const [dispatchManagerId, setDispatchManagerId] = useState(filterState.dispatchManagerId || 'ALL');
   const [vehicleNumber, setVehicleNumber] = useState(filterState.vehicleNumber || '');
-  const [productId, setProductId] = useState(filterState.productId);
-  const [mrpRange, setMrpRange] = useState<'ALL' | 'UNDER_50' | '50_500' | '500_5000' | 'ABOVE_5000'>(filterState.mrpRange);
-  const [dateRangeType, setDateRangeType] = useState<DateRangeType>(filterState.dateRangeType);
+  const [productId, setProductId] = useState(filterState.productId || 'ALL');
+  const [mrpRange, setMrpRange] = useState<'ALL' | 'UNDER_50' | '50_500' | '500_5000' | 'ABOVE_5000'>(filterState.mrpRange || 'ALL');
+  const [dateRangeType, setDateRangeType] = useState<DateRangeType>(filterState.dateRangeType || 'ALL_DATES');
   const [startDate, setStartDate] = useState(filterState.startDate || '');
   const [endDate, setEndDate] = useState(filterState.endDate || '');
 
+  // Synchronize internal form inputs whenever filterState changes or modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setSegment(filterState.segment || 'ALL');
+      setCompanyId(filterState.companyId || 'ALL');
+      setStatus(filterState.status || 'ALL');
+      setSalespersonId(filterState.salespersonId || 'ALL');
+      setAgencyId(filterState.agencyId || 'ALL');
+      setAreaId(filterState.areaId || 'ALL');
+      setCity(filterState.city || 'ALL');
+      setZoneId(filterState.zoneId || 'ALL');
+      setDispatchManagerId(filterState.dispatchManagerId || 'ALL');
+      setVehicleNumber(filterState.vehicleNumber || '');
+      setProductId(filterState.productId || 'ALL');
+      setMrpRange(filterState.mrpRange || 'ALL');
+      setDateRangeType(filterState.dateRangeType || 'ALL_DATES');
+      setStartDate(filterState.startDate || '');
+      setEndDate(filterState.endDate || '');
+    }
+  }, [isOpen, filterState]);
+
   if (!isOpen) return null;
 
-  // Filtered agencies based on area, city, and search input
+  // Filtered agencies based on area, city, search input, and active status
   const filteredAgencies = liveAgencies.filter(a => {
+    if (a.active === false) return false;
     const matchesArea = areaId === 'ALL' || (a.area_name || '').toLowerCase() === areaId.toLowerCase();
     const matchesCity = city === 'ALL' || (a.city || '').toLowerCase() === city.toLowerCase();
     const q = agencySearchText.toLowerCase().trim();
@@ -119,13 +154,15 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
     return matchesArea && matchesCity && matchesSearch;
   });
 
-  // Filtered companies based on segment
+  // Filtered companies based on segment and active status
   const filteredCompanies = liveCompanies.filter(c => {
+    if (c.active === false) return false;
     return segment === 'ALL' || (c.segment || '').toUpperCase() === segment.toUpperCase();
   });
 
-  // Filtered products based on company, segment, and search input
+  // Filtered products based on company, segment, search input, and active status
   const filteredProducts = liveProducts.filter(p => {
+    if (p.active === false) return false;
     const matchesCompany = companyId === 'ALL' || p.company_id === companyId;
     const parentComp = liveCompanies.find(c => c.id === p.company_id);
     const prodSegment = p.segment || parentComp?.segment || 'FMCG';
@@ -144,9 +181,12 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
                      status !== 'ALL' || 
                      salespersonId !== 'ALL' || 
                      agencyId !== 'ALL' ||
-                     areaId !== 'ALL' ||
-                     city !== 'ALL' ||
-                     productId !== 'ALL' ||
+                     (Boolean(areaId) && areaId !== 'ALL') ||
+                     (Boolean(city) && city !== 'ALL') ||
+                     (Boolean(zoneId) && zoneId !== 'ALL') ||
+                     (Boolean(dispatchManagerId) && dispatchManagerId !== 'ALL') ||
+                     Boolean(vehicleNumber?.trim()) ||
+                     (Boolean(productId) && productId !== 'ALL') ||
                      mrpRange !== 'ALL' ||
                      dateRangeType !== 'ALL_DATES';
 
@@ -160,7 +200,7 @@ export const GlobalFilterModal: React.FC<GlobalFilterModalProps> = ({
       city,
       zoneId,
       dispatchManagerId,
-      vehicleNumber,
+      vehicleNumber: vehicleNumber.trim(),
       productId,
       mrpRange,
       dateRangeType,

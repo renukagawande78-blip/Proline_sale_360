@@ -247,10 +247,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <td>
                       <button 
                         className="btn btn-outline" 
-                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                        style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 700, borderColor: '#38bdf8', color: '#38bdf8' }}
                         onClick={() => onSelectOrder(order)}
+                        title="View Order Details"
                       >
-                        Inspect
+                        Details
                       </button>
                     </td>
                   </tr>

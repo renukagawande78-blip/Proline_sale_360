@@ -61,7 +61,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
 
   // Main Tab Navigation: Pincodes, Localities, Zone-wise, City-wise, Region-wise, Mapping Errors
   const [activeMainTab, setActiveMainTab] = useState<'PINCODES' | 'LOCALITIES' | 'ZONE_WISE' | 'CITY_WISE' | 'REGION_WISE' | 'MAPPING_ERRORS'>('PINCODES');
-  const [activeRegionFilter, setActiveRegionFilter] = useState<'ALL' | 'City' | 'Rural'>('ALL');
+  const [activeRegionFilter, setActiveRegionFilter] = useState<'ALL' | 'Surat City' | 'Surat Rural' | 'City' | 'Rural'>('ALL');
   const [selectedZoneFilter, setSelectedZoneFilter] = useState<'ALL' | string>('ALL');
   const [pincodeZoneFilter, setPincodeZoneFilter] = useState<'ALL' | string>('ALL');
   const [viewMode, setViewMode] = useState<'GRID' | 'TABLE'>('GRID');
@@ -78,14 +78,14 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   const [editAreaName, setEditAreaName] = useState('');
   const [editCity, setEditCity] = useState('Surat');
   const [editZoneCode, setEditZoneCode] = useState('City-A');
-  const [editRegion, setEditRegion] = useState<'City' | 'Rural' | 'Other'>('City');
+  const [editRegion, setEditRegion] = useState<'Surat City' | 'Surat Rural' | 'City' | 'Rural' | 'Other'>('Surat City');
   const [editDesc, setEditDesc] = useState('');
 
   // Add New Area Form state
   const [newAreaName, setNewAreaName] = useState('');
   const [newCity, setNewCity] = useState('Surat');
   const [newZoneCode, setNewZoneCode] = useState('City-A');
-  const [newRegion, setNewRegion] = useState<'City' | 'Rural' | 'Other'>('City');
+  const [newRegion, setNewRegion] = useState<'Surat City' | 'Surat Rural' | 'City' | 'Rural' | 'Other'>('Surat City');
   const [newDesc, setNewDesc] = useState('');
 
   // Mapping Resolution Modal state for unmapped/mismatched agencies
@@ -99,7 +99,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   const [resolveAreaName, setResolveAreaName] = useState('');
   const [resolveCity, setResolveCity] = useState('Surat');
   const [resolveZoneCode, setResolveZoneCode] = useState('City-A');
-  const [resolveRegion, setResolveRegion] = useState<'City' | 'Rural' | 'Other'>('City');
+  const [resolveRegion, setResolveRegion] = useState<'Surat City' | 'Surat Rural' | 'City' | 'Rural' | 'Other'>('Surat City');
 
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -124,7 +124,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
             id: `ar_ag_${idx}_${aName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
             area_code: `AR-${(ag.city || 'SUR').substring(0, 3).toUpperCase()}-${(idx + 10).toString().padStart(3, '0')}`,
             area_name: aName,
-            city: ag.city || (resolved.region === 'City' ? 'Surat' : aName),
+            city: ag.city || ((resolved.region || '').toLowerCase().includes('city') ? 'Surat' : aName),
             zone_code: ag.zone_name || resolved.zoneName,
             region: resolved.region,
             description: `Locality mapped from Agency Master (${ag.agency_name})`,
@@ -213,8 +213,8 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   // Filtered areas calculation for Localities View
   const filteredAreas = areasList.filter(a => {
     if (activeRegionFilter !== 'ALL') {
-      const isTargetCity = activeRegionFilter === 'City';
-      const isAreaCity = a.region === 'City' || (a.region || '').toLowerCase().includes('city');
+      const isTargetCity = activeRegionFilter === 'Surat City' || activeRegionFilter === 'City';
+      const isAreaCity = (a.region || '').toLowerCase().includes('city');
       if (isTargetCity && !isAreaCity) return false;
       if (!isTargetCity && isAreaCity) return false;
     }
@@ -283,7 +283,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
     const map: Record<string, { city: string; count: number; agencies: Agency[]; areas: string[] }> = {};
     localAgencies.forEach(ag => {
       const resolved = resolveOfficialZone(ag.area_name || ag.city);
-      const city = ag.city || (resolved.region === 'City' ? 'Surat' : resolved.matchedArea);
+      const city = ag.city || ((resolved.region || '').toLowerCase().includes('city') ? 'Surat' : resolved.matchedArea);
       if (!map[city]) {
         map[city] = { city, count: 0, agencies: [], areas: [] };
       }
@@ -337,18 +337,18 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
     return Object.values(map);
   }, [localAgencies, areasList]);
 
-  // 3. Region-wise Counts & Grouping (City vs Rural)
+  // 3. Region-wise Counts & Grouping (Surat City vs Surat Rural)
   const regionWiseStats = useMemo(() => {
     const map: Record<string, { region: string; count: number; agencies: Agency[]; zones: string[]; cities: string[] }> = {
-      'City': {
-        region: 'City',
+      'Surat City': {
+        region: 'Surat City',
         count: 0,
         agencies: [],
         zones: ['City-A', 'City-B', 'City-C', 'City-D', 'City-E'],
         cities: ['Surat']
       },
-      'Rural': {
-        region: 'Rural',
+      'Surat Rural': {
+        region: 'Surat Rural',
         count: 0,
         agencies: [],
         zones: ['Upper South', 'South', 'East', 'North'],
@@ -358,12 +358,13 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
 
     localAgencies.forEach(ag => {
       const resolved = resolveOfficialZone(ag.area_name || ag.city || ag.address);
-      const reg = resolved.region;
-      if (map[reg]) {
-        map[reg].count += 1;
-        map[reg].agencies.push(ag);
-        if (ag.city && !map[reg].cities.includes(ag.city)) {
-          map[reg].cities.push(ag.city);
+      const isCity = (resolved.region || '').toLowerCase().includes('city');
+      const regKey = isCity ? 'Surat City' : 'Surat Rural';
+      if (map[regKey]) {
+        map[regKey].count += 1;
+        map[regKey].agencies.push(ag);
+        if (ag.city && !map[regKey].cities.includes(ag.city)) {
+          map[regKey].cities.push(ag.city);
         }
       }
     });
@@ -374,15 +375,19 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   // 4. Mapping Audit: Detect Mismatches and Unmapped Agencies
   const mappingAuditList = useMemo(() => {
     return localAgencies.map(ag => {
-      const agArea = (ag.area_name || '').trim().toLowerCase();
+      const agAreaRaw = (ag.area_name || '').trim();
+      const agAreaNorm = normalizeAreaName(agAreaRaw) || agAreaRaw;
+      const agArea = agAreaNorm.toLowerCase();
       const agCity = (ag.city || '').trim().toLowerCase();
-      const agZone = (ag.zone_name || '').trim().toLowerCase();
-      const agRegion = (ag.zone_region || '').trim().toLowerCase();
+      const agZone = (ag.zone_name || '').trim().toLowerCase().replace(/zone/g, '').replace(/[^a-z0-9-]/g, '').trim();
+      const agRegionRaw = (ag.zone_region || '').trim().toLowerCase();
+      const agRegion = agRegionRaw.includes('rural') ? 'rural' : (agRegionRaw.includes('city') ? 'city' : agRegionRaw);
 
       // Check if area exists in Area Master
       const matchedArea = areasList.find(a => {
-        const aName = a.area_name.trim().toLowerCase();
-        return agArea && (agArea === aName || aName.includes(agArea) || agArea.includes(aName));
+        const aName = (a.area_name || '').trim().toLowerCase();
+        const aNorm = (normalizeAreaName(a.area_name) || a.area_name).trim().toLowerCase();
+        return agArea && (agArea === aName || agArea === aNorm || aName.includes(agArea) || agArea.includes(aName));
       });
 
       if (!agArea || agArea === 'n/a' || !matchedArea) {
@@ -395,8 +400,17 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         };
       }
 
-      // Check city mismatch
-      if (agCity && matchedArea.city.trim().toLowerCase() !== agCity) {
+      // Check city mismatch (normalize city variations like Surat, Surat Rural, SURAT)
+      const matchedCity = (matchedArea.city || '').trim().toLowerCase();
+      const isCityMatch = !agCity || agCity === matchedCity || 
+        (agCity.includes('surat') && matchedCity.includes('surat')) ||
+        (agCity.includes('navsari') && matchedCity.includes('navsari')) ||
+        (agCity.includes('vapi') && matchedCity.includes('vapi')) ||
+        (agCity.includes('valsad') && matchedCity.includes('valsad')) ||
+        (agCity.includes('bharuch') && matchedCity.includes('bharuch')) ||
+        (agCity.includes('ankleshwar') && matchedCity.includes('ankleshwar'));
+
+      if (!isCityMatch) {
         return {
           agency: ag,
           status: 'CITY_MISMATCH',
@@ -406,8 +420,18 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         };
       }
 
-      // Check zone mismatch
-      if (agZone && (matchedArea.zone_code || '').trim().toLowerCase() !== agZone) {
+      // Check zone mismatch (normalize Zone format like City-A, City-A Zone, ZN-CTA)
+      const matchedZone = (matchedArea.zone_code || '').trim().toLowerCase().replace(/zone/g, '').replace(/[^a-z0-9-]/g, '').trim();
+      const isZoneMatch = !agZone || agZone === matchedZone || 
+        (agZone.includes('city-a') && matchedZone.includes('city-a')) ||
+        (agZone.includes('city-b') && matchedZone.includes('city-b')) ||
+        (agZone.includes('city-c') && matchedZone.includes('city-c')) ||
+        (agZone.includes('city-d') && matchedZone.includes('city-d')) ||
+        (agZone.includes('rural-a') && matchedZone.includes('rural-a')) ||
+        (agZone.includes('rural-b') && matchedZone.includes('rural-b')) ||
+        (agZone.includes('outstation') && matchedZone.includes('outstation'));
+
+      if (!isZoneMatch) {
         return {
           agency: ag,
           status: 'ZONE_MISMATCH',
@@ -417,8 +441,11 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         };
       }
 
-      // Check region mismatch
-      if (agRegion && (matchedArea.region || '').trim().toLowerCase() !== agRegion) {
+      // Check region mismatch (normalize 'Surat City' vs 'City', 'Surat Rural' vs 'Rural')
+      const matchedRegionRaw = (matchedArea.region || '').trim().toLowerCase();
+      const matchedRegion = matchedRegionRaw.includes('rural') ? 'surat rural' : (matchedRegionRaw.includes('city') ? 'surat city' : matchedRegionRaw);
+
+      if (agRegion && matchedRegion && agRegion !== matchedRegion) {
         return {
           agency: ag,
           status: 'REGION_MISMATCH',
@@ -480,7 +507,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
     setEditCity(area.city || 'Surat');
     setEditZoneCode(area.zone_code || 'City-A');
     const isRural = area.region === 'Rural' || (area.region || '').toLowerCase().includes('rural') || ['Upper South', 'South', 'East', 'North'].includes(area.zone_code || '');
-    setEditRegion(isRural ? 'Rural' : 'City');
+    setEditRegion(isRural ? 'Surat Rural' : 'Surat City');
     setEditDesc(area.description || '');
   };
 
@@ -514,7 +541,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
     setResolveMode('CREATE_IN_MASTER');
     setResolveAreaName(item.agency.area_name || '');
     const resolved = resolveOfficialZone(item.agency.area_name || item.agency.city);
-    setResolveCity(item.agency.city || (resolved.region === 'City' ? 'Surat' : resolved.matchedArea));
+    setResolveCity(item.agency.city || ((resolved.region || '').toLowerCase().includes('city') ? 'Surat' : resolved.matchedArea));
     setResolveZoneCode(item.agency.zone_name || resolved.zoneName);
     setResolveRegion(resolved.region);
     if (areasList.length > 0) {
@@ -622,8 +649,8 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
     document.body.removeChild(link);
   };
 
-  const cityAreasCount = areasList.filter(a => a.region === 'City' || (a.region || '').toLowerCase().includes('city')).length;
-  const ruralAreasCount = areasList.filter(a => a.region === 'Rural' || (a.region || '').toLowerCase().includes('rural')).length;
+  const cityAreasCount = areasList.filter(a => (a.region || '').toLowerCase().includes('city')).length;
+  const ruralAreasCount = areasList.filter(a => (a.region || '').toLowerCase().includes('rural')).length;
 
   const selectedArea = selectedAreaId ? areasList.find(a => a.id === selectedAreaId) : null;
   const selectedAreaAgencies = selectedArea ? getAgenciesForArea(selectedArea.area_name) : [];
@@ -987,13 +1014,13 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
               All ({areasList.length})
             </button>
             <button
-              onClick={() => { setActiveRegionFilter('City'); setSelectedZoneFilter('ALL'); }}
+              onClick={() => { setActiveRegionFilter('Surat City'); setSelectedZoneFilter('ALL'); }}
               style={{
                 padding: '0.45rem 0.95rem',
                 borderRadius: '8px',
                 border: 'none',
-                background: activeRegionFilter === 'City' ? '#fbbf24' : 'transparent',
-                color: activeRegionFilter === 'City' ? '#090d16' : '#94a3b8',
+                background: (activeRegionFilter === 'Surat City' || activeRegionFilter === 'City') ? '#fbbf24' : 'transparent',
+                color: (activeRegionFilter === 'Surat City' || activeRegionFilter === 'City') ? '#090d16' : '#94a3b8',
                 fontWeight: 800,
                 fontSize: '0.775rem',
                 cursor: 'pointer'
@@ -1002,19 +1029,19 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
               Surat City ({cityAreasCount})
             </button>
             <button
-              onClick={() => { setActiveRegionFilter('Rural'); setSelectedZoneFilter('ALL'); }}
+              onClick={() => { setActiveRegionFilter('Surat Rural'); setSelectedZoneFilter('ALL'); }}
               style={{
                 padding: '0.45rem 0.95rem',
                 borderRadius: '8px',
                 border: 'none',
-                background: activeRegionFilter === 'Rural' ? '#34d399' : 'transparent',
-                color: activeRegionFilter === 'Rural' ? '#090d16' : '#94a3b8',
+                background: (activeRegionFilter === 'Surat Rural' || activeRegionFilter === 'Rural') ? '#34d399' : 'transparent',
+                color: (activeRegionFilter === 'Surat Rural' || activeRegionFilter === 'Rural') ? '#090d16' : '#94a3b8',
                 fontWeight: 800,
                 fontSize: '0.775rem',
                 cursor: 'pointer'
               }}
             >
-              Rural Zones ({ruralAreasCount})
+              Surat Rural ({ruralAreasCount})
             </button>
 
             <select
@@ -2035,7 +2062,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                           const val = e.target.value;
                           setResolveZoneCode(val);
                           const isRural = ['Upper South', 'South', 'East', 'North'].includes(val);
-                          setResolveRegion(isRural ? 'Rural' : 'City');
+                          setResolveRegion(isRural ? 'Surat Rural' : 'Surat City');
                           if (!isRural) setResolveCity('Surat');
                         }}
                         style={{ width: '100%', padding: '0.65rem 0.85rem', background: '#070e20', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: '0.85rem', fontWeight: 700 }}
@@ -2064,8 +2091,9 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                       onChange={e => setResolveRegion(e.target.value as any)}
                       style={{ width: '100%', padding: '0.65rem 0.85rem', background: '#070e20', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: '0.85rem', fontWeight: 700 }}
                     >
-                      <option value="City">City (Surat City)</option>
-                      <option value="Rural">Rural (South Gujarat Rural / Highway)</option>
+                      <option value="Surat City">Surat City (Urban / SMC Core)</option>
+                      <option value="Surat Rural">Surat Rural (Industrial Corridor / Districts)</option>
+                      <option value="Other">Other (Outstation / Pan-India)</option>
                     </select>
                   </div>
                 </>
@@ -2162,7 +2190,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                       const val = e.target.value;
                       setEditZoneCode(val);
                       const isRural = ['Upper South', 'South', 'East', 'North'].includes(val);
-                      setEditRegion(isRural ? 'Rural' : 'City');
+                      setEditRegion(isRural ? 'Surat Rural' : 'Surat City');
                       if (!isRural) setEditCity('Surat');
                     }}
                     style={{ width: '100%', padding: '0.65rem 0.85rem', background: '#070e20', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: '0.85rem', fontWeight: 700 }}
@@ -2191,8 +2219,9 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                   onChange={e => setEditRegion(e.target.value as any)}
                   style={{ width: '100%', padding: '0.65rem 0.85rem', background: '#070e20', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: '0.85rem', fontWeight: 700 }}
                 >
-                  <option value="City">City (Surat City)</option>
-                  <option value="Rural">Rural (South Gujarat Rural / Highway)</option>
+                  <option value="Surat City">Surat City (Urban / SMC Core)</option>
+                      <option value="Surat Rural">Surat Rural (Industrial Corridor / Districts)</option>
+                      <option value="Other">Other (Outstation / Pan-India)</option>
                 </select>
               </div>
 
@@ -2283,7 +2312,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                       const val = e.target.value;
                       setNewZoneCode(val);
                       const isRural = ['Upper South', 'South', 'East', 'North'].includes(val);
-                      setNewRegion(isRural ? 'Rural' : 'City');
+                      setNewRegion(isRural ? 'Surat Rural' : 'Surat City');
                       if (!isRural) setNewCity('Surat');
                     }}
                     style={{ width: '100%', padding: '0.65rem 0.85rem', background: '#070e20', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: '0.85rem', fontWeight: 700 }}
@@ -2314,8 +2343,9 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                   onChange={e => setNewRegion(e.target.value as any)}
                   style={{ width: '100%', padding: '0.65rem 0.85rem', background: '#070e20', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: '0.85rem', fontWeight: 700 }}
                 >
-                  <option value="City">City (Surat City)</option>
-                  <option value="Rural">Rural (South Gujarat Rural / Highway)</option>
+                  <option value="Surat City">Surat City (Urban / SMC Core)</option>
+                      <option value="Surat Rural">Surat Rural (Industrial Corridor / Districts)</option>
+                      <option value="Other">Other (Outstation / Pan-India)</option>
                 </select>
               </div>
 

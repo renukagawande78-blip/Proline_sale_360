@@ -878,7 +878,8 @@ export const fetchCompaniesFromSupabase = async (): Promise<Company[]> => {
       company_name: c.company_name || c.name || 'Brand Company',
       handle: c.handle || c.code || c.company_code || 'COMP',
       segment: c.segment || c.industry_segment || c.assigned_segment || 'FMCG',
-      brand_color: c.brand_color || '#38bdf8'
+      brand_color: c.brand_color || '#38bdf8',
+      active: c.active !== false
     }));
   } catch (err: any) {
     console.error('Error fetching companies from Supabase:', err?.message || err);
@@ -892,13 +893,15 @@ export const saveCompanyToSupabase = async (company: any): Promise<{ success: bo
     const companyCode = company.company_code || company.code || company.handle || 'BRAND';
     const companyName = company.company_name || company.name || 'Brand Company';
     const companySeg = company.segment || 'FMCG';
+    const isActive = company.active !== false;
 
     const companyRecord: Company = {
       id: companyId,
       company_code: companyCode,
       company_name: companyName,
       handle: companyCode,
-      segment: companySeg as any
+      segment: companySeg as any,
+      active: isActive
     };
 
     const existingIdx = MOCK_COMPANIES.findIndex(c => c.id === companyId || c.company_code === companyCode);
@@ -915,6 +918,7 @@ export const saveCompanyToSupabase = async (company: any): Promise<{ success: bo
       handle: companyCode,
       segment: companySeg,
       brand_color: company.brand_color || '#38bdf8',
+      active: isActive,
       updated_at: new Date().toISOString()
     };
 
@@ -1187,6 +1191,7 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
       zone_name: agency.zone_name || null,
       zone_region: agency.zone_region || null,
       assigned_salesperson: agency.assigned_salesperson || null,
+      active: agency.active !== false,
       updated_at: nowIso
     };
 

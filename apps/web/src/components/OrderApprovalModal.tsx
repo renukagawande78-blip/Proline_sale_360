@@ -31,6 +31,9 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
     || (currentUser?.full_name || '').toLowerCase().includes('chirag')
     || (currentUser?.full_name || '').toLowerCase().includes('harshad');
   const isSalesAdmin = role === 'SALES_ADMIN';
+  const isBillingOrAccounts = role === 'BILLING' || role === 'ACCOUNTS';
+  const isDispatchUser = role === 'DISPATCH_MANAGER' || (role as string) === 'DISPATCH';
+  const canEditOriginalOrder = (isSuperAdmin || isSalesAdmin || role === 'AREA_SALES_MANAGER' || (role as string) === 'SALES_PERSON' || (role as string) === 'SALESPERSON') && !isBillingOrAccounts && !isDispatchUser;
 
   const accessPerm = order ? getOrderAccessPermission(order, currentUser) : { canExecuteActions: false, accessReason: '', isItemBrandOwner: false };
 
@@ -81,7 +84,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
               <span className={'status-badge status-' + order.status}>{order.status}</span>
               {bothApproved && <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#34d399', background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>✅ Both Approvals Complete</span>}
               {waitingForSuperAdmin && <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#fbbf24', background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', padding: '0.15rem 0.55rem', borderRadius: 6 }}>🔔 Awaiting Super Admin Final Sign-off</span>}
-              {onOpenEditOrder && (isSalesAdmin || isSuperAdmin) && order.status !== 'CANCELLED' && (
+              {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && (
                 <button
                   type="button"
                   onClick={() => {
@@ -146,7 +149,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           <h3 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.5rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <FileText size={14} /> Line Items
           </h3>
-          <div className="data-table-container" style={{ maxHeight: 170, overflowY: 'auto' }}>
+          <div className="data-table-container" style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #334155', borderRadius: 8 }}>
             <table className="data-table" style={{ fontSize: '0.775rem' }}>
               <thead>
                 <tr>
@@ -155,6 +158,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                   <th style={{ textAlign: 'center' }}>Pack</th>
                   <th style={{ textAlign: 'center' }}>Boxes</th>
                   <th style={{ textAlign: 'center' }}>Loose PCS</th>
+                  <th style={{ textAlign: 'center' }}>Free PCS</th>
                   <th style={{ textAlign: 'center' }}>Ordered Qty</th>
                 </tr>
               </thead>
@@ -174,20 +178,47 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                       <td><strong style={{ color: '#f8fafc' }}>{item.product_name || 'Product'}</strong></td>
                       <td><span style={{ color: '#fbbf24', fontWeight: 700 }}>{order.company_name}</span></td>
                       <td style={{ textAlign: 'center' }}>{isFMCDItem ? '1 pc (Unit)' : `${item.pcs_per_box} pcs/box`}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700 }}>{isFMCDItem ? '—' : item.box_qty}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700 }}>{isFMCDItem ? '—' : (item.box_qty || 0)}</td>
                       <td style={{ textAlign: 'center', fontWeight: 700, color: '#38bdf8' }}>{item.loose_pcs || (isFMCDItem ? item.total_qty_pcs : 0)}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#fbbf24' }}>
+                        {(item.free_pcs || 0) > 0 ? `+${item.free_pcs} Free` : '—'}
+                      </td>
                       <td style={{ textAlign: 'center', fontWeight: 800, color: '#34d399' }}>
-                        {qtyDisplay}
-                        {(item.free_pcs || 0) > 0 && (
-                          <span style={{ display: 'block', fontSize: '0.65rem', color: '#fbbf24' }}>
-                            + {item.free_pcs} Free
-                          </span>
-                        )}
+                        {qtyDisplay} ({item.total_qty_pcs?.toLocaleString() || 0} PCS)
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
+              {(() => {
+                const items = order.items || [];
+                const totBox = items.reduce((s, it) => s + (it.box_qty || 0), 0);
+                const totLoose = items.reduce((s, it) => s + (it.loose_pcs || 0), 0);
+                const totFree = items.reduce((s, it) => s + (it.free_pcs || 0), 0);
+                const totPcs = items.reduce((s, it) => s + (it.total_qty_pcs || 0), 0) || order.total_qty_pcs || 0;
+
+                return (
+                  <tfoot style={{ background: '#0b1329', borderTop: '2px solid #38bdf8' }}>
+                    <tr>
+                      <td colSpan={3} style={{ fontWeight: 800, color: '#f8fafc' }}>
+                        TOTAL SUMMARY
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 800, color: '#38bdf8' }}>
+                        {totBox > 0 ? `${totBox} BOX` : '—'}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 800, color: '#38bdf8' }}>
+                        {totLoose > 0 ? `${totLoose} PCS` : '—'}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 800, color: '#fbbf24' }}>
+                        {totFree > 0 ? `${totFree} Free` : '—'}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 900, color: '#34d399' }}>
+                        {totBox > 0 ? `${totBox} BOX` : ''}{totBox > 0 && totLoose > 0 ? ', ' : ''}{totLoose > 0 ? `${totLoose} PCS` : ''}{totBox === 0 && totLoose === 0 ? `${totPcs} PCS` : ''} ({totPcs.toLocaleString()} PCS)
+                      </td>
+                    </tr>
+                  </tfoot>
+                );
+              })()}
             </table>
           </div>
         </div>
@@ -427,7 +458,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
-            {onOpenEditOrder && (isSalesAdmin || isSuperAdmin) && order.status !== 'CANCELLED' && (
+            {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && (
               <button
                 type="button"
                 className="btn"

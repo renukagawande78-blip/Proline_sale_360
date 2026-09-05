@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { MobileBottomNav } from './components/MobileBottomNav';
@@ -35,6 +35,8 @@ import {
   MOCK_HOLD_REASONS,
   fetchOrdersFromSupabase,
   fetchCompaniesFromSupabase,
+  fetchAgenciesFromSupabaseTable,
+  fetchProductsFromSupabase,
   getOrderAccessPermission,
   saveOrderToSupabase,
   deleteOrderFromSupabase,
@@ -110,7 +112,6 @@ const MainLayout: React.FC = () => {
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [liveCompanies, setLiveCompanies] = useState<Company[]>([]);
 
   // Automatically persist local copy
   React.useEffect(() => {
@@ -122,6 +123,10 @@ const MainLayout: React.FC = () => {
       }
     }
   }, [orders]);
+
+  const [liveCompanies, setLiveCompanies] = useState<Company[]>([]);
+  const [liveAgencies, setLiveAgencies] = useState<Agency[]>([]);
+  const [liveProducts, setLiveProducts] = useState<Product[]>([]);
 
   // Initial fetch + Realtime Database Synchronization with Supabase
   React.useEffect(() => {
@@ -136,6 +141,14 @@ const MainLayout: React.FC = () => {
 
     fetchCompaniesFromSupabase().then(comps => {
       if (comps && comps.length > 0) setLiveCompanies(comps);
+    });
+
+    fetchAgenciesFromSupabaseTable().then(({ agencies: liveList }) => {
+      if (liveList && liveList.length > 0) setLiveAgencies(liveList);
+    });
+
+    fetchProductsFromSupabase().then(prods => {
+      if (prods && prods.length > 0) setLiveProducts(prods);
     });
 
     // Use a unique Realtime topic. Supabase reuses channels with the same topic;
@@ -169,12 +182,34 @@ const MainLayout: React.FC = () => {
       })
       .subscribe();
 
+    const channelAgencies = supabase
+      .channel(`agencies_realtime_${generateUuid()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agencies' }, () => {
+        fetchAgenciesFromSupabaseTable().then(({ agencies: liveList }) => {
+          if (liveList && liveList.length > 0) setLiveAgencies(liveList);
+        });
+      })
+      .subscribe();
+
+    const channelProducts = supabase
+      .channel(`products_realtime_${generateUuid()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+        fetchProductsFromSupabase().then(prods => {
+          if (prods && prods.length > 0) setLiveProducts(prods);
+        });
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(channelAgencies);
+      supabase.removeChannel(channelProducts);
     };
   }, []);
 
   const companiesPool = liveCompanies.length > 0 ? liveCompanies : MOCK_COMPANIES;
+  const agenciesPool = liveAgencies.length > 0 ? liveAgencies : MOCK_AGENCIES;
+  const productsPool = liveProducts.length > 0 ? liveProducts : MOCK_PRODUCTS;
 
   React.useEffect(() => {
     if (!currentUser) return;
@@ -183,6 +218,21 @@ const MainLayout: React.FC = () => {
 
     setCurrentTab('dashboard');
   }, [currentUser?.id, currentUser?.role_name]);
+
+  // Check URL params for direct PDF / Invoice link sharing
+  useEffect(() => {
+    if (orders.length === 0) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sharedOrderId = params.get('order_id') || params.get('invoice_id') || params.get('order');
+      if (sharedOrderId) {
+        const found = orders.find(o => o.id === sharedOrderId || o.order_number === sharedOrderId);
+        if (found) {
+          setSelectedOrderForInvoice(found);
+        }
+      }
+    } catch {}
+  }, [orders]);
 
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -253,75 +303,111 @@ const MainLayout: React.FC = () => {
       const matches = 
         (o.order_number || '').toLowerCase().includes(q) ||
         (o.agency_name || '').toLowerCase().includes(q) ||
+        (o.agency_code || '').toLowerCase().includes(q) ||
         (o.company_name || '').toLowerCase().includes(q) ||
         (o.salesperson_name || '').toLowerCase().includes(q) ||
         (o.invoice_number || '').toLowerCase().includes(q) ||
         (o.vehicle_number || '').toLowerCase().includes(q) ||
-        (o.items || []).some(item => (item.product_name || item.product_code || '').toLowerCase().includes(q));
+        (o.items || []).some(item => 
+          (item.product_name || '').toLowerCase().includes(q) || 
+          (item.product_code || '').toLowerCase().includes(q)
+        );
       if (!matches) return false;
     }
 
     // 1. Segment Filter
-    if (globalFilterState.segment !== 'ALL') {
-      const comp = companiesPool.find(c => c.id === o.company_id || c.company_name === o.company_name);
-      if (comp?.segment !== globalFilterState.segment) return false;
+    if (globalFilterState.segment && globalFilterState.segment !== 'ALL') {
+      const comp = companiesPool.find(c => c.id === o.company_id || (c.company_name || '').toLowerCase() === (o.company_name || '').toLowerCase());
+      const orderSegment = comp?.segment || (o.company_name?.includes('Proline') ? 'FMCG' : 'FMCG');
+      if (orderSegment !== globalFilterState.segment) return false;
     }
 
     // 2. Brand / Company Filter
-    if (globalFilterState.companyId !== 'ALL') {
-      if (o.company_id !== globalFilterState.companyId) return false;
+    if (globalFilterState.companyId && globalFilterState.companyId !== 'ALL') {
+      const selectedComp = companiesPool.find(c => c.id === globalFilterState.companyId);
+      const matchesId = o.company_id === globalFilterState.companyId;
+      const matchesName = selectedComp && (o.company_name || '').toLowerCase() === (selectedComp.company_name || '').toLowerCase();
+      if (!matchesId && !matchesName) return false;
     }
 
     // 3. Order Status Filter
-    if (globalFilterState.status !== 'ALL') {
+    if (globalFilterState.status && globalFilterState.status !== 'ALL') {
       if (o.status !== globalFilterState.status) return false;
     }
 
     // 4. Salesperson Filter
-    if (globalFilterState.salespersonId !== 'ALL') {
-      if (o.salesperson_id !== globalFilterState.salespersonId) return false;
+    if (globalFilterState.salespersonId && globalFilterState.salespersonId !== 'ALL') {
+      const selectedUser = users.find(u => u.id === globalFilterState.salespersonId);
+      const matchesId = o.salesperson_id === globalFilterState.salespersonId;
+      const matchesName = selectedUser && (o.salesperson_name || '').toLowerCase() === (selectedUser.full_name || '').toLowerCase();
+      if (!matchesId && !matchesName) return false;
     }
 
     // 5. Agency Filter
-    if (globalFilterState.agencyId !== 'ALL') {
-      if (o.agency_id !== globalFilterState.agencyId) return false;
+    if (globalFilterState.agencyId && globalFilterState.agencyId !== 'ALL') {
+      const selectedAg = agenciesPool.find(a => a.id === globalFilterState.agencyId);
+      const matchesId = o.agency_id === globalFilterState.agencyId;
+      const matchesName = selectedAg && (o.agency_name || '').toLowerCase() === (selectedAg.agency_name || '').toLowerCase();
+      if (!matchesId && !matchesName) return false;
     }
 
     // 6. Area / Territory Filter
-    if (globalFilterState.areaId !== 'ALL') {
-      const agency = MOCK_AGENCIES.find(a => a.id === o.agency_id || a.agency_name === o.agency_name);
-      if (agency?.area_name !== globalFilterState.areaId) return false;
+    if (globalFilterState.areaId && globalFilterState.areaId !== 'ALL') {
+      const agency = agenciesPool.find(a => a.id === o.agency_id || (a.agency_name || '').toLowerCase() === (o.agency_name || '').toLowerCase());
+      const orderArea = (agency?.area_name || '').toLowerCase();
+      if (orderArea !== globalFilterState.areaId.toLowerCase()) return false;
     }
 
     // 7. City Filter
-    if (globalFilterState.city !== 'ALL') {
-      const agency = MOCK_AGENCIES.find(a => a.id === o.agency_id || a.agency_name === o.agency_name);
-      if (agency?.city !== globalFilterState.city) return false;
+    if (globalFilterState.city && globalFilterState.city !== 'ALL') {
+      const agency = agenciesPool.find(a => a.id === o.agency_id || (a.agency_name || '').toLowerCase() === (o.agency_name || '').toLowerCase());
+      const orderCity = (agency?.city || '').toLowerCase();
+      if (orderCity !== globalFilterState.city.toLowerCase()) return false;
     }
 
-    if (globalFilterState.vehicleNumber && !(o.vehicle_number || '').toLowerCase().includes(globalFilterState.vehicleNumber.toLowerCase())) return false;
+    // Zone Filter
+    if (globalFilterState.zoneId && globalFilterState.zoneId !== 'ALL') {
+      const agency = agenciesPool.find(a => a.id === o.agency_id || (a.agency_name || '').toLowerCase() === (o.agency_name || '').toLowerCase());
+      const orderZone = (agency?.zone_name || agency?.area_name || '').toLowerCase();
+      if (!orderZone.includes(globalFilterState.zoneId.toLowerCase())) return false;
+    }
+
+    // Dispatch Manager Filter
+    if (globalFilterState.dispatchManagerId && globalFilterState.dispatchManagerId !== 'ALL') {
+      if ((o as any).dispatch_manager_id && (o as any).dispatch_manager_id !== globalFilterState.dispatchManagerId) return false;
+    }
+
+    // Vehicle Number Filter
+    if (globalFilterState.vehicleNumber && !(o.vehicle_number || '').toLowerCase().includes(globalFilterState.vehicleNumber.toLowerCase())) {
+      return false;
+    }
 
     // 8. Product SKU Filter
-    if (globalFilterState.productId !== 'ALL') {
-      const hasProduct = o.items?.some(i => i.product_id === globalFilterState.productId);
+    if (globalFilterState.productId && globalFilterState.productId !== 'ALL') {
+      const selectedProd = productsPool.find(p => p.id === globalFilterState.productId);
+      const hasProduct = o.items?.some(i => 
+        i.product_id === globalFilterState.productId || 
+        (selectedProd && (i.product_name || '').toLowerCase() === (selectedProd.product_name || '').toLowerCase())
+      );
       if (!hasProduct) return false;
     }
 
     // 9. MRP Price Range Filter
-    if (globalFilterState.mrpRange !== 'ALL') {
+    if (globalFilterState.mrpRange && globalFilterState.mrpRange !== 'ALL') {
       const hasMatchingMRP = o.items?.some(i => {
-        if (globalFilterState.mrpRange === 'UNDER_50') return i.unit_price < 50;
-        if (globalFilterState.mrpRange === '50_500') return i.unit_price >= 50 && i.unit_price <= 500;
-        if (globalFilterState.mrpRange === '500_5000') return i.unit_price > 500 && i.unit_price <= 5000;
-        if (globalFilterState.mrpRange === 'ABOVE_5000') return i.unit_price > 5000;
+        const price = Number(i.unit_price || 0);
+        if (globalFilterState.mrpRange === 'UNDER_50') return price < 50;
+        if (globalFilterState.mrpRange === '50_500') return price >= 50 && price <= 500;
+        if (globalFilterState.mrpRange === '500_5000') return price > 500 && price <= 5000;
+        if (globalFilterState.mrpRange === 'ABOVE_5000') return price > 5000;
         return true;
       });
       if (!hasMatchingMRP) return false;
     }
 
     // 10. Date Period Filter (Today, Month, Quarter, Year, Custom, All)
-    if (globalFilterState.dateRangeType !== 'ALL_DATES') {
-      const orderDate = new Date(o.order_date);
+    if (globalFilterState.dateRangeType && globalFilterState.dateRangeType !== 'ALL_DATES') {
+      const orderDate = new Date(o.order_date || Date.now());
       const today = new Date();
 
       if (globalFilterState.dateRangeType === 'TODAY') {
@@ -337,6 +423,7 @@ const MainLayout: React.FC = () => {
       } else if (globalFilterState.dateRangeType === 'CUSTOM' && globalFilterState.startDate && globalFilterState.endDate) {
         const start = new Date(globalFilterState.startDate);
         const end = new Date(globalFilterState.endDate);
+        end.setHours(23, 59, 59, 999);
         if (orderDate < start || orderDate > end) return false;
       }
     }
@@ -344,7 +431,7 @@ const MainLayout: React.FC = () => {
     return true;
   });
 
-  // Stage-level scoped orders for Dispatch and Accounts pages (includes role, brand, segment, agency, date filtering, but not restricting to an unrelated stage status)
+  // Stage-level scoped orders for Dispatch and Accounts pages
   const stageScopedOrders = accessibleOrders.filter(o => {
     // 0. Search Query Filter
     if (globalSearchQuery.trim()) {
@@ -361,43 +448,56 @@ const MainLayout: React.FC = () => {
     }
 
     // 1. Segment Filter
-    if (globalFilterState.segment !== 'ALL') {
-      const comp = companiesPool.find(c => c.id === o.company_id || c.company_name === o.company_name);
+    if (globalFilterState.segment && globalFilterState.segment !== 'ALL') {
+      const comp = companiesPool.find(c => c.id === o.company_id || (c.company_name || '').toLowerCase() === (o.company_name || '').toLowerCase());
       if (comp?.segment !== globalFilterState.segment) return false;
     }
 
     // 2. Brand / Company Filter
-    if (globalFilterState.companyId !== 'ALL') {
-      if (o.company_id !== globalFilterState.companyId) return false;
+    if (globalFilterState.companyId && globalFilterState.companyId !== 'ALL') {
+      const selectedComp = companiesPool.find(c => c.id === globalFilterState.companyId);
+      const matchesId = o.company_id === globalFilterState.companyId;
+      const matchesName = selectedComp && (o.company_name || '').toLowerCase() === (selectedComp.company_name || '').toLowerCase();
+      if (!matchesId && !matchesName) return false;
     }
 
     // 4. Salesperson Filter
-    if (globalFilterState.salespersonId !== 'ALL') {
-      if (o.salesperson_id !== globalFilterState.salespersonId) return false;
+    if (globalFilterState.salespersonId && globalFilterState.salespersonId !== 'ALL') {
+      const selectedUser = users.find(u => u.id === globalFilterState.salespersonId);
+      const matchesId = o.salesperson_id === globalFilterState.salespersonId;
+      const matchesName = selectedUser && (o.salesperson_name || '').toLowerCase() === (selectedUser.full_name || '').toLowerCase();
+      if (!matchesId && !matchesName) return false;
     }
 
     // 5. Agency Filter
-    if (globalFilterState.agencyId !== 'ALL') {
-      if (o.agency_id !== globalFilterState.agencyId) return false;
+    if (globalFilterState.agencyId && globalFilterState.agencyId !== 'ALL') {
+      const selectedAg = agenciesPool.find(a => a.id === globalFilterState.agencyId);
+      const matchesId = o.agency_id === globalFilterState.agencyId;
+      const matchesName = selectedAg && (o.agency_name || '').toLowerCase() === (selectedAg.agency_name || '').toLowerCase();
+      if (!matchesId && !matchesName) return false;
     }
 
     // 6. Area / Territory Filter
-    if (globalFilterState.areaId !== 'ALL') {
-      const agency = MOCK_AGENCIES.find(a => a.id === o.agency_id || a.agency_name === o.agency_name);
-      if (agency?.area_name !== globalFilterState.areaId) return false;
+    if (globalFilterState.areaId && globalFilterState.areaId !== 'ALL') {
+      const agency = agenciesPool.find(a => a.id === o.agency_id || (a.agency_name || '').toLowerCase() === (o.agency_name || '').toLowerCase());
+      if ((agency?.area_name || '').toLowerCase() !== globalFilterState.areaId.toLowerCase()) return false;
     }
 
     // 7. City Filter
-    if (globalFilterState.city !== 'ALL') {
-      const agency = MOCK_AGENCIES.find(a => a.id === o.agency_id || a.agency_name === o.agency_name);
-      if (agency?.city !== globalFilterState.city) return false;
+    if (globalFilterState.city && globalFilterState.city !== 'ALL') {
+      const agency = agenciesPool.find(a => a.id === o.agency_id || (a.agency_name || '').toLowerCase() === (o.agency_name || '').toLowerCase());
+      if ((agency?.city || '').toLowerCase() !== globalFilterState.city.toLowerCase()) return false;
     }
 
     if (globalFilterState.vehicleNumber && !(o.vehicle_number || '').toLowerCase().includes(globalFilterState.vehicleNumber.toLowerCase())) return false;
 
     // 8. Product SKU Filter
-    if (globalFilterState.productId !== 'ALL') {
-      const hasProduct = o.items?.some(i => i.product_id === globalFilterState.productId);
+    if (globalFilterState.productId && globalFilterState.productId !== 'ALL') {
+      const selectedProd = productsPool.find(p => p.id === globalFilterState.productId);
+      const hasProduct = o.items?.some(i => 
+        i.product_id === globalFilterState.productId || 
+        (selectedProd && (i.product_name || '').toLowerCase() === (selectedProd.product_name || '').toLowerCase())
+      );
       if (!hasProduct) return false;
     }
 
@@ -457,6 +557,21 @@ const MainLayout: React.FC = () => {
         : `B2B Order for ${orderData.agency_name} (${orderData.total_qty_pcs} PCS). Created by ${orderData.salesperson_name}.`,
       event_type: isEditing ? 'ORDER_HELD' : 'ORDER_SUBMITTED',
       order_id: orderData.id
+    });
+  };
+
+  const handleBulkImportOrders = (newOrders: Order[]) => {
+    setOrders(prev => {
+      const merged = [...newOrders, ...prev];
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(merged));
+      } catch {}
+      return merged;
+    });
+    addNotification({
+      title: '📦 Bulk Orders Registered',
+      message: `Successfully imported ${newOrders.length} sales orders into system.`,
+      event_type: 'ORDER_SUBMITTED'
     });
   };
 
@@ -1250,7 +1365,8 @@ const MainLayout: React.FC = () => {
           totalOrdersCount={accessibleOrders.length}
           filteredOrdersCount={globallyFilteredOrders.length}
           companies={companiesPool}
-          agencies={MOCK_AGENCIES}
+          agencies={agenciesPool}
+          products={productsPool}
           users={users}
           searchQuery={globalSearchQuery}
           onClearSearch={() => setGlobalSearchQuery('')}
@@ -1285,6 +1401,7 @@ const MainLayout: React.FC = () => {
             onRequestAccountsApproval={handleRequestAccountsApproval}
             onAccountsApprovalResponse={handleAccountsApprovalResponse}
             onOpenPODModal={(o) => setSelectedOrderForPOD(o)}
+            onBulkImportOrders={handleBulkImportOrders}
           />
         )}
 
@@ -1310,6 +1427,7 @@ const MainLayout: React.FC = () => {
             onRequestAccountsApproval={handleRequestAccountsApproval}
             onAccountsApprovalResponse={handleAccountsApprovalResponse}
             onOpenPODModal={(o) => setSelectedOrderForPOD(o)}
+            onBulkImportOrders={handleBulkImportOrders}
           />
         )}
 
@@ -1355,14 +1473,14 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'reports' && (
           <ReportsPage 
-            orders={globallyFilteredOrders.length > 0 ? globallyFilteredOrders : orders} 
+            orders={globallyFilteredOrders} 
             initialReport={selectedReportName}
           />
         )}
 
         {currentTab === 'returns' && (
           <ReturnsRegisterView
-            orders={orders}
+            orders={globallyFilteredOrders}
             onOpenProcessReturnModal={(o) => setSelectedOrderForProcessReturn(o)}
             onSelectOrder={(o) => setSelectedOrderForApproval(o)}
             onResolveException={handleResolveException}
@@ -1373,7 +1491,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'pod' && (
           <PODQueueView
-            orders={orders}
+            orders={globallyFilteredOrders}
             onVerifyPOD={(order) => setSelectedOrderForPOD(order)}
             onResolveQuery={handleResolveException}
           />
@@ -1381,14 +1499,14 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'tracker' && (
           <OrderTrackerView
-            orders={orders}
+            orders={globallyFilteredOrders}
             onReleaseHold={handleReleaseHold}
           />
         )}
       </div>
 
       <MobileBottomNav 
-        currentTab={currentTab}
+        currentTab={currentTab} 
         onTabChange={(tab) => {
           setCurrentTab(tab);
           setIsMobileSidebarOpen(false);
@@ -1448,7 +1566,7 @@ const MainLayout: React.FC = () => {
       <ZoneMasterModal 
         isOpen={isZoneMasterOpen}
         onClose={() => setIsZoneMasterOpen(false)}
-        agencies={MOCK_AGENCIES}
+        agencies={agenciesPool}
       />
 
       <OrderInvoiceModal 
@@ -1464,6 +1582,8 @@ const MainLayout: React.FC = () => {
         onApplyFilter={(state) => setGlobalFilterState(state)}
         onResetFilter={() => setGlobalFilterState(DEFAULT_GLOBAL_FILTER)}
         companies={companiesPool}
+        agencies={agenciesPool}
+        products={productsPool}
       />
 
       <RegisterAgencyModal

@@ -1,6 +1,6 @@
 import { Agency, Product, Company, ZoneMaster, User } from '../types';
 
-export type MasterType = 'agencies' | 'products' | 'zones' | 'companies' | 'users' | 'party_balances';
+export type MasterType = 'agencies' | 'products' | 'zones' | 'companies' | 'users' | 'party_balances' | 'orders';
 
 export interface MasterColumnConfig {
   key: string;
@@ -233,6 +233,52 @@ export const MASTER_SCHEMAS: Record<MasterType, MasterSchema> = {
         role_name: 'BILLING',
         company_handle: 'Whirlpool, Daikin',
         password: '1234'
+      }
+    ]
+  },
+
+  orders: {
+    title: 'Sales Orders Bulk CSV Upload',
+    filenamePrefix: 'Sales_Orders_Bulk_Upload_Sample',
+    columns: [
+      { key: 'order_number', header: 'Order Number', example: 'SO-2026-901' },
+      { key: 'agency_name', header: 'Agency / Party Name', example: 'A One Electronics' },
+      { key: 'company_name', header: 'Brand / Company Name', example: 'Priyagold' },
+      { key: 'salesperson_name', header: 'Salesperson Name', example: 'Chirag Patel' },
+      { key: 'product_name', header: 'Product Name / SKU', example: 'Butter Gold 100g' },
+      { key: 'box_qty', header: 'Box Qty', example: '10' },
+      { key: 'loose_pcs', header: 'Loose Pcs', example: '0' },
+      { key: 'free_pcs', header: 'Free Pcs', example: '1' },
+      { key: 'unit_price', header: 'Unit Rate (INR)', example: '120' },
+      { key: 'delivery_type', header: 'Delivery Mode (F.O.R / Self Pickup)', example: 'F.O.R' },
+      { key: 'remarks', header: 'Order Remarks', example: 'Bulk Order Sample' }
+    ],
+    sampleData: [
+      {
+        order_number: 'SO-2026-901',
+        agency_name: 'A One Electronics',
+        company_name: 'Priyagold',
+        salesperson_name: 'Chirag Patel',
+        product_name: 'Butter Gold 100g',
+        box_qty: '10',
+        loose_pcs: '0',
+        free_pcs: '1',
+        unit_price: '120',
+        delivery_type: 'F.O.R',
+        remarks: 'Sample B2B Order 1'
+      },
+      {
+        order_number: 'SO-2026-902',
+        agency_name: 'A One Mall',
+        company_name: 'Orion',
+        salesperson_name: 'Nikhil',
+        product_name: 'Choco Pie 6P',
+        box_qty: '25',
+        loose_pcs: '0',
+        free_pcs: '2',
+        unit_price: '90',
+        delivery_type: 'F.O.R',
+        remarks: 'Sample B2B Order 2'
       }
     ]
   }

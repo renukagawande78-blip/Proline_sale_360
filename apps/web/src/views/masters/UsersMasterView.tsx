@@ -40,6 +40,7 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ searchQuery, o
   const [localUsers, setLocalUsers] = useState<User[]>([]);
   const [companiesList, setCompaniesList] = useState<Company[]>([]);
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
@@ -118,8 +119,12 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ searchQuery, o
     const newStatus = !(user.active !== false);
     const updated = { ...user, active: newStatus };
     setLocalUsers(prev => prev.map(u => u.id === user.id ? updated : u));
-    await saveUserToSupabase(updated);
     if (updateUser) updateUser(user.id, { active: newStatus });
+    const res = await saveUserToSupabase(updated);
+    setNoticeMsg(res.success
+      ? `✅ User ${user.full_name} marked ${newStatus ? 'ACTIVE' : 'INACTIVE'} in Supabase!`
+      : `Status updated locally.`);
+    setTimeout(() => setNoticeMsg(null), 3000);
   };
 
   const togglePasswordVisibility = (userId: string) => {
@@ -132,68 +137,65 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ searchQuery, o
   // Open User-Wise Company Assignment Modal
   const handleOpenAssignModal = (user: User) => {
     setAssignUserModal(user);
-    const handle = (user.company_handle || 'All').trim();
-    if (handle.toLowerCase() === 'all' || !handle) {
+    const currentScope = user.company_handle || 'All';
+    if (currentScope.toLowerCase() === 'all' || !currentScope.trim()) {
       setIsAllCompaniesSelected(true);
       setSelectedCompanyNames(companiesList.map(c => c.company_name));
     } else {
       setIsAllCompaniesSelected(false);
-      const parsed = handle.split(',').map(s => s.trim().toLowerCase());
-      const matched = companiesList
-        .filter(c => parsed.includes(c.company_name.toLowerCase()) || parsed.includes(c.company_code.toLowerCase()))
-        .map(c => c.company_name);
-      setSelectedCompanyNames(matched.length > 0 ? matched : [handle]);
+      const names = currentScope.split(',').map(s => s.trim()).filter(Boolean);
+      setSelectedCompanyNames(names);
     }
   };
 
-  const handleToggleCompanySelection = (companyName: string) => {
+  const handleToggleCompanySelection = (compName: string) => {
     setIsAllCompaniesSelected(false);
     setSelectedCompanyNames(prev => {
-      if (prev.includes(companyName)) {
-        const next = prev.filter(name => name !== companyName);
+      if (prev.includes(compName)) {
+        const next = prev.filter(n => n !== compName);
         return next;
       } else {
-        return [...prev, companyName];
+        return [...prev, compName];
       }
     });
   };
 
-  const handleToggleAllCompanies = () => {
-    if (isAllCompaniesSelected) {
-      setIsAllCompaniesSelected(false);
-      setSelectedCompanyNames([]);
-    } else {
-      setIsAllCompaniesSelected(true);
+  const handleSelectAllCompanies = (selectAll: boolean) => {
+    setIsAllCompaniesSelected(selectAll);
+    if (selectAll) {
       setSelectedCompanyNames(companiesList.map(c => c.company_name));
+    } else {
+      setSelectedCompanyNames([]);
     }
+  };
+
+  const handleToggleAllCompanies = () => {
+    handleSelectAllCompanies(!isAllCompaniesSelected);
   };
 
   const handleSaveCompanyAssignment = async () => {
     if (!assignUserModal) return;
-    let newHandle = 'All';
-
-    if (!isAllCompaniesSelected) {
-      if (selectedCompanyNames.length === 0) {
-        newHandle = 'All';
-      } else if (selectedCompanyNames.length === companiesList.length) {
-        newHandle = 'All';
+    let finalHandle = 'All';
+    if (!isAllCompaniesSelected && selectedCompanyNames.length > 0) {
+      if (selectedCompanyNames.length === companiesList.length) {
+        finalHandle = 'All';
       } else {
-        newHandle = selectedCompanyNames.join(', ');
+        finalHandle = selectedCompanyNames.join(', ');
       }
+    } else if (!isAllCompaniesSelected && selectedCompanyNames.length === 0) {
+      finalHandle = 'All';
     }
 
-    const updatedUser: User = {
-      ...assignUserModal,
-      company_handle: newHandle
-    };
-
+    const updatedUser: User = { ...assignUserModal, company_handle: finalHandle };
     setLocalUsers(prev => prev.map(u => u.id === assignUserModal.id ? updatedUser : u));
-    if (updateUser) updateUser(assignUserModal.id, { company_handle: newHandle });
-    await saveUserToSupabase(updatedUser);
+    if (updateUser) updateUser(assignUserModal.id, { company_handle: finalHandle });
+    const res = await saveUserToSupabase(updatedUser);
 
-    setNoticeMsg(`✅ Assigned Companies for "${assignUserModal.full_name}": [${newHandle}] saved to Supabase!`);
+    setNoticeMsg(res.success
+      ? `✅ Mapped [${finalHandle}] to ${assignUserModal.full_name} in Supabase!`
+      : `Assignment saved locally.`);
+    setTimeout(() => setNoticeMsg(null), 3500);
     setAssignUserModal(null);
-    setTimeout(() => setNoticeMsg(null), 4000);
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -204,30 +206,31 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ searchQuery, o
     const newUser: User = {
       id: generateUuid(),
       full_name: newFullName.trim(),
-      email: newEmail.trim(),
+      email: newEmail.trim().toLowerCase(),
       role_name: newRole,
-      company_handle: newCompanyHandle.trim() || 'All',
-      password: newPassword.trim() || '1234',
+      company_handle: newCompanyHandle,
       phone: newPhone.trim() || undefined,
+      password: newPassword.trim() || '1234',
       active: true
     };
 
     setLocalUsers(prev => [newUser, ...prev]);
     await saveUserToSupabase(newUser);
-
     setIsSavingUser(false);
     setIsAddOpen(false);
     setNewFullName('');
     setNewEmail('');
-    setNewRole('SALES_PERSON');
-    setNewCompanyHandle('All');
     setNewPhone('');
+    setNewPassword('1234');
     setNoticeMsg(`✅ New user "${newUser.full_name}" registered and saved to Supabase!`);
     setTimeout(() => setNoticeMsg(null), 4000);
   };
 
-  // Filter users by role tab + search query
+  // Filter users by status + role tab + search query
   const filteredUsers = localUsers.filter(u => {
+    if (selectedStatusFilter === 'ACTIVE' && u.active === false) return false;
+    if (selectedStatusFilter === 'INACTIVE' && u.active !== false) return false;
+
     if (selectedRoleFilter !== 'ALL' && u.role_name !== selectedRoleFilter) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -523,19 +526,69 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ searchQuery, o
         border: '1px solid #1e293b',
         marginBottom: '1rem'
       }}>
-        {/* Role Pills */}
-        <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setSelectedRoleFilter('ALL')}
-            style={{
-              padding: '0.35rem 0.85rem', borderRadius: '7px', border: 'none', cursor: 'pointer',
-              background: selectedRoleFilter === 'ALL' ? '#38bdf8' : 'transparent',
-              color: selectedRoleFilter === 'ALL' ? '#090d16' : '#94a3b8',
-              fontWeight: 800, fontSize: '0.75rem', transition: 'all 0.15s ease'
-            }}
-          >
-            All Accounts ({localUsers.length})
-          </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Active / Inactive Status Filter */}
+          <div style={{ display: 'flex', gap: '0.25rem', background: '#0b1329', padding: '0.2rem', borderRadius: '8px', border: '1px solid #1e293b' }}>
+            <button
+              onClick={() => setSelectedStatusFilter('ALL')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: selectedStatusFilter === 'ALL' ? '#38bdf8' : 'transparent',
+                color: selectedStatusFilter === 'ALL' ? '#090d16' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem'
+              }}
+            >
+              All ({localUsers.length})
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('ACTIVE')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: selectedStatusFilter === 'ACTIVE' ? '#10b981' : 'transparent',
+                color: selectedStatusFilter === 'ACTIVE' ? '#ffffff' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem'
+              }}
+            >
+              Active ({localUsers.filter(u => u.active !== false).length})
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('INACTIVE')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: selectedStatusFilter === 'INACTIVE' ? '#f43f5e' : 'transparent',
+                color: selectedStatusFilter === 'INACTIVE' ? '#ffffff' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem'
+              }}
+            >
+              Inactive ({localUsers.filter(u => u.active === false).length})
+            </button>
+          </div>
+
+          {/* Role Pills */}
+          <div style={{ display: 'flex', gap: '0.35rem', background: '#0b1329', padding: '0.25rem', borderRadius: '10px', border: '1px solid #1e293b', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setSelectedRoleFilter('ALL')}
+              style={{
+                padding: '0.35rem 0.85rem', borderRadius: '7px', border: 'none', cursor: 'pointer',
+                background: selectedRoleFilter === 'ALL' ? '#38bdf8' : 'transparent',
+                color: selectedRoleFilter === 'ALL' ? '#090d16' : '#94a3b8',
+                fontWeight: 800, fontSize: '0.75rem', transition: 'all 0.15s ease'
+              }}
+            >
+              All Roles
+            </button>
 
           {allRoles.map(role => {
             const count = localUsers.filter(u => u.role_name === role).length;
@@ -558,6 +611,7 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ searchQuery, o
               </button>
             );
           })}
+          </div>
         </div>
 
         {/* Right Actions */}
