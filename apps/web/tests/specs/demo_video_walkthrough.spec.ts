@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { TEST_USERS } from '../fixtures/test-users';
 
+test.use({ video: 'on' });
+
 test.describe('Automated Product Demo Walkthrough Video', () => {
 
   test('Record Full 4-Role End-to-End Walkthrough Demo Video', async ({ page }) => {
