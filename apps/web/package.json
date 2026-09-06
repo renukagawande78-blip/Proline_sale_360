@@ -12,6 +12,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
+    "record:demo": "playwright test tests/specs/demo_video_walkthrough.spec.ts --project=chromium --use:video=on",
     "cap:sync": "cap sync android",
     "cap:build": "npm run build && cap sync android",
     "cap:open": "cap open android"
