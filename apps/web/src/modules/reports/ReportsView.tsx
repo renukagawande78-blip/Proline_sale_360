@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart3, PieChart, TrendingUp, Calendar, Truck, Download, 
   PackageCheck, Boxes, CheckCircle2, X, Search, ExternalLink, 
   Clock, AlertTriangle, User, MapPin, Building2, ShieldCheck, 
-  FileText, Info, CheckSquare, Filter 
+  FileText, Info, CheckSquare, Filter, Layers, ChevronDown, ChevronRight,
+  CalendarRange, CalendarDays
 } from 'lucide-react';
 import { Order } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -14,6 +15,8 @@ interface ReportsViewProps {
   initialReport?: string;
 }
 
+export type PeriodMode = 'STANDARD' | 'DAY' | 'MONTH' | 'QUARTER' | 'YEAR';
+
 export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport }) => {
   const { currentUser } = useAuth();
   const [lastOrderDays, setLastOrderDays] = useState<'7' | '15' | '21' | '30' | '60'>('15');
@@ -22,6 +25,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
   const [isReportModalOpen, setIsReportModalOpen] = useState(Boolean(initialReport));
   const [activeModalReport, setActiveModalReport] = useState<string>(initialReport || 'Completed Orders Report');
   const [modalSearch, setModalSearch] = useState('');
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('STANDARD');
+  const [expandedPeriodKey, setExpandedPeriodKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialReport) {
@@ -204,6 +209,157 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           o.vehicle_number || o.tempo_number || 'N/A', o.is_company_vehicle ? 'Company Owned' : 'Rental / Transporter', o.rental_agency_name || 'Direct', o.driver_name || 'N/A', o.driver_mobile || 'N/A', o.order_number, o.invoice_number || 'N/A', o.agency_name || 'N/A', o.area_name || 'N/A', o.total_box_qty, o.booking_id || 'N/A', o.status
         ]);
       }
+
+      const csvLines = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob(['\uFEFF' + csvLines], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${filename}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setIsExporting(false);
+    }, 400);
+  };
+
+  // Helper for Indian Financial Year Quarters (Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar)
+  const getQuarterInfo = (d: Date) => {
+    const month = d.getMonth() + 1;
+    const year = d.getFullYear();
+    if (month >= 4 && month <= 6) {
+      return { qCode: `FY${year}-${(year + 1).toString().slice(-2)} Q1`, qLabel: `Q1 FY ${year}-${(year + 1).toString().slice(-2)} (Apr - Jun ${year})` };
+    } else if (month >= 7 && month <= 9) {
+      return { qCode: `FY${year}-${(year + 1).toString().slice(-2)} Q2`, qLabel: `Q2 FY ${year}-${(year + 1).toString().slice(-2)} (Jul - Sep ${year})` };
+    } else if (month >= 10 && month <= 12) {
+      return { qCode: `FY${year}-${(year + 1).toString().slice(-2)} Q3`, qLabel: `Q3 FY ${year}-${(year + 1).toString().slice(-2)} (Oct - Dec ${year})` };
+    } else {
+      return { qCode: `FY${year - 1}-${year.toString().slice(-2)} Q4`, qLabel: `Q4 FY ${year - 1}-${year.toString().slice(-2)} (Jan - Mar ${year})` };
+    }
+  };
+
+  // Helper for Indian Financial Year
+  const getFinancialYear = (d: Date) => {
+    const month = d.getMonth() + 1;
+    const year = d.getFullYear();
+    if (month >= 4) {
+      return `FY ${year}-${(year + 1).toString().slice(-2)}`;
+    } else {
+      return `FY ${year - 1}-${year.toString().slice(-2)}`;
+    }
+  };
+
+  // Periodic Groups Calculation for Day-wise, Month-wise, Quarter-wise, and Year-wise reports
+  const periodicGroups = useMemo(() => {
+    if (periodMode === 'STANDARD') return [];
+
+    const map: Record<string, {
+      periodKey: string;
+      periodLabel: string;
+      subLabel: string;
+      orders: Order[];
+      sortDate: number;
+    }> = {};
+
+    scopedOrders.forEach(o => {
+      const d = o.order_date ? new Date(o.order_date) : new Date();
+      const sortDate = d.getTime();
+
+      let pKey = '';
+      let pLabel = '';
+      let pSub = '';
+
+      if (periodMode === 'DAY') {
+        pKey = d.toISOString().substring(0, 10);
+        pLabel = d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+        pSub = 'Daily Demand & Billing';
+      } else if (periodMode === 'MONTH') {
+        pKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+        pLabel = d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+        pSub = `Monthly Fiscal Aggregate (${d.getFullYear()})`;
+      } else if (periodMode === 'QUARTER') {
+        const q = getQuarterInfo(d);
+        pKey = q.qCode;
+        pLabel = q.qLabel;
+        pSub = 'Quarterly Fiscal Performance';
+      } else if (periodMode === 'YEAR') {
+        const fy = getFinancialYear(d);
+        pKey = fy;
+        pLabel = `${fy} Annual Performance Report`;
+        pSub = 'Consolidated Fiscal Year';
+      }
+
+      if (!map[pKey]) {
+        map[pKey] = {
+          periodKey: pKey,
+          periodLabel: pLabel,
+          subLabel: pSub,
+          orders: [],
+          sortDate
+        };
+      }
+      map[pKey].orders.push(o);
+      if (sortDate > map[pKey].sortDate) {
+        map[pKey].sortDate = sortDate;
+      }
+    });
+
+    return Object.values(map)
+      .sort((a, b) => b.sortDate - a.sortDate)
+      .map(group => {
+        const totalOrd = group.orders.length;
+        const completedOrd = group.orders.filter(o => o.status === 'COMPLETED' || o.status === 'DELIVERED').length;
+        const totalBox = group.orders.reduce((s, o) => s + (o.total_box_qty || 0), 0);
+        const totalPcs = group.orders.reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
+        const totalIssuedPcs = group.orders.reduce((s, o) => s + getOrderIssuedQty(o), 0);
+        const revenue = group.orders.reduce((s, o) => s + (o.invoice_amount || 0), 0);
+        const billedCount = group.orders.filter(o => o.invoice_amount && o.invoice_amount > 0).length;
+        const aov = billedCount > 0 ? Math.round(revenue / billedCount) : 0;
+        const fillRate = totalPcs > 0 ? ((totalIssuedPcs / totalPcs) * 100).toFixed(1) : '0.0';
+
+        const brandCounts: Record<string, number> = {};
+        group.orders.forEach(o => {
+          if (o.company_name) brandCounts[o.company_name] = (brandCounts[o.company_name] || 0) + 1;
+        });
+        const topBrand = Object.entries(brandCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+
+        return {
+          ...group,
+          totalOrders: totalOrd,
+          completedOrders: completedOrd,
+          totalBoxes: totalBox,
+          totalPcs,
+          totalIssuedPcs,
+          settledRevenue: revenue,
+          aov,
+          fillRate,
+          topBrand
+        };
+      });
+  }, [scopedOrders, periodMode]);
+
+  // Periodic CSV Export Handler for Day / Month / Quarter / Year
+  const handleExportPeriodicExcel = () => {
+    setIsExporting(true);
+    setTimeout(() => {
+      const todayStr = new Date().toISOString().substring(0, 10);
+      const filename = `Proline_OMS_${periodMode}_Wise_Executive_Report_${todayStr}`;
+      const headers = ['Period / Date Range', 'Total Orders', 'Completed Orders', 'Pending Orders', 'Total Boxes (FMCG)', 'Total PCS Demand', 'Settled Invoiced Revenue (INR)', 'Avg Order Value (INR)', 'Fill Rate %', 'Top Brand'];
+      const rows = periodicGroups.map(g => [
+        g.periodLabel,
+        g.totalOrders,
+        g.completedOrders,
+        g.totalOrders - g.completedOrders,
+        g.totalBoxes,
+        g.totalPcs,
+        g.settledRevenue,
+        g.aov,
+        `${g.fillRate}%`,
+        g.topBrand
+      ]);
 
       const csvLines = [
         headers.join(','),
@@ -1028,101 +1184,387 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
         </div>
       </div>
 
-      {/* Report Summary Cards Selection Grid */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Company All Reports Dashboard</h2>
-          <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 700 }}>💡 Click any report below to inspect its dedicated data view</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.7rem' }}>
-          {reportCatalog.map(report => {
-            const isSel = selectedReport === report;
-            return (
-              <button 
-                key={report} 
-                type="button" 
-                onClick={() => setSelectedReport(report)} 
-                style={{ 
-                  textAlign: 'left', 
-                  padding: '0.85rem 1rem', 
-                  borderRadius: 10, 
-                  cursor: 'pointer', 
-                  border: isSel ? '1px solid #38bdf8' : '1px solid #334155', 
-                  background: isSel ? 'rgba(56,189,248,0.15)' : '#0f172a', 
-                  color: '#f8fafc', 
-                  fontWeight: 800, 
-                  fontSize: '0.825rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '0.5rem',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <BarChart3 size={16} color={report === 'Completed Orders Report' ? '#34d399' : '#38bdf8'} />
-                  {report}
-                </span>
-                <span 
-                  onClick={(e) => { e.stopPropagation(); handleOpenReport(report); }} 
-                  title="Open full interactive modal viewer"
-                  style={{ padding: '0.2rem', borderRadius: 4, background: 'rgba(255,255,255,0.06)' }}
-                >
-                  <ExternalLink size={13} color="#94a3b8" />
-                </span>
-              </button>
-            );
-          })}
-        </div>
+      {/* Executive Report Mode Switcher Tab Bar */}
+      <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button
+          type="button"
+          onClick={() => setPeriodMode('STANDARD')}
+          className={`btn ${periodMode === 'STANDARD' ? 'btn-primary' : 'btn-outline'}`}
+          style={{ fontSize: '0.8rem', padding: '0.55rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.45rem', borderRadius: 8 }}
+        >
+          <BarChart3 size={15} /> 📋 Purpose-Built Reports (9)
+        </button>
+        <button
+          type="button"
+          onClick={() => setPeriodMode('DAY')}
+          className={`btn ${periodMode === 'DAY' ? 'btn-primary' : 'btn-outline'}`}
+          style={{ fontSize: '0.8rem', padding: '0.55rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.45rem', borderRadius: 8 }}
+        >
+          <Calendar size={15} /> 📆 Day-Wise Performance
+        </button>
+        <button
+          type="button"
+          onClick={() => setPeriodMode('MONTH')}
+          className={`btn ${periodMode === 'MONTH' ? 'btn-primary' : 'btn-outline'}`}
+          style={{ fontSize: '0.8rem', padding: '0.55rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.45rem', borderRadius: 8 }}
+        >
+          <CalendarRange size={15} /> 🗓️ Month-Wise Aggregate
+        </button>
+        <button
+          type="button"
+          onClick={() => setPeriodMode('QUARTER')}
+          className={`btn ${periodMode === 'QUARTER' ? 'btn-primary' : 'btn-outline'}`}
+          style={{ fontSize: '0.8rem', padding: '0.55rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.45rem', borderRadius: 8 }}
+        >
+          <PieChart size={15} /> 📊 Quarter-Wise (Q1-Q4)
+        </button>
+        <button
+          type="button"
+          onClick={() => setPeriodMode('YEAR')}
+          className={`btn ${periodMode === 'YEAR' ? 'btn-primary' : 'btn-outline'}`}
+          style={{ fontSize: '0.8rem', padding: '0.55rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.45rem', borderRadius: 8 }}
+        >
+          <TrendingUp size={15} /> 🏛️ Year-Wise Consolidated
+        </button>
       </div>
 
-      {/* Main Page Report View Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-        <div className="data-table-container">
-          <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>
-                  {selectedReport} ({currentMainList.length} Active Records)
-                </h2>
-                <span style={{ fontSize: '0.675rem', padding: '0.15rem 0.5rem', borderRadius: 6, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 800, border: '1px solid rgba(56, 189, 248, 0.3)' }}>
-                  PURPOSE-BUILT VIEW
-                </span>
+      {periodMode === 'STANDARD' ? (
+        <>
+          {/* Report Summary Cards Selection Grid */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Company All Reports Dashboard</h2>
+              <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 700 }}>💡 Click any report below to inspect its dedicated data view</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.7rem' }}>
+              {reportCatalog.map(report => {
+                const isSel = selectedReport === report;
+                return (
+                  <button 
+                    key={report} 
+                    type="button" 
+                    onClick={() => setSelectedReport(report)} 
+                    style={{ 
+                      textAlign: 'left', 
+                      padding: '0.85rem 1rem', 
+                      borderRadius: 10, 
+                      cursor: 'pointer', 
+                      border: isSel ? '1px solid #38bdf8' : '1px solid #334155', 
+                      background: isSel ? 'rgba(56,189,248,0.15)' : '#0f172a', 
+                      color: '#f8fafc', 
+                      fontWeight: 800, 
+                      fontSize: '0.825rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.5rem',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <BarChart3 size={16} color={report === 'Completed Orders Report' ? '#34d399' : '#38bdf8'} />
+                      {report}
+                    </span>
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); handleOpenReport(report); }} 
+                      title="Open full interactive modal viewer"
+                      style={{ padding: '0.2rem', borderRadius: 4, background: 'rgba(255,255,255,0.06)' }}
+                    >
+                      <ExternalLink size={13} color="#94a3b8" />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Main Page Report View Section */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+            <div className="data-table-container">
+              <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>
+                      {selectedReport} ({currentMainList.length} Active Records)
+                    </h2>
+                    <span style={{ fontSize: '0.675rem', padding: '0.15rem 0.5rem', borderRadius: 6, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 800, border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                      PURPOSE-BUILT VIEW
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.775rem', color: '#94a3b8', margin: '4px 0 0' }}>
+                    Displaying specialized columns and telemetry for <strong style={{ color: '#f8fafc' }}>{selectedReport}</strong>
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.6rem' }}>
+                  <button 
+                    onClick={() => handleExportExcel(selectedReport)}
+                    className="btn btn-outline"
+                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', gap: '0.35rem' }}
+                  >
+                    <Download size={14} /> Export XLS
+                  </button>
+                  <button
+                    onClick={() => handleOpenReport(selectedReport)}
+                    className="btn btn-primary"
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', gap: '0.35rem' }}
+                  >
+                    <ExternalLink size={14} /> Open Full Interactive Modal
+                  </button>
+                </div>
               </div>
-              <p style={{ fontSize: '0.775rem', color: '#94a3b8', margin: '4px 0 0' }}>
-                Displaying specialized columns and telemetry for <strong style={{ color: '#f8fafc' }}>{selectedReport}</strong>
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '0.6rem' }}>
-              <button 
-                onClick={() => handleExportExcel(selectedReport)}
-                className="btn btn-outline"
-                style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', gap: '0.35rem' }}
-              >
-                <Download size={14} /> Export XLS
-              </button>
-              <button
-                onClick={() => handleOpenReport(selectedReport)}
-                className="btn btn-primary"
-                style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', gap: '0.35rem' }}
-              >
-                <ExternalLink size={14} /> Open Full Interactive Modal
-              </button>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table" style={{ fontSize: '0.825rem', width: '100%' }}>
+                  <thead>
+                    {renderTableHeaders(selectedReport)}
+                  </thead>
+                  <tbody>
+                    {renderTableContent(selectedReport, currentMainList)}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
+        </>
+      ) : (
+        /* Periodic Matrix View (Day / Month / Quarter / Year) */
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+          <div className="data-table-container">
+            <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>
+                    {periodMode === 'DAY' && '📆 Day-Wise Performance Matrix'}
+                    {periodMode === 'MONTH' && '🗓️ Month-Wise Aggregate Performance'}
+                    {periodMode === 'QUARTER' && '📊 Quarter-Wise Performance (Q1-Q4)'}
+                    {periodMode === 'YEAR' && '🏛️ Year-Wise Consolidated Matrix'}
+                  </h2>
+                  <span style={{ fontSize: '0.675rem', padding: '0.15rem 0.5rem', borderRadius: 6, background: 'rgba(52, 211, 153, 0.15)', color: '#34d399', fontWeight: 800, border: '1px solid rgba(52, 211, 153, 0.3)' }}>
+                    SUPER ADMIN MATRIX ({periodicGroups.length} Periods)
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.775rem', color: '#94a3b8', margin: '4px 0 0' }}>
+                  Executive aggregate breakdown of Box volume, piece demand, fill rates, and invoiced revenue.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.6rem' }}>
+                <button 
+                  onClick={() => handleExportPeriodicExcel()}
+                  disabled={isExporting || periodicGroups.length === 0}
+                  className="btn btn-primary"
+                  style={{ padding: '0.45rem 0.9rem', fontSize: '0.8rem', gap: '0.4rem', background: '#059669', borderColor: '#10b981' }}
+                >
+                  <Download size={15} /> {isExporting ? 'Exporting...' : `Export ${periodMode} Matrix CSV`}
+                </button>
+              </div>
+            </div>
 
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table" style={{ fontSize: '0.825rem', width: '100%' }}>
-              <thead>
-                {renderTableHeaders(selectedReport)}
-              </thead>
-              <tbody>
-                {renderTableContent(selectedReport, currentMainList)}
-              </tbody>
-            </table>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ fontSize: '0.825rem', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }}></th>
+                    <th>PERIOD / TIMELINE</th>
+                    <th>ORDERS (COMPLETED / TOTAL)</th>
+                    <th>TOTAL BOXES (FMCG)</th>
+                    <th>TOTAL DEMAND (PCS)</th>
+                    <th>INVOICED VALUE (₹)</th>
+                    <th>AVG ORDER VALUE (AOV)</th>
+                    <th>FILL RATE %</th>
+                    <th>TOP BRAND</th>
+                    <th>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {periodicGroups.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
+                        No orders recorded for this time grouping.
+                      </td>
+                    </tr>
+                  ) : (
+                    periodicGroups.map((g) => {
+                      const isExpanded = expandedPeriodKey === g.periodKey;
+                      const fillRateNum = parseFloat(g.fillRate) || 0;
+                      return (
+                        <React.Fragment key={g.periodKey}>
+                          <tr 
+                            style={{ 
+                              background: isExpanded ? 'rgba(56, 189, 248, 0.08)' : 'inherit',
+                              cursor: 'pointer',
+                              borderBottom: isExpanded ? 'none' : '1px solid #334155'
+                            }}
+                            onClick={() => setExpandedPeriodKey(isExpanded ? null : g.periodKey)}
+                          >
+                            <td style={{ textAlign: 'center', color: '#38bdf8' }}>
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.875rem' }}>{g.periodLabel}</div>
+                              {periodMode !== 'DAY' && (
+                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 1 }}>{g.subLabel}</div>
+                              )}
+                            </td>
+                            <td>
+                              <span style={{ fontWeight: 700, color: '#34d399' }}>{g.completedOrders} Completed</span>
+                              <span style={{ color: '#94a3b8' }}> / {g.totalOrders} Total</span>
+                            </td>
+                            <td style={{ fontWeight: 800, color: '#38bdf8' }}>
+                              {g.totalBoxes > 0 ? `${g.totalBoxes.toLocaleString()} Boxes` : '—'}
+                            </td>
+                            <td style={{ fontWeight: 700 }}>{g.totalPcs.toLocaleString()} PCS</td>
+                            <td>
+                              {g.settledRevenue > 0 ? (
+                                <strong style={{ color: '#10b981', fontSize: '0.875rem' }}>
+                                  ₹{g.settledRevenue.toLocaleString()}
+                                </strong>
+                              ) : (
+                                <span style={{ color: '#64748b' }}>— (Pending Billing)</span>
+                              )}
+                            </td>
+                            <td style={{ color: g.aov > 0 ? '#fbbf24' : '#64748b', fontWeight: 700 }}>
+                              {g.aov > 0 ? `₹${g.aov.toLocaleString()}` : '—'}
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <div style={{ 
+                                  width: 48, 
+                                  height: 6, 
+                                  background: '#334155', 
+                                  borderRadius: 3, 
+                                  overflow: 'hidden' 
+                                }}>
+                                  <div style={{ 
+                                    width: `${Math.min(100, Math.max(0, fillRateNum))}%`, 
+                                    height: '100%', 
+                                    background: fillRateNum >= 90 ? '#34d399' : fillRateNum >= 70 ? '#fbbf24' : '#fb7185' 
+                                  }} />
+                                </div>
+                                <span style={{ fontWeight: 800, color: fillRateNum >= 90 ? '#34d399' : fillRateNum >= 70 ? '#fbbf24' : '#fb7185' }}>
+                                  {g.fillRate}%
+                                </span>
+                              </div>
+                            </td>
+                            <td>
+                              <span style={{ 
+                                fontSize: '0.725rem', 
+                                padding: '0.2rem 0.5rem', 
+                                borderRadius: 4, 
+                                background: 'rgba(56, 189, 248, 0.12)', 
+                                color: '#38bdf8', 
+                                fontWeight: 700 
+                              }}>
+                                {g.topBrand}
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedPeriodKey(isExpanded ? null : g.periodKey);
+                                }}
+                                className="btn btn-outline"
+                                style={{ padding: '0.25rem 0.55rem', fontSize: '0.725rem', gap: '0.25rem' }}
+                              >
+                                {isExpanded ? 'Collapse ▲' : `View ${g.orders.length} Orders ▼`}
+                              </button>
+                            </td>
+                          </tr>
+
+                          {/* Expanded Underlying Orders Breakdown */}
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={10} style={{ padding: '0.75rem 1.25rem 1.25rem', background: '#0b1324', borderBottom: '2px solid #334155' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    📦 Underlying Orders in {g.periodLabel} ({g.orders.length} Records)
+                                  </span>
+                                  <span style={{ fontSize: '0.725rem', color: '#94a3b8' }}>
+                                    Post-billing invoice amounts displayed. MRP estimated discount calculation bugs prevented.
+                                  </span>
+                                </div>
+                                <div style={{ overflowX: 'auto', border: '1px solid #1e293b', borderRadius: 8 }}>
+                                  <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                    <thead>
+                                      <tr style={{ background: '#1e293b', color: '#94a3b8', borderBottom: '1px solid #334155' }}>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>ORDER NO</th>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>AGENCY / PARTY</th>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>BRAND</th>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>BOXES</th>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>DEMAND PCS</th>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>ISSUED PCS</th>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>STATUS</th>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>INVOICED AMOUNT (₹)</th>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>PAYMENT</th>
+                                        <th style={{ padding: '0.4rem 0.6rem' }}>DISPATCH / VEHICLE</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {g.orders.map((ord) => {
+                                        const issuedQty = getOrderIssuedQty(ord);
+                                        return (
+                                          <tr key={ord.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                                            <td style={{ padding: '0.45rem 0.6rem', fontWeight: 800, color: '#38bdf8' }}>
+                                              {ord.order_number}
+                                            </td>
+                                            <td style={{ padding: '0.45rem 0.6rem', color: '#f8fafc', fontWeight: 600 }}>
+                                              {ord.agency_name || 'Direct Order'}
+                                            </td>
+                                            <td style={{ padding: '0.45rem 0.6rem' }}>
+                                              <span style={{ fontSize: '0.675rem', padding: '0.1rem 0.35rem', borderRadius: 4, background: 'rgba(56,189,248,0.1)', color: '#38bdf8' }}>
+                                                {ord.company_name || 'PROLINE'}
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '0.45rem 0.6rem', color: '#38bdf8', fontWeight: 700 }}>
+                                              {ord.total_box_qty ? `${ord.total_box_qty} Bx` : '—'}
+                                            </td>
+                                            <td style={{ padding: '0.45rem 0.6rem' }}>
+                                              {ord.total_qty_pcs || 0} PCS
+                                            </td>
+                                            <td style={{ padding: '0.45rem 0.6rem', color: issuedQty > 0 ? '#34d399' : '#94a3b8' }}>
+                                              {issuedQty > 0 ? `${issuedQty} PCS` : '—'}
+                                            </td>
+                                            <td style={{ padding: '0.45rem 0.6rem' }}>
+                                              <span style={{ 
+                                                fontSize: '0.675rem', 
+                                                padding: '0.15rem 0.4rem', 
+                                                borderRadius: 4, 
+                                                fontWeight: 800,
+                                                background: ord.status === 'COMPLETED' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                                                color: ord.status === 'COMPLETED' ? '#34d399' : '#fbbf24'
+                                              }}>
+                                                {ord.status.replace(/_/g, ' ')}
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '0.45rem 0.6rem', fontWeight: 800, color: ord.invoice_amount ? '#10b981' : '#64748b' }}>
+                                              {ord.invoice_amount ? `₹${ord.invoice_amount.toLocaleString()}` : '—'}
+                                            </td>
+                                            <td style={{ padding: '0.45rem 0.6rem', color: '#94a3b8' }}>
+                                              {ord.payment_type || 'Credit'}
+                                            </td>
+                                            <td style={{ padding: '0.45rem 0.6rem', color: '#94a3b8' }}>
+                                              {ord.driver_name ? `🚗 ${ord.driver_name}` : (ord.rental_agency_name || ord.vehicle_number || 'Standard Dispatch')}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── FULL INTERACTIVE REPORT VIEWER MODAL ── */}
       {isReportModalOpen && (
