@@ -21,9 +21,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
   const [invoiceNumberInput, setInvoiceNumberInput] = useState('');
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
 
-  const [creditDaysInput, setCreditDaysInput] = useState<number>(30);
+  const [creditDaysInput, setCreditDaysInput] = useState<number | ''>('');
   const [billingTotalQtyInput, setBillingTotalQtyInput] = useState<number>(0);
-  const [billingAmountInput, setBillingAmountInput] = useState<number>(0);
+  const [billingAmountInput, setBillingAmountInput] = useState<number | ''>('');
   const [invoiceRemark, setInvoiceRemark] = useState('');
   const [billedQtyByItem, setBilledQtyByItem] = useState<Record<string, number>>({});
   const [billedBoxesByItem, setBilledBoxesByItem] = useState<Record<string, number>>({});
@@ -97,9 +97,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
 
   const handleOpenInvoiceModal = (order: Order) => {
     setSelectedOrderForInvoice(order);
-    const autoInv = order.invoice_number || `BILL-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    setInvoiceNumberInput(autoInv);
-    setCreditDaysInput(order.payment_type === 'ADVANCE' ? 0 : (order.credit_days || 30));
+    setInvoiceNumberInput(order.invoice_number || '');
+    setCreditDaysInput(order.payment_type === 'ADVANCE' ? 0 : (order.credit_days != null && order.credit_days > 0 ? order.credit_days : ''));
 
     const initialBoxes: Record<string, number> = {};
     const initialLoose: Record<string, number> = {};
@@ -142,7 +141,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
 
     const sumQty = Object.values(initialQty).reduce((sum, qty) => sum + qty, 0) || order.total_qty_pcs || 0;
     setBillingTotalQtyInput(order.billing_total_qty && order.billing_total_qty > 0 ? order.billing_total_qty : sumQty);
-    setBillingAmountInput(order.invoice_amount && order.invoice_amount > 0 ? order.invoice_amount : (order.total_amount || 0));
+    setBillingAmountInput(order.invoice_amount && order.invoice_amount > 0 ? order.invoice_amount : '');
     setInvoiceRemark(order.remarks || '');
   };
 
@@ -179,9 +178,13 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
 
     const fallbackQty = (selectedOrderForInvoice.items || []).reduce((sum, it) => sum + (it.issued_qty_pcs || it.total_qty_pcs || 0), 0) || selectedOrderForInvoice.total_qty_pcs || 0;
     const finalBillingQty = billingTotalQtyInput > 0 ? billingTotalQtyInput : fallbackQty;
-    const finalBillingAmount = billingAmountInput > 0 ? billingAmountInput : (selectedOrderForInvoice.total_amount || 0);
+    const finalBillingAmount = typeof billingAmountInput === 'number' && billingAmountInput > 0 
+      ? billingAmountInput 
+      : (selectedOrderForInvoice.total_amount || 0);
 
-    const lockedCreditDays = selectedOrderForInvoice.payment_type === 'ADVANCE' ? 0 : Math.max(0, creditDaysInput);
+    const lockedCreditDays = selectedOrderForInvoice.payment_type === 'ADVANCE' 
+      ? 0 
+      : (typeof creditDaysInput === 'number' ? Math.max(0, creditDaysInput) : 0);
     const finalInvNo = invoiceNumberInput.trim();
 
     if (onGenerateInvoice) {
@@ -423,7 +426,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
               <div style={{ color: '#94a3b8', marginTop: 3 }}>Payment Type: <strong style={{ color: '#38bdf8' }}>{selectedOrderForInvoice.payment_type || 'CREDIT'}</strong></div>
               <div style={{ color: '#94a3b8', marginTop: 3 }}>
                 New Bill Amount: <strong style={{ color: '#34d399', fontSize: '0.9rem' }}>
-                  ₹{billingAmountInput.toLocaleString('en-IN')}
+                  {billingAmountInput !== '' ? `₹${Number(billingAmountInput).toLocaleString('en-IN')}` : '— (Pending Entry)'}
                 </strong>
               </div>
             </div>
@@ -542,7 +545,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                 type="text" 
                 value={invoiceNumberInput}
                 onChange={e => setInvoiceNumberInput(e.target.value)}
-                placeholder="e.g. BILL-2026-9042"
+                placeholder="Enter Invoice / Bill Number (Mandatory)"
                 style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #38bdf8', borderRadius: 6, color: '#38bdf8', fontWeight: 800, fontSize: '0.9rem' }}
               />
             </div>
@@ -561,8 +564,16 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>TOTAL BILL AMOUNT (₹)</label>
-                    <input type="number" min="0" step="0.01" value={billingAmountInput} onChange={event => setBillingAmountInput(Math.max(0, Number(event.target.value) || 0))} placeholder="Enter bill amount" style={{ width: '100%', padding: '0.55rem 0.65rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', fontWeight: 800, fontSize: '0.85rem' }} />
-                    <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 2, display: 'block' }}>Entered manually or auto-filled.</span>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      step="0.01" 
+                      value={billingAmountInput} 
+                      onChange={event => setBillingAmountInput(event.target.value === '' ? '' : Math.max(0, Number(event.target.value)))} 
+                      placeholder="Enter Bill Amount (₹)" 
+                      style={{ width: '100%', padding: '0.55rem 0.65rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', fontWeight: 800, fontSize: '0.85rem' }} 
+                    />
+                    <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 2, display: 'block' }}>Enter billing cost manually.</span>
                   </div>
                 </div>
               );
@@ -574,8 +585,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                 type="number" 
                 disabled={selectedOrderForInvoice.payment_type === 'ADVANCE'}
                 value={creditDaysInput}
-                onChange={e => setCreditDaysInput(Math.max(0, Number(e.target.value) || 0))}
-                placeholder="e.g. 15, 30, 45 Days"
+                onChange={e => setCreditDaysInput(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                placeholder="Enter Credit Days (e.g. 15, 30, 45)"
                 style={{ width: '100%', padding: '0.5rem', background: selectedOrderForInvoice.payment_type === 'ADVANCE' ? '#334155' : '#0f172a', border: '1px solid #475569', borderRadius: 6, color: 'white', fontWeight: 800, fontSize: '0.85rem' }}
               />
               {selectedOrderForInvoice.payment_type === 'ADVANCE' && (
