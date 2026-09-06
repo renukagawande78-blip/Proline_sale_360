@@ -6,3 +6,6 @@ android/app/build
 android/.gradle
 *.apk
 .env*
+test-results/
+playwright-report/
+blob-report/

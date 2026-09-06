@@ -69,6 +69,7 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
 
       {/* Selected Box Trigger */}
       <div 
+        data-testid="agency-select-trigger"
         onClick={() => setIsOpen(!isOpen)}
         style={{
           padding: '0.55rem 0.75rem',
@@ -128,6 +129,7 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
                 return (
                   <div
                     key={a.id}
+                    data-testid="agency-option-item"
                     onClick={() => {
                       onSelectAgency(a.id);
                       setIsOpen(false);
@@ -475,6 +477,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
       {/* Selected Box Trigger */}
       <div 
+        data-testid="product-select-trigger"
         onClick={() => {
           setIsOpen(!isOpen);
           updatePosition();
@@ -559,6 +562,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                 return (
                   <div
                     key={p.id}
+                    data-testid="product-option-item"
                     onClick={() => {
                       if (isAlreadyChosen) return;
                       onSelectProduct(p.id);
@@ -1623,7 +1627,11 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <button className="btn btn-outline" onClick={() => handleSubmit('DRAFT')}>
               Save as Draft
             </button>
-            <button className="btn btn-primary" onClick={() => handleSubmit('SUBMITTED')}>
+            <button 
+              data-testid="create-order-submit"
+              className="btn btn-primary" 
+              onClick={() => handleSubmit('SUBMITTED')}
+            >
               Submit Order
             </button>
           </div>

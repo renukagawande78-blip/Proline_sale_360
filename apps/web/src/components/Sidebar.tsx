@@ -318,6 +318,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sign Out Button */}
               <button
+                data-testid="logout-button"
                 onClick={() => logout()}
                 style={{
                   width: '100%',
@@ -361,6 +362,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: userSegment === 'FMCG' ? '#10b981' : (userSegment === 'FMCD' ? '#fbbf24' : '#38bdf8'), boxShadow: '0 0 8px currentColor' }} title={`Segment: ${userSegment}`}></div>
               <span style={{ fontSize: '0.55rem', color: '#38bdf8', fontWeight: 800, fontFamily: 'monospace' }}>{APP_VERSION}</span>
               <button
+                data-testid="logout-button"
                 onClick={() => logout()}
                 title="Sign Out"
                 style={{

@@ -191,6 +191,7 @@ export const LoginPage: React.FC = () => {
                 ⚡ QUICK SELECT USER ACCOUNT
               </label>
               <select
+                data-testid="login-quick-select"
                 value={usernameInput}
                 onChange={e => {
                   const selVal = e.target.value;
@@ -232,6 +233,7 @@ export const LoginPage: React.FC = () => {
             <div style={{ position: 'relative' }}>
               <UserCheck size={16} color="#64748b" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
               <input 
+                data-testid="login-username"
                 type="text" 
                 value={usernameInput} 
                 onChange={e => setUsernameInput(e.target.value)} 
@@ -265,6 +267,7 @@ export const LoginPage: React.FC = () => {
             <div style={{ position: 'relative' }}>
               <Lock size={16} color="#64748b" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
               <input 
+                data-testid="login-password"
                 type={showPassword ? 'text' : 'password'} 
                 value={passwordInput} 
                 onChange={e => setPasswordInput(e.target.value)} 
@@ -353,6 +356,7 @@ export const LoginPage: React.FC = () => {
           </div>
 
           <button 
+            data-testid="login-submit"
             type="submit" 
             disabled={isLoading}
             className="btn btn-primary"
