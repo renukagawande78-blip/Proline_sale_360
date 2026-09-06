@@ -73,17 +73,105 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
   const unfulfilledQty = Math.max(0, totalOrdered - totalIssued);
   const fillRatePercent = totalOrdered > 0 ? ((totalIssued / totalOrdered) * 100).toFixed(1) : '0.0';
 
-  const reportCatalog = [
-    'Completed Orders Report',
-    'Fill Rate Report',
-    'Order Daily Report',
-    'Outstanding Report',
-    'POD Remarks Report',
-    'Monthly Dispatch Report',
-    'Daywise / Weekwise Dispatch Report',
-    `Last Order Days Report (${lastOrderDays} days)`,
-    'Vehicle-wise Dispatch Report'
-  ];
+  const roleName = currentUser?.role_name || 'SALES_PERSON';
+  const isSuperAdmin = checkIsSuperAdmin(currentUser);
+  const isAccounts = roleName === 'ACCOUNTS';
+  const isSalesAdmin = roleName === 'SALES_ADMIN';
+  const isBilling = roleName === 'BILLING';
+  const isDispatch = roleName === 'DISPATCH_MANAGER' || (roleName as string) === 'DISPATCH';
+  const isASM = roleName === 'AREA_SALES_MANAGER';
+  const isSalesPerson = (roleName as string) === 'SALES_PERSON' || (roleName as string) === 'SALES_EXECUTIVE' || (roleName as string) === 'SALESPERSON' || (roleName as string) === 'FIELD_SALES_MANAGER';
+
+  // Role-Specific Reports Arrangement Matrix
+  const reportCatalog = useMemo(() => {
+    // 1 & 2: Admin (Chirag) & Accounts (Harshad) -> All 9 Reports
+    if (isSuperAdmin || isAccounts) {
+      return [
+        'Completed Orders Report',
+        'Fill Rate Report',
+        'Order Daily Report',
+        'Outstanding Report',
+        'POD Remarks Report',
+        'Monthly Dispatch Report',
+        'Daywise / Weekwise Dispatch Report',
+        `Last Order Days Report (${lastOrderDays} days)`,
+        'Vehicle-wise Dispatch Report'
+      ];
+    }
+    // 3, 4, 5: Sales Admin (Jay, Dixit, Sumit) -> Fill Rate, Order Delay, Outstanding, POD Remarks, Monthly Dispatch, Daywise/Weekwise Dispatch, Last Order Days, Completed
+    if (isSalesAdmin) {
+      return [
+        'Fill Rate Report',
+        'Order Daily Report',
+        'Outstanding Report',
+        'POD Remarks Report',
+        'Monthly Dispatch Report',
+        'Daywise / Weekwise Dispatch Report',
+        `Last Order Days Report (${lastOrderDays} days)`,
+        'Completed Orders Report'
+      ];
+    }
+    // 6, 7, 8: Billing (Riddhi, Mansi, Sneha) -> POD Remarks, Vehicle wise dispatch, Daywise Dispatch, Last Order Days, Monthly Dispatch
+    if (isBilling) {
+      return [
+        'POD Remarks Report',
+        'Vehicle-wise Dispatch Report',
+        'Daywise / Weekwise Dispatch Report',
+        `Last Order Days Report (${lastOrderDays} days)`,
+        'Monthly Dispatch Report'
+      ];
+    }
+    // 9, 10, 11: Dispatch Manager (Dhruv, Dharmik, Jitendra) -> Vehicle wise dispatch, Daywise Dispatch, POD Remarks, Monthly Dispatch, Completed Orders
+    if (isDispatch) {
+      return [
+        'Vehicle-wise Dispatch Report',
+        'Daywise / Weekwise Dispatch Report',
+        'POD Remarks Report',
+        'Monthly Dispatch Report',
+        'Completed Orders Report'
+      ];
+    }
+    // 12-21: Area Sales Manager (Brijesh, Kamal, Shashi, Ankit, etc.) -> Align Company All Reports Dashboard
+    if (isASM) {
+      return [
+        'Completed Orders Report',
+        'Fill Rate Report',
+        'Order Daily Report',
+        'Outstanding Report',
+        'Monthly Dispatch Report',
+        'Daywise / Weekwise Dispatch Report',
+        `Last Order Days Report (${lastOrderDays} days)`
+      ];
+    }
+    // 22-34: Field Sales Manager / Sales Person -> Align Company All Reports Dashboard
+    if (isSalesPerson) {
+      return [
+        'Completed Orders Report',
+        'Order Daily Report',
+        'Outstanding Report',
+        'Monthly Dispatch Report',
+        `Last Order Days Report (${lastOrderDays} days)`,
+        'Fill Rate Report'
+      ];
+    }
+    return [
+      'Completed Orders Report',
+      'Fill Rate Report',
+      'Order Daily Report',
+      'Outstanding Report',
+      'Monthly Dispatch Report',
+      `Last Order Days Report (${lastOrderDays} days)`
+    ];
+  }, [isSuperAdmin, isAccounts, isSalesAdmin, isBilling, isDispatch, isASM, isSalesPerson, lastOrderDays]);
+
+  useEffect(() => {
+    if (reportCatalog.length > 0) {
+      const match = reportCatalog.find(r => r.split(' (')[0] === selectedReport.split(' (')[0]);
+      if (!match) {
+        setSelectedReport(reportCatalog[0]);
+      }
+    }
+  }, [reportCatalog]);
 
   // Specific data filter function by report type & search term
   const getFilteredReportData = (reportName: string, searchStr = '') => {
@@ -1192,7 +1280,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           className={`btn ${periodMode === 'STANDARD' ? 'btn-primary' : 'btn-outline'}`}
           style={{ fontSize: '0.8rem', padding: '0.55rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.45rem', borderRadius: 8 }}
         >
-          <BarChart3 size={15} /> 📋 Purpose-Built Reports (9)
+          <BarChart3 size={15} /> 📋 Purpose-Built Reports ({reportCatalog.length})
         </button>
         <button
           type="button"
