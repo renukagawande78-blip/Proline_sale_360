@@ -54,11 +54,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalOrdersCount = scopeOrders.length;
   const totalVolumePcs = scopeOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
 
-  const completedOrders = scopeOrders.filter(o => o.status === 'COMPLETED');
-  const completedVolumePcs = completedOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
-  const approvedOrders = scopeOrders.filter(o => o.status === 'APPROVED' || o.status === 'SALES_ADMIN_APPROVED');
+  // 1. Pending for Approval (New / Submitted orders awaiting sign-off)
+  const pendingApprovalOrders = scopeOrders.filter(o => 
+    o.status === 'SUBMITTED' || o.status === 'DRAFT' || o.status === 'WAIT_FOR_STOCK' || (o.status as string) === 'PENDING'
+  );
+  const pendingApprovalVolume = pendingApprovalOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
+
+  // 2. Pending for Billing (Approved orders waiting for B2B Invoice creation)
+  const pendingBillingOrders = scopeOrders.filter(o => 
+    o.status === 'APPROVED' || o.status === 'ACCOUNTS_APPROVED' || o.status === 'INVENTORY_AUDITED' || (o.status as string) === 'SALES_ADMIN_APPROVED'
+  );
+  const pendingBillingVolume = pendingBillingOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
+
+  // 3. Pending for Dispatch (Billed orders waiting for Vehicle loading & Dispatch)
+  const pendingDispatchOrders = scopeOrders.filter(o => 
+    o.status === 'BILLED' || o.status === 'DISPATCH_PENDING' || o.status === 'READY_FOR_PICKUP' || o.status === 'READY_FOR_SELF_PICKUP' || o.status === 'PARTIALLY_DISPATCHED'
+  );
+  const pendingDispatchVolume = pendingDispatchOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
+
+  // 4. Secondary Pipeline Statuses
   const heldOrders = scopeOrders.filter(o => o.status === 'HELD');
-  const pendingOrders = scopeOrders.filter(o => o.status === 'SUBMITTED' || o.status === 'WAIT_FOR_STOCK' || o.status === 'DRAFT');
+  const completedOrders = scopeOrders.filter(o => o.status === 'COMPLETED' || o.status === 'DELIVERED');
+  const completedVolumePcs = completedOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
 
   return (
     <div className="page-body">
@@ -98,102 +115,69 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="kpi-grid">
-        {/* KPI 1: Order Quantity */}
-        <div className="kpi-card">
+      {/* 4-Stage Operational Pipeline KPI Cards */}
+      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+        {/* KPI 1: TOTAL ORDERS */}
+        <div className="kpi-card" style={{ borderLeft: '4px solid #38bdf8' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div className="kpi-title">TOTAL ORDER QUANTITY</div>
-              <div className="kpi-value">{totalVolumePcs.toLocaleString()} PCS</div>
+              <div className="kpi-title" style={{ color: '#38bdf8', fontWeight: 700 }}>TOTAL ORDERS</div>
+              <div className="kpi-value">{totalOrdersCount}</div>
             </div>
             <div style={{ background: 'rgba(56, 189, 248, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#38bdf8' }}>
               <TrendingUp size={20} />
             </div>
           </div>
-          <div className="kpi-subtext" style={{ color: '#34d399' }}>
-            <ArrowUpRight size={14} /> {totalOrdersCount} Total Orders
+          <div className="kpi-subtext" style={{ color: '#94a3b8' }}>
+            <ArrowUpRight size={14} style={{ color: '#38bdf8' }} /> {totalVolumePcs.toLocaleString()} Total PCS in scope
           </div>
         </div>
 
-        {/* KPI 2: Completed Orders */}
-        <div 
-          className="kpi-card" 
-          onClick={() => onNavigateToReports?.('Completed Orders Report')}
-          style={{ border: '1px solid rgba(16, 185, 129, 0.4)', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(15, 23, 42, 0.6))', cursor: onNavigateToReports ? 'pointer' : 'default', transition: 'all 0.15s ease' }}
-          title="Click to view Completed Orders Report"
-        >
+        {/* KPI 2: PENDING FOR APPROVAL */}
+        <div className="kpi-card" style={{ borderLeft: '4px solid #6366f1' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div className="kpi-title" style={{ color: '#34d399' }}>ORDERS COMPLETED</div>
-              <div className="kpi-value" style={{ color: '#34d399' }}>{completedOrders.length}</div>
-            </div>
-            <div style={{ background: 'rgba(16, 185, 129, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#10b981' }}>
-              <PackageCheck size={20} />
-            </div>
-          </div>
-          <div className="kpi-subtext" style={{ color: '#34d399', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>{completedVolumePcs.toLocaleString()} PCS delivered</span>
-            {onNavigateToReports && <span style={{ fontSize: '0.7rem', fontWeight: 700 }}>Open Report ↗</span>}
-          </div>
-        </div>
-
-        {/* KPI 3: Approved Orders */}
-        <div className="kpi-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div className="kpi-title">APPROVED FOR DISPATCH</div>
-              <div className="kpi-value">{approvedOrders.length}</div>
-            </div>
-            <div style={{ background: 'rgba(16, 185, 129, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#10b981' }}>
-              <CheckCircle size={20} />
-            </div>
-          </div>
-          <div className="kpi-subtext">
-            {approvedOrders.reduce((sum, o) => sum + o.total_qty_pcs, 0).toLocaleString()} PCS ready for billing
-          </div>
-        </div>
-
-        {/* KPI 3: Held Orders */}
-        <div 
-          className="kpi-card" 
-          onClick={() => setIsHoldDirectoryOpen(true)}
-          style={{ 
-            borderColor: heldOrders.length > 0 ? '#f59e0b' : 'rgba(245, 158, 11, 0.3)', 
-            cursor: 'pointer',
-            background: heldOrders.length > 0 ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(15, 23, 42, 0.6))' : undefined,
-            transition: 'all 0.15s ease'
-          }}
-          title="Click to open Hold Reason Directory & Orders on Hold Review"
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div className="kpi-title" style={{ color: '#fbbf24' }}>ORDERS ON HOLD</div>
-              <div className="kpi-value" style={{ color: '#fbbf24' }}>{heldOrders.length}</div>
-            </div>
-            <div style={{ background: 'rgba(245, 158, 11, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#f59e0b' }}>
-              <AlertTriangle size={20} />
-            </div>
-          </div>
-          <div className="kpi-subtext" style={{ color: '#fbbf24', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>Credit limit / Overdue invoice review</span>
-            <span style={{ fontSize: '0.725rem', textDecoration: 'underline', fontWeight: 800 }}>Open Directory ➔</span>
-          </div>
-        </div>
-
-        {/* KPI 4: Pending Review */}
-        <div className="kpi-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div className="kpi-title">PENDING APPROVAL</div>
-              <div className="kpi-value">{pendingOrders.length}</div>
+              <div className="kpi-title" style={{ color: '#818cf8', fontWeight: 700 }}>PENDING FOR APPROVAL</div>
+              <div className="kpi-value" style={{ color: '#818cf8' }}>{pendingApprovalOrders.length}</div>
             </div>
             <div style={{ background: 'rgba(99, 102, 241, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#6366f1' }}>
               <Clock size={20} />
             </div>
           </div>
-          <div className="kpi-subtext">
-            Awaiting System Admin / ASM Verification
+          <div className="kpi-subtext" style={{ color: '#94a3b8' }}>
+            {pendingApprovalVolume.toLocaleString()} PCS awaiting review
+          </div>
+        </div>
+
+        {/* KPI 3: PENDING FOR BILLING */}
+        <div className="kpi-card" style={{ borderLeft: '4px solid #f59e0b' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div className="kpi-title" style={{ color: '#fbbf24', fontWeight: 700 }}>PENDING FOR BILLING</div>
+              <div className="kpi-value" style={{ color: '#fbbf24' }}>{pendingBillingOrders.length}</div>
+            </div>
+            <div style={{ background: 'rgba(245, 158, 11, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#f59e0b' }}>
+              <CheckCircle size={20} />
+            </div>
+          </div>
+          <div className="kpi-subtext" style={{ color: '#94a3b8' }}>
+            {pendingBillingVolume.toLocaleString()} PCS approved & awaiting invoice
+          </div>
+        </div>
+
+        {/* KPI 4: PENDING FOR DISPATCH */}
+        <div className="kpi-card" style={{ borderLeft: '4px solid #a855f7' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div className="kpi-title" style={{ color: '#c084fc', fontWeight: 700 }}>PENDING FOR DISPATCH</div>
+              <div className="kpi-value" style={{ color: '#c084fc' }}>{pendingDispatchOrders.length}</div>
+            </div>
+            <div style={{ background: 'rgba(168, 85, 247, 0.15)', padding: '0.5rem', borderRadius: 8, color: '#a855f7' }}>
+              <PackageCheck size={20} />
+            </div>
+          </div>
+          <div className="kpi-subtext" style={{ color: '#94a3b8' }}>
+            {pendingDispatchVolume.toLocaleString()} PCS billed & ready for vehicle
           </div>
         </div>
       </div>
