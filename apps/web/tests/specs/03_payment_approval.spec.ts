@@ -29,7 +29,7 @@ test.describe('3. Payment & Credit Approval Workflow', () => {
     await dashboardPage.expectLoggedIn();
 
     // Verify Salesperson sidebar does not expose restricted financial controls
-    const accountsNav = page.locator('button:has-text("Billing / Accounts")');
+    const accountsNav = page.locator('button:has-text("Accounts & Billing"), button:has-text("Billing / Accounts")');
     const isAccountsVisible = await accountsNav.isVisible().catch(() => false);
     expect(isAccountsVisible).toBe(false);
   });

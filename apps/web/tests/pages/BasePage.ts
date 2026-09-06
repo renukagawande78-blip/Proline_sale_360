@@ -24,37 +24,105 @@ export class BasePage {
   }
 
   async navigateToTab(tabName: 'dashboard' | 'orders' | 'accounts' | 'dispatch' | 'pod' | 'reports' | 'returns' | 'masters'): Promise<void> {
-    const tabMap: Record<string, string> = {
-      dashboard: 'Dashboard',
-      orders: 'Sales Orders',
-      accounts: 'Billing / Accounts',
-      dispatch: 'Dispatch Management',
-      pod: 'POD & Delivery Queue',
-      reports: 'Reports & Analytics',
-      returns: 'Returns Register',
-      masters: 'Master Data Management'
+    const tabMap: Record<string, string[]> = {
+      dashboard: ['Dashboard'],
+      orders: ['Orders & Approvals', 'Sales Orders', 'Orders'],
+      accounts: ['Accounts & Billing', 'Billing / Accounts', 'Accounts', 'Billing'],
+      dispatch: ['Dispatch Management', 'Dispatch'],
+      pod: ['POD Queue', 'POD & Delivery Queue', 'POD'],
+      reports: ['Reports & Analytics', 'Reports'],
+      returns: ['Returns & Damage', 'Returns Register', 'Returns'],
+      masters: ['Master Data', 'Master Data Management', 'Masters']
     };
 
-    const label = tabMap[tabName] || tabName;
-    const navButton = this.page.locator(`button:has-text("${label}"), a:has-text("${label}"), button:has-text("${tabName}")`).first();
-    
-    if (await navButton.isVisible()) {
-      await navButton.click();
+    const targetLabels = tabMap[tabName] || [tabName];
+    const isMobileNav = await this.page.locator('.mobile-bottom-nav').isVisible({ timeout: 600 }).catch(() => false);
+
+    if (isMobileNav) {
+      // 1. Check direct mobile bottom nav buttons
+      if (tabName === 'dashboard') {
+        const dashBtn = this.page.locator('.mobile-bottom-nav button:has-text("Dashboard")').first();
+        if (await dashBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+          await dashBtn.click();
+          await this.page.waitForTimeout(400);
+          return;
+        }
+      } else if (tabName === 'orders') {
+        const orderBtn = this.page.locator('.mobile-bottom-nav button:has-text("Orders")').first();
+        if (await orderBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+          await orderBtn.click();
+          await this.page.waitForTimeout(400);
+          return;
+        }
+      } else if (tabName === 'dispatch') {
+        const dispatchBtn = this.page.locator('.mobile-bottom-nav button:has-text("Dispatch")').first();
+        if (await dispatchBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+          await dispatchBtn.click();
+          await this.page.waitForTimeout(400);
+          return;
+        }
+      }
+
+      // 2. Open Mobile Sidebar Drawer via Menu button
+      const isDrawerOpen = await this.page.locator('.sidebar.open').isVisible({ timeout: 400 }).catch(() => false);
+      if (!isDrawerOpen) {
+        const menuBtn = this.page.locator('.mobile-bottom-nav button:has-text("Menu")').first();
+        if (await menuBtn.isVisible({ timeout: 800 }).catch(() => false)) {
+          await menuBtn.click();
+          await expect(this.page.locator('.sidebar.open')).toBeVisible({ timeout: 3000 });
+        }
+      }
+
+      // 3. Click target item in open drawer
+      for (const label of targetLabels) {
+        const itemBtn = this.page.locator(`.sidebar.open button:has-text("${label}")`).first();
+        if (await itemBtn.isVisible({ timeout: 800 }).catch(() => false)) {
+          await itemBtn.click();
+          await this.page.waitForTimeout(400);
+          return;
+        }
+      }
     } else {
-      // Direct fallback by finding text match in sidebar
-      await this.page.locator(`.sidebar button:has-text("${label}")`).click();
+      // Desktop: Click directly in visible sidebar
+      for (const label of targetLabels) {
+        const navBtn = this.page.locator(`aside.sidebar button:has-text("${label}"), nav button:has-text("${label}")`).first();
+        if (await navBtn.isVisible({ timeout: 800 }).catch(() => false)) {
+          await navBtn.click();
+          await this.page.waitForTimeout(400);
+          return;
+        }
+      }
     }
-    await this.page.waitForTimeout(400);
   }
 
   async logout(): Promise<void> {
-    if (await this.logoutButton.isVisible()) {
+    const isMobileNav = await this.page.locator('.mobile-bottom-nav').isVisible({ timeout: 600 }).catch(() => false);
+
+    if (isMobileNav) {
+      const isDrawerOpen = await this.page.locator('.sidebar.open').isVisible({ timeout: 400 }).catch(() => false);
+      if (!isDrawerOpen) {
+        const menuBtn = this.page.locator('.mobile-bottom-nav button:has-text("Menu")').first();
+        if (await menuBtn.isVisible({ timeout: 800 }).catch(() => false)) {
+          await menuBtn.click();
+          await expect(this.page.locator('.sidebar.open')).toBeVisible({ timeout: 3000 });
+        }
+      }
+
+      const drawerLogoutBtn = this.page.locator('.sidebar.open [data-testid="logout-button"], .sidebar.open button:has-text("Sign Out")').first();
+      if (await drawerLogoutBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await drawerLogoutBtn.click();
+        await this.page.waitForTimeout(600);
+        return;
+      }
+    }
+
+    if (await this.logoutButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await this.logoutButton.click();
-      await this.page.waitForTimeout(500);
+      await this.page.waitForTimeout(600);
     }
   }
 
   async expectLoggedIn(): Promise<void> {
-    await expect(this.page.locator('h1, .page-header-row, header').first()).toBeVisible({ timeout: 10000 });
+    await expect(this.page.locator('h1, .page-header-row, header, .mobile-bottom-nav').first()).toBeVisible({ timeout: 10000 });
   }
 }
