@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Receipt, DollarSign, CheckCircle2, X, Truck } from 'lucide-react';
-import { Order } from '../../types';
+import { Order, Agency } from '../../types';
 import { useNotifications } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import { checkIsSuperAdmin, isCompanyAllowedForUser } from '../../lib/supabase';
@@ -8,18 +8,26 @@ import { UpdatePartyBalanceModal } from '../../components/UpdatePartyBalanceModa
 
 interface AccountsViewProps {
   orders: Order[];
+  agencies?: Agency[];
   onGenerateInvoice?: (order: Order, invoiceNumber: string, billingTotalQty: number, invoiceAmount: number, creditDays: number, remark: string, billedQtyByItem: Record<string, number>) => void;
   onCompleteGrn?: (orderId: string, grnNumber: string, grnDate: string, grnValue: number, grnRemark: string) => void;
   onViewInvoice?: (order: Order) => void;
 }
 
-export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateInvoice, onCompleteGrn, onViewInvoice }) => {
+export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, onGenerateInvoice, onCompleteGrn, onViewInvoice }) => {
   const { addNotification } = useNotifications();
   const { currentUser } = useAuth();
   const canViewAllCompanies = checkIsSuperAdmin(currentUser) || !currentUser?.company_handle || currentUser?.company_handle === 'All';
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState('');
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+
+  const getPartyName = (ord: Order | null) => {
+    if (!ord) return '—';
+    if (ord.agency_name && ord.agency_name !== 'Agency Party') return ord.agency_name;
+    const match = (agencies || []).find(a => a.id === ord.agency_id);
+    return match?.agency_name || ord.agency_name || 'Direct Order';
+  };
 
   const [creditDaysInput, setCreditDaysInput] = useState<number | ''>('');
   const [billingTotalQtyInput, setBillingTotalQtyInput] = useState<number>(0);
@@ -335,7 +343,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
                         {order.priority === 'HIGH' ? '🔴 HIGH' : order.priority === 'LOW' ? '🟢 LOW' : '🟡 MEDIUM'}
                       </span>
                     </td>
-                    <td><strong style={{ color: '#f8fafc' }}>{order.agency_name}</strong></td>
+                    <td><strong style={{ color: '#f8fafc' }}>{getPartyName(order)}</strong></td>
                     <td>
                       <span style={{ fontSize: '0.75rem', fontWeight: 800, color: order.payment_type === 'ADVANCE' ? '#34d399' : order.payment_type === 'OVERDUE' ? '#fb7185' : '#38bdf8' }}>
                         {order.payment_type || 'CREDIT'}
@@ -422,7 +430,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, onGenerateIn
             </div>
 
             <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.85rem', marginBottom: '1rem', fontSize: '0.8rem' }}>
-              <div style={{ color: '#94a3b8' }}>Party Name: <strong style={{ color: '#f8fafc' }}>{selectedOrderForInvoice.agency_name}</strong></div>
+              <div style={{ color: '#94a3b8' }}>Party Name: <strong style={{ color: '#f8fafc' }}>{getPartyName(selectedOrderForInvoice)}</strong></div>
               <div style={{ color: '#94a3b8', marginTop: 3 }}>Payment Type: <strong style={{ color: '#38bdf8' }}>{selectedOrderForInvoice.payment_type || 'CREDIT'}</strong></div>
               <div style={{ color: '#94a3b8', marginTop: 3 }}>
                 New Bill Amount: <strong style={{ color: '#34d399', fontSize: '0.9rem' }}>

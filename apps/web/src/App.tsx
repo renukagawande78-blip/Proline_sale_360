@@ -1465,6 +1465,7 @@ const MainLayout: React.FC = () => {
         {currentTab === 'accounts' && (
           <AccountsPage 
             orders={stageScopedOrders} 
+            agencies={agenciesPool}
             onGenerateInvoice={handleGenerateInvoice}
             onCompleteGrn={handleCompleteGrn}
             onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
