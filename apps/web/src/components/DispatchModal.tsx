@@ -24,7 +24,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   const [rentalAgencyName, setRentalAgencyName] = useState('');
   const [bookingId, setBookingId] = useState('');
   const [freightAmount, setFreightAmount] = useState<number>(0);
-  const [lrNumber, setLrNumber] = useState('LR-99887766');
+  const [lrNumber, setLrNumber] = useState('');
   const [dispatchRemark, setDispatchRemark] = useState('');
   const [validationError, setValidationError] = useState('');
   
@@ -44,6 +44,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     setRentalAgencyName(order.rental_agency_name || '');
     setBookingId(order.booking_id || '');
     setFreightAmount(order.freight_amount || 0);
+    setLrNumber((order as any).lr_number || '');
     setDispatchRemark(order.dispatch_remark || '');
     setValidationError('');
 

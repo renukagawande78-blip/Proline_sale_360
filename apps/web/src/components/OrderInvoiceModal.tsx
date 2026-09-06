@@ -124,16 +124,19 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
     return sum + (item.total_qty_pcs || (item.box_qty * (item.pcs_per_box || 1) + (item.loose_pcs || 0)));
   }, 0) || order.total_qty_pcs || (order.total_box_qty * 24);
 
-  // Vehicle information with fallbacks
-  const vehicleNo = order.vehicle_number || order.tempo_number || 'GJ-05-BX-4921';
-  const driverName = order.driver_name || 'Ramesh Kumar';
-  const driverMobile = order.driver_mobile || '9876543210';
-  const vehicleType = order.is_company_vehicle ? 'Company Owned Fleet' : (order.rental_agency_name || 'Commercial Rental Tempo');
-  const gatePassId = order.booking_id || `GP-${order.order_number.replace(/[^0-9]/g, '').slice(-4) || '8081'}`;
+  // Vehicle information with fallbacks (Keep blank if not yet dispatched)
+  const vehicleNo = order.vehicle_number || order.tempo_number || '—';
+  const driverName = order.driver_name || '—';
+  const driverMobile = order.driver_mobile || '—';
+  const hasVehicle = Boolean(order.vehicle_number || order.tempo_number || order.driver_name);
+  const vehicleType = hasVehicle 
+    ? (order.is_company_vehicle ? 'Company Owned Fleet' : (order.rental_agency_name || 'Commercial Rental Tempo')) 
+    : '—';
+  const gatePassId = order.booking_id || (hasVehicle ? `GP-${order.order_number?.replace(/[^0-9]/g, '').slice(-4) || '8081'}` : '');
 
   // Invoice Details & Qty Issued by Invoice calculation
   const isChallan = docMode === 'DISPATCH_CHALLAN';
-  const invoiceNumber = order.invoice_number || (isChallan ? `BILL-${order.order_number.replace(/[^0-9]/g, '') || '2026-780'}` : '');
+  const invoiceNumber = order.invoice_number || '—';
   const invoiceDate = order.invoice_date 
     ? new Date(order.invoice_date).toLocaleDateString('en-IN') 
     : (order.order_date ? new Date(order.order_date).toLocaleDateString('en-IN') : formattedDate);
@@ -672,7 +675,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                 <div style={{ paddingLeft: 12 }}>
                   <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Fleet & Gate Pass</div>
                   <div style={{ fontWeight: 800, color: '#000000', marginTop: 1 }}>
-                    {vehicleType} ({gatePassId})
+                    {vehicleType !== '—' ? `${vehicleType}${gatePassId ? ` (${gatePassId})` : ''}` : '—'}
                   </div>
                 </div>
               </div>
