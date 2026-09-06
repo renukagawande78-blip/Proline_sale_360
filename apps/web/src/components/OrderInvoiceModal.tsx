@@ -142,7 +142,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
     : (order.order_date ? new Date(order.order_date).toLocaleDateString('en-IN') : formattedDate);
   const invoiceTotalAmount = (order.invoice_amount && order.invoice_amount > 0)
     ? order.invoice_amount 
-    : (order.total_amount || 0);
+    : null;
 
   const getItemIssuedPcs = (item: any) => {
     if (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) return item.issued_qty_pcs;
@@ -627,7 +627,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                   <div style={{ borderRight: '1px solid #bbf7d0', paddingLeft: 12, paddingRight: 8 }}>
                     <div style={{ fontSize: '0.625rem', color: '#166534', fontWeight: 800, textTransform: 'uppercase' }}>Bill Amount</div>
                     <div style={{ fontWeight: 900, color: '#15803d', fontSize: '0.875rem', marginTop: 1 }}>
-                      ₹{invoiceTotalAmount.toLocaleString('en-IN')}
+                      {invoiceTotalAmount != null ? `₹${invoiceTotalAmount.toLocaleString('en-IN')}` : '—'}
                     </div>
                   </div>
                 )}

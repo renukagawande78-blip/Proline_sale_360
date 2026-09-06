@@ -125,9 +125,9 @@ export const getBrandByCode = (code?: string): BrandDefinition | undefined => {
 export const getBrandByName = (name?: string): BrandDefinition | undefined => {
   if (!name) return undefined;
   const clean = name.trim().toLowerCase();
-  return SYSTEM_BRANDS.find(b => 
-    b.name.toLowerCase() === clean || 
-    clean.includes(b.name.toLowerCase()) || 
+  return SYSTEM_BRANDS.find(b =>
+    b.name.toLowerCase() === clean ||
+    clean.includes(b.name.toLowerCase()) ||
     b.code.toLowerCase() === clean
   );
 };
@@ -412,7 +412,7 @@ export interface Order {
   invoice_amount?: number;
   billing_total_qty?: number;
   return_request?: ReturnRequest;
-  
+
   // Operational Workflow Diagram Fields
   payment_type?: 'ADVANCE' | 'OVERDUE' | 'CREDIT';
   payment_receipt_no?: string;
@@ -519,7 +519,7 @@ export interface Dispatch {
   dispatched_by_name?: string;
 }
 
-export type NotificationCategory = 
+export type NotificationCategory =
   | 'ORDER'      // New order created / modified
   | 'APPROVAL'   // Super Admin approval / review required
   | 'INVENTORY'  // Wait for stock / stock availability

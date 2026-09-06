@@ -149,7 +149,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
         filename = `Proline_OMS_Completed_Orders_Report_${todayStr}`;
         headers = ['Order Number', 'Order Date', 'Company Brand', 'Agency Name', 'Salesperson', 'Invoice Number', 'Settled Amount (INR)', 'Delivery Type', 'Total Box Qty', 'Total Quantity (PCS)', 'POD Remarks', 'Status'];
         rows = dataset.map(o => [
-          o.order_number, o.order_date, o.company_name || 'N/A', o.agency_name || 'N/A', o.salesperson_name || 'N/A', o.invoice_number || 'N/A', o.invoice_amount || o.total_amount || 0, o.delivery_type || 'F.O.R', o.total_box_qty, o.total_qty_pcs, o.remarks || 'POD Verified', o.status
+          o.order_number, o.order_date, o.company_name || 'N/A', o.agency_name || 'N/A', o.salesperson_name || 'N/A', o.invoice_number || 'N/A', o.invoice_amount ? Number(o.invoice_amount) : '—', o.delivery_type || 'F.O.R', o.total_box_qty, o.total_qty_pcs, o.remarks || 'POD Verified', o.status
         ]);
       } else if (reportName === 'Fill Rate Report') {
         filename = `Proline_OMS_Fill_Rate_Report_${todayStr}`;
@@ -183,7 +183,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
         filename = `Proline_OMS_Monthly_Dispatch_Report_${todayStr}`;
         headers = ['Invoice Date', 'Order Number', 'Invoice Number', 'Company Brand', 'Agency Name', 'Vehicle Number', 'Driver Name', 'Driver Mobile', 'Dispatched Boxes', 'Dispatched PCS', 'Invoice Amount (INR)', 'Status'];
         rows = dataset.map(o => [
-          o.invoice_date || o.order_date, o.order_number, o.invoice_number || 'N/A', o.company_name || 'N/A', o.agency_name || 'N/A', o.vehicle_number || 'N/A', o.driver_name || 'N/A', o.driver_mobile || 'N/A', o.total_box_qty, getOrderIssuedQty(o), o.invoice_amount || o.total_amount || 0, o.status
+          o.invoice_date || o.order_date, o.order_number, o.invoice_number || 'N/A', o.company_name || 'N/A', o.agency_name || 'N/A', o.vehicle_number || 'N/A', o.driver_name || 'N/A', o.driver_mobile || 'N/A', o.total_box_qty, getOrderIssuedQty(o), o.invoice_amount ? Number(o.invoice_amount) : '—', o.status
         ]);
       } else if (reportName === 'Daywise / Weekwise Dispatch Report') {
         filename = `Proline_OMS_Daywise_Dispatch_Report_${todayStr}`;
@@ -248,7 +248,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           <td>
             <strong style={{ color: '#34d399' }}>{o.invoice_number || 'INV-SETTLED'}</strong>
             <div style={{ color: '#94a3b8', fontSize: '0.725rem' }}>
-              ₹{(o.invoice_amount || o.total_amount || 0).toLocaleString()}
+              {o.invoice_amount != null ? `₹${Number(o.invoice_amount).toLocaleString()}` : '—'}
             </div>
           </td>
           <td>
@@ -333,7 +333,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           <td><span style={{ color: '#cbd5e1' }}>{o.salesperson_name}</span></td>
           <td><strong style={{ color: '#38bdf8' }}>{o.total_box_qty} Boxes</strong></td>
           <td><span style={{ color: '#34d399', fontWeight: 700 }}>{o.total_qty_pcs} PCS</span></td>
-          <td><span style={{ color: '#f8fafc', fontWeight: 700 }}>₹{(o.total_amount || 0).toLocaleString()}</span></td>
+          <td><span style={{ color: '#f8fafc', fontWeight: 700 }}>{o.invoice_amount != null ? `₹${Number(o.invoice_amount).toLocaleString()}` : '—'}</span></td>
           <td><span className={`status-badge status-${o.status}`}>{o.status}</span></td>
         </tr>
       ));
@@ -453,7 +453,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           </td>
           <td><strong style={{ color: '#38bdf8' }}>{o.total_box_qty} Boxes</strong></td>
           <td><strong style={{ color: '#34d399' }}>{getOrderIssuedQty(o)} PCS</strong></td>
-          <td><span style={{ color: '#f8fafc', fontWeight: 700 }}>₹{(o.invoice_amount || o.total_amount || 0).toLocaleString()}</span></td>
+          <td><span style={{ color: '#f8fafc', fontWeight: 700 }}>{o.invoice_amount != null ? `₹${Number(o.invoice_amount).toLocaleString()}` : '—'}</span></td>
           <td><span className={`status-badge status-${o.status}`}>{o.status}</span></td>
         </tr>
       ));
@@ -722,7 +722,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           <div style={{ background: '#1e293b', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: 10, padding: '0.85rem' }}>
             <div style={{ fontSize: '0.725rem', color: '#34d399', fontWeight: 700 }}>SETTLED INVOICE VALUE</div>
             <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#10b981', marginTop: 2 }}>
-              ₹{list.reduce((s, o) => s + (o.invoice_amount || o.total_amount || 0), 0).toLocaleString()}
+              ₹{list.reduce((s, o) => s + (o.invoice_amount || 0), 0).toLocaleString()}
             </div>
           </div>
         </div>
@@ -929,7 +929,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
         <div style={{ background: '#1e293b', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: 10, padding: '0.85rem' }}>
           <div style={{ fontSize: '0.725rem', color: '#10b981', fontWeight: 700 }}>DISPATCHED VALUE</div>
           <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#10b981', marginTop: 2 }}>
-            ₹{list.reduce((s, o) => s + (o.invoice_amount || o.total_amount || 0), 0).toLocaleString()}
+            ₹{list.reduce((s, o) => s + (o.invoice_amount || 0), 0).toLocaleString()}
           </div>
         </div>
       </div>
