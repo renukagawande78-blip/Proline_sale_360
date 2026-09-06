@@ -1,0 +1,9 @@
+node_modules
+apps/web/node_modules
+*.apk
+android
+apps/web/android
+.git
+dist
+apps/web/dist
+.DS_Store

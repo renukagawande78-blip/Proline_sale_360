@@ -234,29 +234,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </ul>
 
-        {/* Footer System Status & Logged-In User Details */}
-        <div style={{ marginTop: 'auto', paddingTop: '0.85rem', borderTop: '1px solid #334155' }}>
+        {/* Footer System Status & Logged-In User Details - Unified Parent View */}
+        <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid #334155' }}>
           {!isCollapsed ? (
-            <>
-              {/* Logged-In Person Name & Role */}
-              <div style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
-                LOGGED-IN USER
-              </div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '0.5rem',
-                background: '#0f172a',
-                border: '1px solid #334155',
-                borderRadius: '8px',
-                padding: '0.5rem 0.65rem',
-                marginBottom: '0.65rem'
-              }}>
+            <div style={{
+              background: 'linear-gradient(180deg, #0f172a 0%, #0b1329 100%)',
+              border: '1px solid #334155',
+              borderRadius: '10px',
+              padding: '0.75rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.6rem',
+              boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3)'
+            }}>
+              {/* User Profile & Segment Scope */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', overflow: 'hidden' }}>
                   <div style={{
-                    width: 30,
-                    height: 30,
+                    width: 32,
+                    height: 32,
                     borderRadius: '50%',
                     background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
                     display: 'flex',
@@ -264,8 +260,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     justifyContent: 'center',
                     color: '#ffffff',
                     fontWeight: 900,
-                    fontSize: '0.825rem',
-                    flexShrink: 0
+                    fontSize: '0.85rem',
+                    flexShrink: 0,
+                    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.4)'
                   }}>
                     {(currentUser?.full_name || 'U').charAt(0).toUpperCase()}
                   </div>
@@ -273,32 +270,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div style={{ fontSize: '0.825rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {currentUser?.full_name || 'System User'}
                     </div>
-                    <div style={{ fontSize: '0.68rem', color: '#38bdf8', fontWeight: 700 }}>
+                    <div style={{ fontSize: '0.675rem', color: '#94a3b8', fontWeight: 700 }}>
                       {(currentUser?.role_name || 'SALES_PERSON').replace(/_/g, ' ')}
                     </div>
                   </div>
                 </div>
+
+                {/* Segment Scope Badge */}
+                <span style={{
+                  fontSize: '0.675rem',
+                  fontWeight: 800,
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: '6px',
+                  background: userSegment === 'FMCG' ? 'rgba(16, 185, 129, 0.18)' : (userSegment === 'FMCD' ? 'rgba(251, 191, 36, 0.18)' : 'rgba(56, 189, 248, 0.18)'),
+                  color: userSegment === 'FMCG' ? '#34d399' : (userSegment === 'FMCD' ? '#fbbf24' : '#38bdf8'),
+                  border: userSegment === 'FMCG' ? '1px solid rgba(16, 185, 129, 0.35)' : (userSegment === 'FMCD' ? '1px solid rgba(251, 191, 36, 0.35)' : '1px solid rgba(56, 189, 248, 0.35)'),
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }} title={`Segment Scope: ${userSegment}`}>
+                  {userSegment === 'ALL' ? 'FMCG & FMCD' : userSegment}
+                </span>
               </div>
 
-              {/* Segment Scope */}
-              <div style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
-                LOGGED-IN SEGMENT SCOPE
-              </div>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '0.45rem', 
-                fontSize: '0.75rem', 
-                fontWeight: 800, 
-                padding: '0.35rem 0.55rem', 
-                borderRadius: '8px', 
-                background: userSegment === 'FMCG' ? 'rgba(16, 185, 129, 0.15)' : (userSegment === 'FMCD' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(56, 189, 248, 0.15)'),
-                color: userSegment === 'FMCG' ? '#34d399' : (userSegment === 'FMCD' ? '#fbbf24' : '#38bdf8'),
-                border: userSegment === 'FMCG' ? '1px solid rgba(16, 185, 129, 0.3)' : (userSegment === 'FMCD' ? '1px solid rgba(251, 191, 36, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'),
-                marginBottom: '0.65rem'
+              {/* System Environment & App Version Row */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0.35rem 0.55rem',
+                background: '#070d1e',
+                borderRadius: '6px',
+                border: '1px solid #1e293b',
+                fontSize: '0.675rem'
               }}>
-                <ShoppingBag size={13} />
-                <span>Segment: {userSegment === 'ALL' ? 'FMCG & FMCD' : userSegment}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#38bdf8', fontWeight: 700 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
+                  <span>Supabase Live DB</span>
+                </div>
+                <div 
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontFamily: 'monospace', fontWeight: 700, color: '#94a3b8' }}
+                  title={`Version ${APP_VERSION} • Built: ${APP_BUILD_DATETIME}`}
+                >
+                  <Tag size={10} color="#38bdf8" />
+                  <span style={{ color: '#38bdf8' }}>{APP_VERSION}</span>
+                </div>
               </div>
 
               {/* Sign Out Button */}
@@ -310,48 +325,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '0.45rem',
-                  padding: '0.45rem 0.65rem',
-                  borderRadius: '7px',
+                  padding: '0.4rem 0.65rem',
+                  borderRadius: '6px',
                   background: 'rgba(244, 63, 94, 0.12)',
                   border: '1px solid rgba(244, 63, 94, 0.35)',
                   color: '#fb7185',
-                  fontSize: '0.775rem',
+                  fontSize: '0.75rem',
                   fontWeight: 800,
                   cursor: 'pointer',
-                  marginBottom: '0.65rem',
                   transition: 'all 0.15s ease'
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(244, 63, 94, 0.22)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'rgba(244, 63, 94, 0.12)')}
               >
-                <LogOut size={14} />
+                <LogOut size={13} />
                 <span>Sign Out</span>
               </button>
-
-              <div style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.04em', marginBottom: '0.35rem' }}>
-                SYSTEM ENVIRONMENT
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.775rem', color: '#38bdf8', fontWeight: 700 }}>
-                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }}></div>
-                <span>Supabase Live DB</span>
-              </div>
-
-              {/* Version & Build Creation Date/Time */}
-              <div style={{ marginTop: '0.65rem', paddingTop: '0.5rem', borderTop: '1px solid #1e293b' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <Tag size={11} color="#38bdf8" /> Version:
-                  </span>
-                  <span style={{ color: '#38bdf8', fontWeight: 800, fontFamily: 'monospace' }}>
-                    {APP_VERSION}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.64rem', color: '#64748b', marginTop: '0.25rem' }} title={`Build Creation Timestamp: ${APP_BUILD_DATETIME}`}>
-                  <Clock size={10} color="#64748b" />
-                  <span>Created: {APP_BUILD_DATETIME}</span>
-                </div>
-              </div>
-            </>
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.55rem' }} title={`App Version ${APP_VERSION} • Built: ${APP_BUILD_DATETIME}`}>
               <div style={{

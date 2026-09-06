@@ -163,26 +163,9 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
         </div>
       </div>
 
-      {/* Right Section: Action Controls & User Mapped Segment */}
+      {/* Right Section: Action Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
         
-        {/* Logged-In User Segment Badge */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.35rem',
-          padding: '0.35rem 0.65rem',
-          borderRadius: 8,
-          fontSize: '0.725rem',
-          fontWeight: 800,
-          background: isFmcg ? 'rgba(16, 185, 129, 0.15)' : (isFmcd ? 'rgba(251, 191, 36, 0.15)' : 'rgba(56, 189, 248, 0.15)'),
-          color: isFmcg ? '#34d399' : (isFmcd ? '#fbbf24' : '#38bdf8'),
-          border: isFmcg ? '1px solid rgba(16, 185, 129, 0.35)' : (isFmcd ? '1px solid rgba(251, 191, 36, 0.35)' : '1px solid rgba(56, 189, 248, 0.35)')
-        }} title={`Salesperson Segment Scope: ${userSegment}`}>
-          {isFmcg ? <ShoppingBag size={13} /> : <Zap size={13} />}
-          <span>{userSegment === 'ALL' ? 'ALL' : userSegment}</span>
-        </div>
-
         {/* 1. Global Filter Button */}
         {onOpenGlobalFilter && (
           <button
