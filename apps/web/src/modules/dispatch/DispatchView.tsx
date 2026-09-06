@@ -67,8 +67,7 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const userRole = (currentUser?.role_name || '') as string;
   const isDispatchUser = userRole === 'DISPATCH_MANAGER' || userRole === 'DISPATCH';
-  const isScopeAll = !currentUser?.company_handle || currentUser?.company_handle.trim().toLowerCase() === 'all';
-  const canViewAll = isSuperAdmin || isScopeAll;
+  const canViewAll = isSuperAdmin || isDispatchUser || !currentUser?.company_handle || currentUser?.company_handle === 'All';
 
   // Active Dispatch Orders (All bills with completed Tax Invoicing / Stage 4 clearance)
   const dispatchQueueOrders = orders.filter(o => 
