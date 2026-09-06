@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  BarChart3, PieChart, TrendingUp, Calendar, Truck, Download, 
-  PackageCheck, Boxes, CheckCircle2, X, Search, ExternalLink, 
-  Clock, AlertTriangle, User, MapPin, Building2, ShieldCheck, 
+import {
+  BarChart3, PieChart, TrendingUp, Calendar, Truck, Download,
+  PackageCheck, Boxes, CheckCircle2, X, Search, ExternalLink,
+  Clock, AlertTriangle, User, MapPin, Building2, ShieldCheck,
   FileText, Info, CheckSquare, Filter, Layers, ChevronDown, ChevronRight,
   CalendarRange, CalendarDays
 } from 'lucide-react';
@@ -44,7 +44,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
   };
 
   // Scoped Orders by Brand Scope Handle
-  const scopedOrders = orders.filter(o => 
+  const scopedOrders = orders.filter(o =>
     checkIsSuperAdmin(currentUser) || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle)
   );
 
@@ -80,7 +80,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
   const isBilling = roleName === 'BILLING';
   const isDispatch = roleName === 'DISPATCH_MANAGER' || (roleName as string) === 'DISPATCH';
   const isASM = roleName === 'AREA_SALES_MANAGER';
-  const isSalesPerson = (roleName as string) === 'SALES_PERSON' || (roleName as string) === 'SALES_EXECUTIVE' || (roleName as string) === 'SALESPERSON' || (roleName as string) === 'FIELD_SALES_MANAGER';
+  const isSalesPerson = roleName === 'SALES_PERSON' || (roleName as string) === 'SALES_EXECUTIVE' || (roleName as string) === 'SALESPERSON';
 
   // Role-Specific Reports Arrangement Matrix
   const reportCatalog = useMemo(() => {
@@ -180,11 +180,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
     if (reportName === 'Completed Orders Report') {
       list = list.filter(o => o.status === 'COMPLETED' || o.status === 'DELIVERED');
     } else if (reportName === 'Fill Rate Report') {
-      list = list.filter(o => 
-        o.status === 'COMPLETED' || 
-        o.status === 'BILLED' || 
-        o.status === 'OUT_FOR_DELIVERY' || 
-        o.status === 'DELIVERED' || 
+      list = list.filter(o =>
+        o.status === 'COMPLETED' ||
+        o.status === 'BILLED' ||
+        o.status === 'OUT_FOR_DELIVERY' ||
+        o.status === 'DELIVERED' ||
         Boolean(o.invoice_number)
       );
     } else if (reportName === 'Order Daily Report') {
@@ -208,7 +208,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
 
     if (searchStr.trim()) {
       const q = searchStr.toLowerCase().trim();
-      list = list.filter(o => 
+      list = list.filter(o =>
         o.order_number.toLowerCase().includes(q) ||
         (o.agency_name || '').toLowerCase().includes(q) ||
         (o.company_name || '').toLowerCase().includes(q) ||
@@ -586,12 +586,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
     if (reportName === 'Outstanding Report') {
       return list.map((o, idx) => {
         const daysPending = getOrderAgeDays(o.order_date);
-        const bottleneck = o.status === 'WAIT_FOR_STOCK' 
-          ? '📦 Out of Stock / Waiting Stock' 
-          : o.status === 'APPROVED' 
-            ? '🧾 Pending Billing Invoice' 
-            : o.status === 'SALES_ADMIN_APPROVED' 
-              ? '👑 Pending Super Admin Approval' 
+        const bottleneck = o.status === 'WAIT_FOR_STOCK'
+          ? '📦 Out of Stock / Waiting Stock'
+          : o.status === 'APPROVED'
+            ? '🧾 Pending Billing Invoice'
+            : o.status === 'SALES_ADMIN_APPROVED'
+              ? '👑 Pending Super Admin Approval'
               : '⏳ Awaiting Sales Admin Approval';
         return (
           <tr key={idx}>
@@ -607,14 +607,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
             </td>
             <td><span style={{ color: '#cbd5e1' }}>{o.salesperson_name}</span></td>
             <td>
-              <span style={{ 
-                display: 'inline-block', 
-                padding: '0.2rem 0.5rem', 
-                borderRadius: 6, 
-                background: o.status === 'WAIT_FOR_STOCK' ? 'rgba(251, 113, 133, 0.15)' : 'rgba(251, 191, 36, 0.15)', 
-                color: o.status === 'WAIT_FOR_STOCK' ? '#fb7185' : '#fbbf24', 
-                fontSize: '0.75rem', 
-                fontWeight: 700 
+              <span style={{
+                display: 'inline-block',
+                padding: '0.2rem 0.5rem',
+                borderRadius: 6,
+                background: o.status === 'WAIT_FOR_STOCK' ? 'rgba(251, 113, 133, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                color: o.status === 'WAIT_FOR_STOCK' ? '#fb7185' : '#fbbf24',
+                fontSize: '0.75rem',
+                fontWeight: 700
               }}>
                 {bottleneck}
               </span>
@@ -654,14 +654,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
             </td>
             <td><strong style={{ color: '#38bdf8' }}>{o.total_box_qty} Boxes</strong></td>
             <td>
-              <span style={{ 
-                display: 'inline-block', 
-                padding: '0.15rem 0.5rem', 
-                borderRadius: 6, 
-                background: hasIssue ? 'rgba(244, 63, 94, 0.15)' : 'rgba(52, 211, 153, 0.15)', 
-                color: hasIssue ? '#fb7185' : '#34d399', 
-                fontSize: '0.75rem', 
-                fontWeight: 700 
+              <span style={{
+                display: 'inline-block',
+                padding: '0.15rem 0.5rem',
+                borderRadius: 6,
+                background: hasIssue ? 'rgba(244, 63, 94, 0.15)' : 'rgba(52, 211, 153, 0.15)',
+                color: hasIssue ? '#fb7185' : '#34d399',
+                fontSize: '0.75rem',
+                fontWeight: 700
               }}>
                 {hasIssue ? '⚠️ Issue Reported' : '✅ Verified Clean'}
               </span>
@@ -745,14 +745,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
             <td><strong style={{ color: '#cbd5e1' }}>{o.order_number}</strong></td>
             <td>{o.order_date ? new Date(o.order_date).toLocaleDateString('en-IN') : '-'}</td>
             <td>
-              <span style={{ 
-                display: 'inline-block', 
-                padding: '0.15rem 0.5rem', 
-                borderRadius: 6, 
-                background: daysAgo <= 7 ? 'rgba(52, 211, 153, 0.15)' : daysAgo <= 15 ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)', 
-                color: daysAgo <= 7 ? '#34d399' : daysAgo <= 15 ? '#38bdf8' : '#fbbf24', 
-                fontSize: '0.75rem', 
-                fontWeight: 700 
+              <span style={{
+                display: 'inline-block',
+                padding: '0.15rem 0.5rem',
+                borderRadius: 6,
+                background: daysAgo <= 7 ? 'rgba(52, 211, 153, 0.15)' : daysAgo <= 15 ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                color: daysAgo <= 7 ? '#34d399' : daysAgo <= 15 ? '#38bdf8' : '#fbbf24',
+                fontSize: '0.75rem',
+                fontWeight: 700
               }}>
                 {daysAgo === 0 ? 'Today' : `${daysAgo} days ago`}
               </span>
@@ -776,14 +776,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           <strong style={{ color: '#38bdf8' }}>{o.vehicle_number || o.tempo_number || 'Unassigned Vehicle'}</strong>
         </td>
         <td>
-          <span style={{ 
-            display: 'inline-block', 
-            padding: '0.15rem 0.5rem', 
-            borderRadius: 6, 
-            background: o.is_company_vehicle ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)', 
-            color: o.is_company_vehicle ? '#38bdf8' : '#fbbf24', 
-            fontSize: '0.725rem', 
-            fontWeight: 700 
+          <span style={{
+            display: 'inline-block',
+            padding: '0.15rem 0.5rem',
+            borderRadius: 6,
+            background: o.is_company_vehicle ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+            color: o.is_company_vehicle ? '#38bdf8' : '#fbbf24',
+            fontSize: '0.725rem',
+            fontWeight: 700
           }}>
             {o.is_company_vehicle ? '🏢 Company Owned' : '🚛 Rental / Transporter'}
           </span>
@@ -1190,9 +1190,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <button 
-            onClick={() => handleExportExcel(selectedReport)} 
-            disabled={isExporting} 
+          <button
+            onClick={() => handleExportExcel(selectedReport)}
+            disabled={isExporting}
             className="btn btn-outline"
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}
           >
@@ -1203,7 +1203,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
 
       {/* Global Supply Chain KPI Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-        <div 
+        <div
           className="kpi-card"
           onClick={() => handleOpenReport('Fill Rate Report')}
           style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
@@ -1220,7 +1220,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           </div>
         </div>
 
-        <div 
+        <div
           className="kpi-card"
           onClick={() => handleOpenReport('Order Daily Report')}
           style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
@@ -1237,7 +1237,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           </div>
         </div>
 
-        <div 
+        <div
           className="kpi-card"
           onClick={() => handleOpenReport('Monthly Dispatch Report')}
           style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
@@ -1254,7 +1254,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
           </div>
         </div>
 
-        <div 
+        <div
           className="kpi-card"
           onClick={() => handleOpenReport('Outstanding Report')}
           style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
@@ -1328,19 +1328,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
               {reportCatalog.map(report => {
                 const isSel = selectedReport === report;
                 return (
-                  <button 
-                    key={report} 
-                    type="button" 
-                    onClick={() => setSelectedReport(report)} 
-                    style={{ 
-                      textAlign: 'left', 
-                      padding: '0.85rem 1rem', 
-                      borderRadius: 10, 
-                      cursor: 'pointer', 
-                      border: isSel ? '1px solid #38bdf8' : '1px solid #334155', 
-                      background: isSel ? 'rgba(56,189,248,0.15)' : '#0f172a', 
-                      color: '#f8fafc', 
-                      fontWeight: 800, 
+                  <button
+                    key={report}
+                    type="button"
+                    onClick={() => setSelectedReport(report)}
+                    style={{
+                      textAlign: 'left',
+                      padding: '0.85rem 1rem',
+                      borderRadius: 10,
+                      cursor: 'pointer',
+                      border: isSel ? '1px solid #38bdf8' : '1px solid #334155',
+                      background: isSel ? 'rgba(56,189,248,0.15)' : '#0f172a',
+                      color: '#f8fafc',
+                      fontWeight: 800,
                       fontSize: '0.825rem',
                       display: 'flex',
                       alignItems: 'center',
@@ -1353,8 +1353,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                       <BarChart3 size={16} color={report === 'Completed Orders Report' ? '#34d399' : '#38bdf8'} />
                       {report}
                     </span>
-                    <span 
-                      onClick={(e) => { e.stopPropagation(); handleOpenReport(report); }} 
+                    <span
+                      onClick={(e) => { e.stopPropagation(); handleOpenReport(report); }}
                       title="Open full interactive modal viewer"
                       style={{ padding: '0.2rem', borderRadius: 4, background: 'rgba(255,255,255,0.06)' }}
                     >
@@ -1384,7 +1384,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.6rem' }}>
-                  <button 
+                  <button
                     onClick={() => handleExportExcel(selectedReport)}
                     className="btn btn-outline"
                     style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', gap: '0.35rem' }}
@@ -1436,7 +1436,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '0.6rem' }}>
-                <button 
+                <button
                   onClick={() => handleExportPeriodicExcel()}
                   disabled={isExporting || periodicGroups.length === 0}
                   className="btn btn-primary"
@@ -1476,8 +1476,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                       const fillRateNum = parseFloat(g.fillRate) || 0;
                       return (
                         <React.Fragment key={g.periodKey}>
-                          <tr 
-                            style={{ 
+                          <tr
+                            style={{
                               background: isExpanded ? 'rgba(56, 189, 248, 0.08)' : 'inherit',
                               cursor: 'pointer',
                               borderBottom: isExpanded ? 'none' : '1px solid #334155'
@@ -1515,17 +1515,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                             </td>
                             <td>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <div style={{ 
-                                  width: 48, 
-                                  height: 6, 
-                                  background: '#334155', 
-                                  borderRadius: 3, 
-                                  overflow: 'hidden' 
+                                <div style={{
+                                  width: 48,
+                                  height: 6,
+                                  background: '#334155',
+                                  borderRadius: 3,
+                                  overflow: 'hidden'
                                 }}>
-                                  <div style={{ 
-                                    width: `${Math.min(100, Math.max(0, fillRateNum))}%`, 
-                                    height: '100%', 
-                                    background: fillRateNum >= 90 ? '#34d399' : fillRateNum >= 70 ? '#fbbf24' : '#fb7185' 
+                                  <div style={{
+                                    width: `${Math.min(100, Math.max(0, fillRateNum))}%`,
+                                    height: '100%',
+                                    background: fillRateNum >= 90 ? '#34d399' : fillRateNum >= 70 ? '#fbbf24' : '#fb7185'
                                   }} />
                                 </div>
                                 <span style={{ fontWeight: 800, color: fillRateNum >= 90 ? '#34d399' : fillRateNum >= 70 ? '#fbbf24' : '#fb7185' }}>
@@ -1534,13 +1534,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                               </div>
                             </td>
                             <td>
-                              <span style={{ 
-                                fontSize: '0.725rem', 
-                                padding: '0.2rem 0.5rem', 
-                                borderRadius: 4, 
-                                background: 'rgba(56, 189, 248, 0.12)', 
-                                color: '#38bdf8', 
-                                fontWeight: 700 
+                              <span style={{
+                                fontSize: '0.725rem',
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: 4,
+                                background: 'rgba(56, 189, 248, 0.12)',
+                                color: '#38bdf8',
+                                fontWeight: 700
                               }}>
                                 {g.topBrand}
                               </span>
@@ -1614,10 +1614,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                                               {issuedQty > 0 ? `${issuedQty} PCS` : '—'}
                                             </td>
                                             <td style={{ padding: '0.45rem 0.6rem' }}>
-                                              <span style={{ 
-                                                fontSize: '0.675rem', 
-                                                padding: '0.15rem 0.4rem', 
-                                                borderRadius: 4, 
+                                              <span style={{
+                                                fontSize: '0.675rem',
+                                                padding: '0.15rem 0.4rem',
+                                                borderRadius: 4,
                                                 fontWeight: 800,
                                                 background: ord.status === 'COMPLETED' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(251, 191, 36, 0.15)',
                                                 color: ord.status === 'COMPLETED' ? '#34d399' : '#fbbf24'
@@ -1656,16 +1656,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
 
       {/* ── FULL INTERACTIVE REPORT VIEWER MODAL ── */}
       {isReportModalOpen && (
-        <div 
-          className="modal-overlay" 
+        <div
+          className="modal-overlay"
           style={{ zIndex: 1100, position: 'fixed', inset: 0, background: 'rgba(2, 6, 23, 0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
           onClick={() => setIsReportModalOpen(false)}
         >
-          <div 
-            style={{ 
-              maxWidth: 1150, 
-              width: '100%', 
-              maxHeight: '92vh', 
+          <div
+            style={{
+              maxWidth: 1150,
+              width: '100%',
+              maxHeight: '92vh',
               display: 'flex',
               flexDirection: 'column',
               background: '#0f172a',
@@ -1679,14 +1679,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
             {/* Modal Header */}
             <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1e293b', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{ 
-                  width: 42, 
-                  height: 42, 
-                  borderRadius: 10, 
-                  background: activeModalReport === 'Completed Orders Report' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)', 
-                  border: activeModalReport === 'Completed Orders Report' ? '1px solid #10b981' : '1px solid #38bdf8', 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <div style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 10,
+                  background: activeModalReport === 'Completed Orders Report' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                  border: activeModalReport === 'Completed Orders Report' ? '1px solid #10b981' : '1px solid #38bdf8',
+                  display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'center',
                   color: activeModalReport === 'Completed Orders Report' ? '#34d399' : '#38bdf8'
                 }}>
@@ -1712,7 +1712,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                 >
                   <Download size={15} /> Download CSV / XLS
                 </button>
-                <button 
+                <button
                   onClick={() => setIsReportModalOpen(false)}
                   style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.5rem', cursor: 'pointer', color: '#94a3b8' }}
                   title="Close Report"
@@ -1730,10 +1730,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
               {/* Filter / Search Bar inside Modal */}
               <div style={{ marginBottom: '1rem', position: 'relative' }}>
                 <Search size={16} color="#64748b" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
-                <input 
-                  type="text" 
-                  value={modalSearch} 
-                  onChange={e => setModalSearch(e.target.value)} 
+                <input
+                  type="text"
+                  value={modalSearch}
+                  onChange={e => setModalSearch(e.target.value)}
                   placeholder={`Search ${activeModalReport} by order no, agency, brand, salesperson, invoice, driver, vehicle...`}
                   style={{
                     width: '100%',
@@ -1766,7 +1766,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
               <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
                 Showing <strong style={{ color: '#f8fafc' }}>{currentModalList.length}</strong> active rows in {activeModalReport}
               </span>
-              <button 
+              <button
                 onClick={() => setIsReportModalOpen(false)}
                 className="btn btn-outline"
                 style={{ padding: '0.45rem 1rem', fontSize: '0.8rem' }}

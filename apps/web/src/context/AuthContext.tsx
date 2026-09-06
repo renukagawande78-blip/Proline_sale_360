@@ -138,59 +138,97 @@ export const INITIAL_PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: getDefaultPermissions('SUPER_ADMIN')
   },
   {
+    id: 'pg_accounts',
+    group_name: 'Accounts Authority Group',
+    description: 'All Reports & Periodic Matrices, B2B Billing, Outstanding & Collections, Order View & Controls',
+    is_system: true,
+    permissions: getDefaultPermissions('ACCOUNTS')
+  },
+  {
     id: 'pg_sales_admin',
     group_name: 'Sales Admin Authority Group',
-    description: 'Add Order, View Order, Cancel Order, Transfer to Billing & Dispatch (No Delete)',
+    description: 'Order Entry, New Party, New Product, Order Transfer to Billing, Status Dashboard & Reports',
     is_system: true,
     permissions: getDefaultPermissions('SALES_ADMIN')
   },
   {
-    id: 'pg_sales_person',
-    group_name: 'Sales Person / Field Sales Group',
-    description: 'Add Order, View Order, Cancel Order, Company Form (No Delete Access)',
-    is_system: true,
-    permissions: getDefaultPermissions('SALES_PERSON')
-  },
-  {
     id: 'pg_billing',
-    group_name: 'Billing & Accounts Group',
-    description: 'View Orders, Transfer to Billing & Dispatch, POD Verification (No Delete Access)',
+    group_name: 'Billing Operations Group',
+    description: 'Order Status Dashboard, Order Transfer to Dispatch, POD Verification & Reports',
     is_system: true,
     permissions: getDefaultPermissions('BILLING')
   },
   {
     id: 'pg_dispatch',
     group_name: 'Dispatch Operations Group',
-    description: 'View Orders, Transfer Out For Delivery, Vehicle Assignment (No Delete Access)',
+    description: 'Zonewise Order Display, Order Transfer Out for Delivery, Vehicle-wise Dispatch, POD Queue',
     is_system: true,
     permissions: getDefaultPermissions('DISPATCH_MANAGER')
   },
   {
     id: 'pg_asm',
-    group_name: 'Area Sales Manager Group',
-    description: 'Add Order, View Order, Cancel Order, Company Dashboard (No Delete Access)',
+    group_name: 'Area Sales Manager (ASM) Group',
+    description: 'Aligned Company Order Status Dashboard & Reports Dashboard',
     is_system: true,
     permissions: getDefaultPermissions('AREA_SALES_MANAGER')
+  },
+  {
+    id: 'pg_sales_person',
+    group_name: 'Field Sales Manager / Sales Person Group',
+    description: 'Aligned Company Order Form, Order Status Dashboard & Reports',
+    is_system: true,
+    permissions: getDefaultPermissions('SALES_PERSON')
   }
 ];
 
-const SEED_USERS: User[] = [
+export const SEED_USERS: User[] = [
+  // 1. Super Admin (Chirag)
   { sno: 1, id: 'u01', full_name: 'Chirag', email: 'chirag@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '1234', active: true },
-  { sno: 2, id: 'u02', full_name: 'Harshad', email: 'harshad@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '1234', active: true },
-  { sno: 3, id: 'u_jay', full_name: 'Jay', email: 'jay@proline.com', role_name: 'SALES_ADMIN', permission_group_id: 'pg_sales_admin', permission_group_name: 'Sales Admin Group', company_handle: 'Priyagold, RCPL, Orion, Gandour, HPPL', password: '1234', active: true },
-  { sno: 4, id: 'u_dixit', full_name: 'Dixit', email: 'dixit@proline.com', role_name: 'SALES_ADMIN', permission_group_id: 'pg_sales_admin', permission_group_name: 'Sales Admin Group', company_handle: 'Hell, Waiwai, PRAN, Mogu Mogu', password: '1234', active: true },
-  { sno: 5, id: 'u_sumit', full_name: 'Sumit', email: 'sumit@proline.com', role_name: 'SALES_ADMIN', permission_group_id: 'pg_sales_admin', permission_group_name: 'Sales Admin Group', company_handle: 'Whirlpool, Daikin, Cruise, AKAI', password: '1234', active: true },
-  { sno: 6, id: 'u_ridhhi', full_name: 'Ridhhi', email: 'ridhhi@proline.com', role_name: 'BILLING', permission_group_id: 'pg_billing', permission_group_name: 'Billing Group', company_handle: 'Priyagold, RCPL, Orion, Gandour, HPPL', password: '1234', active: true },
-  { sno: 7, id: 'u_mansi', full_name: 'Mansi', email: 'mansi@proline.com', role_name: 'BILLING', permission_group_id: 'pg_billing', permission_group_name: 'Billing Group', company_handle: 'Hell, Waiwai, PRAN, Mogu Mogu', password: '1234', active: true },
-  { sno: 8, id: 'u_sneha', full_name: 'Sneha', email: 'sneha@proline.com', role_name: 'BILLING', permission_group_id: 'pg_billing', permission_group_name: 'Billing Group', company_handle: 'Whirlpool, Daikin, Cruise, AKAI', password: '1234', active: true },
-  { sno: 9, id: 'u_dharmik', full_name: 'Dharmik', email: 'dharmik@proline.com', role_name: 'DISPATCH_MANAGER', permission_group_id: 'pg_dispatch', permission_group_name: 'Dispatch Group', company_handle: 'Priyagold, RCPL, Orion, Gandour, HPPL', password: '1234', active: true },
-  { sno: 10, id: 'u_dhruv', full_name: 'Dhruv', email: 'dhruv@proline.com', role_name: 'DISPATCH_MANAGER', permission_group_id: 'pg_dispatch', permission_group_name: 'Dispatch Group', company_handle: 'Hell, Waiwai, PRAN, Mogu Mogu', password: '1234', active: true },
-  { sno: 11, id: 'u_jitendra', full_name: 'Jitendra', email: 'jitendra@proline.com', role_name: 'DISPATCH_MANAGER', permission_group_id: 'pg_dispatch', permission_group_name: 'Dispatch Group', company_handle: 'Whirlpool, Daikin, Cruise, AKAI', password: '1234', active: true },
-  { sno: 12, id: 'u_nikhil', full_name: 'Nikhil', email: 'nikhil@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person Group', company_handle: 'Priyagold', password: '1234', active: true },
-  { sno: 13, id: 'u_milan', full_name: 'Milan', email: 'milan@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person Group', company_handle: 'PRAN', password: '1234', active: true },
-  { sno: 14, id: 'u_taral', full_name: 'Taral', email: 'taral@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person Group', company_handle: 'Whirlpool, Daikin, Cruise, AKAI', password: '1234', active: true },
-  { sno: 15, id: 'u_rahul', full_name: 'Rahul', email: 'rahul@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person Group', company_handle: 'Mogu Mogu', password: '1234', active: true },
-  { sno: 16, id: 'u_keyur', full_name: 'Keyur', email: 'keyur@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Sales Person Group', company_handle: 'Hell', password: '1234', active: true }
+  
+  // 2. Accounts (Harshad)
+  { sno: 2, id: 'u02', full_name: 'Harshad', email: 'harshad@proline.com', role_name: 'ACCOUNTS', permission_group_id: 'pg_accounts', permission_group_name: 'Accounts Authority Group', company_handle: 'All', password: '1234', active: true },
+  
+  // 3–5. Sales Admin
+  { sno: 3, id: 'u_jay', full_name: 'Jay', email: 'jay@proline.com', role_name: 'SALES_ADMIN', permission_group_id: 'pg_sales_admin', permission_group_name: 'Sales Admin Authority Group', company_handle: 'Priyagold, RCPL, Orion, Gandour, HPPL', password: '1234', active: true },
+  { sno: 4, id: 'u_dixit', full_name: 'Dixit', email: 'dixit@proline.com', role_name: 'SALES_ADMIN', permission_group_id: 'pg_sales_admin', permission_group_name: 'Sales Admin Authority Group', company_handle: 'Hell, Waiwai, PRAN, Mogu mogu', password: '1234', active: true },
+  { sno: 5, id: 'u_sumit', full_name: 'Sumit', email: 'sumit@proline.com', role_name: 'SALES_ADMIN', permission_group_id: 'pg_sales_admin', permission_group_name: 'Sales Admin Authority Group', company_handle: 'Whirlpool, Daikin, Cruise, Akai', password: '1234', active: true },
+  
+  // 6–8. Billing
+  { sno: 6, id: 'u_riddhi', full_name: 'Riddhi', email: 'riddhi@proline.com', role_name: 'BILLING', permission_group_id: 'pg_billing', permission_group_name: 'Billing Operations Group', company_handle: 'Priyagold, RCPL, Orion, Gandour, HPPL', password: '1234', active: true },
+  { sno: 7, id: 'u_mansi', full_name: 'Mansi', email: 'mansi@proline.com', role_name: 'BILLING', permission_group_id: 'pg_billing', permission_group_name: 'Billing Operations Group', company_handle: 'Hell, Waiwai, PRAN, Mogu mogu', password: '1234', active: true },
+  { sno: 8, id: 'u_sneha', full_name: 'Sneha', email: 'sneha@proline.com', role_name: 'BILLING', permission_group_id: 'pg_billing', permission_group_name: 'Billing Operations Group', company_handle: 'Whirlpool, Daikin, Cruise, Akai', password: '1234', active: true },
+  
+  // 9–11. Dispatch Manager
+  { sno: 9, id: 'u_dhruv', full_name: 'Dhruv', email: 'dhruv@proline.com', role_name: 'DISPATCH_MANAGER', permission_group_id: 'pg_dispatch', permission_group_name: 'Dispatch Operations Group', company_handle: 'All', password: '1234', active: true },
+  { sno: 10, id: 'u_dharmik', full_name: 'Dharmik', email: 'dharmik@proline.com', role_name: 'DISPATCH_MANAGER', permission_group_id: 'pg_dispatch', permission_group_name: 'Dispatch Operations Group', company_handle: 'All', password: '1234', active: true },
+  { sno: 11, id: 'u_jitendra', full_name: 'Jitendra', email: 'jitendra@proline.com', role_name: 'DISPATCH_MANAGER', permission_group_id: 'pg_dispatch', permission_group_name: 'Dispatch Operations Group', company_handle: 'All', password: '1234', active: true },
+  
+  // 12–21. Area Sales Managers (10 ASMs)
+  { sno: 12, id: 'u_asm_brijesh', full_name: 'Brijesh', email: 'brijesh@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'Whirlpool', password: '1234', active: true },
+  { sno: 13, id: 'u_asm_kamal', full_name: 'Kamal', email: 'kamal@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'Cruise', password: '1234', active: true },
+  { sno: 14, id: 'u_asm_shashi', full_name: 'Shashi', email: 'shashi@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'Priyagold', password: '1234', active: true },
+  { sno: 15, id: 'u_asm_ankit', full_name: 'Ankit', email: 'ankit@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'Orion', password: '1234', active: true },
+  { sno: 16, id: 'u_asm_tushar', full_name: 'Tushar', email: 'tushar@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'Waiwai', password: '1234', active: true },
+  { sno: 17, id: 'u_asm_shakti', full_name: 'Shakti', email: 'shakti@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'PRAN', password: '1234', active: true },
+  { sno: 18, id: 'u_asm_sanjay', full_name: 'Sanjay', email: 'sanjay@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'HPPL', password: '1234', active: true },
+  { sno: 19, id: 'u_asm_keyur', full_name: 'Keyur (KK)', email: 'keyur_kk@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'Hell', password: '1234', active: true },
+  { sno: 20, id: 'u_asm_jagrut', full_name: 'Jagrut', email: 'jagrut@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'Daikin', password: '1234', active: true },
+  { sno: 21, id: 'u_asm_dinesh', full_name: 'Dinesh', email: 'dinesh@proline.com', role_name: 'AREA_SALES_MANAGER', permission_group_id: 'pg_asm', permission_group_name: 'Area Sales Manager (ASM) Group', company_handle: 'Akai', password: '1234', active: true },
+  
+  // 22–34. Field Sales Managers / Sales Persons (13 FSMs)
+  { sno: 22, id: 'u_fsm_keyur', full_name: 'Keyur', email: 'keyur@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Hell', password: '1234', active: true },
+  { sno: 23, id: 'u_fsm_shailendra', full_name: 'Shailendra', email: 'shailendra@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Orion', password: '1234', active: true },
+  { sno: 24, id: 'u_fsm_jayendra', full_name: 'Jayendra', email: 'jayendra@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Waiwai', password: '1234', active: true },
+  { sno: 25, id: 'u_fsm_nikhil', full_name: 'Nikhil', email: 'nikhil@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Priyagold', password: '1234', active: true },
+  { sno: 26, id: 'u_fsm_jay', full_name: 'Jay', email: 'jay_sales@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Gandour', password: '1234', active: true },
+  { sno: 27, id: 'u_fsm_sahil', full_name: 'Sahil', email: 'sahil@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'HPPL', password: '1234', active: true },
+  { sno: 28, id: 'u_fsm_milan', full_name: 'Milan', email: 'milan@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'PRAN', password: '1234', active: true },
+  { sno: 29, id: 'u_fsm_rahul', full_name: 'Rahul', email: 'rahul@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Mogu mogu', password: '1234', active: true },
+  { sno: 30, id: 'u_fsm_sagar', full_name: 'Sagar', email: 'sagar@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'RCPL', password: '1234', active: true },
+  { sno: 31, id: 'u_fsm_taral', full_name: 'Taral', email: 'taral@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Daikin', password: '1234', active: true },
+  { sno: 32, id: 'u_fsm_pinkle', full_name: 'Pinkle', email: 'pinkle@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Whirlpool, Daikin, Cruise, Akai', password: '1234', active: true },
+  { sno: 33, id: 'u_fsm_lalit', full_name: 'Lalit', email: 'lalit@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Whirlpool, Daikin, Cruise, Akai', password: '1234', active: true },
+  { sno: 34, id: 'u_fsm_kano', full_name: 'Kano', email: 'kano@proline.com', role_name: 'SALES_PERSON', permission_group_id: 'pg_sales_person', permission_group_name: 'Field Sales Manager / Sales Person Group', company_handle: 'Whirlpool, Daikin, Cruise, Akai', password: '1234', active: true }
 ];
 
 
@@ -238,26 +276,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (data && data.length > 0 && !error) {
-          const mappedUsers: User[] = data.map((u: any, idx: number) => ({
-            sno: u.sno || idx + 1,
-            id: u.id || `u_${idx + 1}`,
-            full_name: u.full_name || u.name || u.user_name || 'System User',
-            email: u.email || `${u.id}@proline.com`,
-            role_name: (u.role_name || u.role || 'SALES_PERSON') as RoleName,
-            permission_group_id: u.permission_group_id || 'pg_sales_person',
-            permission_group_name: u.permission_group_name || 'Sales Person Group',
-            company_handle: (() => {
-              const handle = u.company_handle || u.brand_scope || '';
-              const role = (u.role_name || u.role || '').toUpperCase();
-              // Super Admins with no handle → All; others keep their handle (empty = restrict)
-              if (!handle && (role === 'SUPER_ADMIN' || (u.full_name || '').toLowerCase().includes('chirag') || (u.full_name || '').toLowerCase().includes('harshad'))) return 'All';
-              return handle;
-            })(),
-            password: u.password || '1234',
-            active: u.active ?? true,
-            permissions: getDefaultPermissions((u.role_name || u.role || 'SALES_PERSON') as RoleName)
-          }));
-          setUsers(deduplicateUsers(mappedUsers));
+          const mappedUsers: User[] = data
+            .filter((u: any) => u.active !== false && u.email && !u.email.toLowerCase().includes('.con') && !u.email.toLowerCase().includes('test@'))
+            .map((u: any, idx: number) => ({
+              sno: u.sno || idx + 1,
+              id: u.id || `u_${idx + 1}`,
+              full_name: u.full_name || u.name || u.user_name || 'System User',
+              email: u.email || `${u.id}@proline.com`,
+              role_name: (u.role_name || u.role || 'SALES_PERSON') as RoleName,
+              permission_group_id: u.permission_group_id || 'pg_sales_person',
+              permission_group_name: u.permission_group_name || 'Sales Person Group',
+              company_handle: (() => {
+                const handle = u.company_handle || u.brand_scope || '';
+                const role = (u.role_name || u.role || '').toUpperCase();
+                // Super Admins with no handle → All; others keep their handle (empty = restrict)
+                if (!handle && (role === 'SUPER_ADMIN' || (u.full_name || '').toLowerCase().includes('chirag') || (u.full_name || '').toLowerCase().includes('harshad'))) return 'All';
+                return handle;
+              })(),
+              password: u.password || '1234',
+              active: u.active ?? true,
+              permissions: getDefaultPermissions((u.role_name || u.role || 'SALES_PERSON') as RoleName)
+            }))
+            .sort((a, b) => (a.sno || 0) - (b.sno || 0));
+
+          setUsers(deduplicateUsers(mappedUsers.length >= 34 ? mappedUsers : INITIAL_USERS));
           if (currentUser) {
             const updatedSelf = mappedUsers.find(mu => mu.id === currentUser.id);
             if (updatedSelf) setCurrentUser(updatedSelf);
