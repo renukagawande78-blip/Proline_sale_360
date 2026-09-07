@@ -10,7 +10,7 @@ export const LoginPage: React.FC = () => {
   const { login } = useAuth();
   const { addNotification } = useNotifications();
   const [usernameInput, setUsernameInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('1234');
+  const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -196,9 +196,6 @@ export const LoginPage: React.FC = () => {
               <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.04em' }}>
                 PASSWORD
               </label>
-              <span style={{ fontSize: '0.675rem', color: '#34d399', fontWeight: 700, background: 'rgba(52, 211, 153, 0.12)', padding: '0.1rem 0.4rem', borderRadius: 4 }}>
-                Default: 1234
-              </span>
             </div>
             <div style={{ position: 'relative' }}>
               <Lock size={16} color="#64748b" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
