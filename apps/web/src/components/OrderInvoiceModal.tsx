@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Printer, CheckCircle, SlidersHorizontal, FileText, Truck, Share2, Mail, MessageCircle, Download, Check, Link2 } from 'lucide-react';
 import { Order, Agency } from '../types';
-import { fetchAgenciesFromSupabaseTable, MOCK_AGENCIES } from '../lib/supabase';
+import { fetchAgenciesFromSupabaseTable, MOCK_AGENCIES, supabase } from '../lib/supabase';
 
 interface OrderInvoiceModalProps {
   order: Order | null;
@@ -26,6 +26,15 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
   const [showTotalPcs, setShowTotalPcs] = useState(true);
 
   const [liveAgency, setLiveAgency] = useState<any>(null);
+  const [liveItems, setLiveItems] = useState<any[]>([]);
+
+  // Detect FMCD Segment
+  const isFMCD = Boolean(
+    (order as any).company_segment?.toUpperCase() === 'FMCD' ||
+    (order as any).segment?.toUpperCase() === 'FMCD' ||
+    ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((order.company_name || (order as any).company_handle || '').toUpperCase()) ||
+    ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (order.order_number || '').toUpperCase().startsWith(k))
+  );
 
   useEffect(() => {
     if (!order) return;
@@ -42,7 +51,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
       setShowBoxQty(true);
       setShowIssuedQty(true);
       setShowInvoiceAmount(false);
-      setShowPcsPerBox(true);
+      setShowPcsPerBox(!isFMCD);
       setShowTotalPcs(true);
     } else {
       setDocMode('SALES_ORDER');
@@ -50,7 +59,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
       setShowBoxQty(true);
       setShowIssuedQty(false);
       setShowInvoiceAmount(true);
-      setShowPcsPerBox(true);
+      setShowPcsPerBox(!isFMCD);
       setShowTotalPcs(true);
     }
 
@@ -67,7 +76,21 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
         if (match) setLiveAgency(match);
       }
     }).catch(err => console.warn('Supabase fetch error in order modal:', err));
-  }, [order?.id, order?.agency_id, order?.agency_name, order?.invoice_number, order?.status, agencies]);
+
+    // If order items are missing or empty, fetch from order_items table
+    if (!order.items || order.items.length === 0) {
+      (async () => {
+        try {
+          const { data: itemsData } = await supabase.from('order_items').select('*').eq('order_id', order.id);
+          if (itemsData && itemsData.length > 0) {
+            setLiveItems(itemsData);
+          }
+        } catch (err) {
+          console.warn('Fetch order items error:', err);
+        }
+      })();
+    }
+  }, [order?.id, order?.agency_id, order?.agency_name, order?.invoice_number, order?.status, isFMCD, agencies]);
 
   const agency = liveAgency || (agencies?.find(a => a.id === order.agency_id)) || MOCK_AGENCIES.find(a => a.id === order.agency_id) || {};
 
@@ -102,14 +125,14 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
       setShowBoxQty(true);
       setShowIssuedQty(false);
       setShowFreePcs(true);
-      setShowPcsPerBox(true);
+      setShowPcsPerBox(!isFMCD);
       setShowTotalPcs(true);
     } else {
       setShowMrp(false); // Delivery Challan skips MRP by default to focus on physical count
       setShowBoxQty(true);
       setShowIssuedQty(true);
       setShowFreePcs(true);
-      setShowPcsPerBox(true);
+      setShowPcsPerBox(!isFMCD);
       setShowTotalPcs(true);
     }
   };
@@ -118,11 +141,37 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
     window.print();
   };
 
+  const effectiveItems = (order.items && order.items.length > 0) ? order.items : liveItems;
+
   // Calculate totals
-  const totalFreePcs = order.items?.reduce((sum, item) => sum + (item.free_pcs || 0), 0) || 0;
-  const totalPcsSum = order.items?.reduce((sum, item) => {
-    return sum + (item.total_qty_pcs || (item.box_qty * (item.pcs_per_box || 1) + (item.loose_pcs || 0)));
-  }, 0) || order.total_qty_pcs || (order.total_box_qty * 24);
+  const totalFreePcs = effectiveItems?.reduce((sum, item) => sum + (item.free_pcs || 0), 0) || 0;
+  
+  const getItemIssuedPcs = (item: any) => {
+    if (item.issued_qty_pcs != null && Number(item.issued_qty_pcs) > 0) return Number(item.issued_qty_pcs);
+    if (item.dispatched_qty_pcs != null && Number(item.dispatched_qty_pcs) > 0) return Number(item.dispatched_qty_pcs);
+    return Number(item.total_qty_pcs || (item.box_qty * (item.pcs_per_box || 1) + (item.loose_pcs || 0)));
+  };
+
+  const getItemIssuedBoxes = (item: any) => {
+    if (isFMCD) return 0;
+    const pcs = getItemIssuedPcs(item);
+    const ppb = item.pcs_per_box || 1;
+    return Math.floor(pcs / ppb);
+  };
+
+  const itemsTotalPcs = effectiveItems && effectiveItems.length > 0
+    ? effectiveItems.reduce((sum, item) => {
+        return sum + (item.total_qty_pcs || (item.box_qty * (item.pcs_per_box || 1) + (item.loose_pcs || 0)));
+      }, 0)
+    : (order.total_qty_pcs || (order.total_box_qty * (isFMCD ? 1 : 24)));
+
+  const totalIssuedQtyPcs = effectiveItems && effectiveItems.length > 0
+    ? effectiveItems.reduce((sum, item) => sum + getItemIssuedPcs(item), 0)
+    : (order.billing_total_qty || itemsTotalPcs);
+
+  const totalIssuedBoxes = isFMCD 
+    ? 0 
+    : (effectiveItems?.reduce((sum, item) => sum + getItemIssuedBoxes(item), 0) || order.total_box_qty || 0);
 
   // Vehicle information with fallbacks (Keep blank if not yet dispatched)
   const vehicleNo = order.vehicle_number || order.tempo_number || '—';
@@ -143,21 +192,6 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
   const invoiceTotalAmount = (order.invoice_amount && order.invoice_amount > 0)
     ? order.invoice_amount 
     : null;
-
-  const getItemIssuedPcs = (item: any) => {
-    if (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) return item.issued_qty_pcs;
-    if (item.dispatched_qty_pcs != null && item.dispatched_qty_pcs > 0) return item.dispatched_qty_pcs;
-    return item.total_qty_pcs || (item.box_qty * (item.pcs_per_box || 1) + (item.loose_pcs || 0));
-  };
-
-  const getItemIssuedBoxes = (item: any) => {
-    const pcs = getItemIssuedPcs(item);
-    const ppb = item.pcs_per_box || 1;
-    return Math.floor(pcs / ppb);
-  };
-
-  const totalIssuedQtyPcs = order.billing_total_qty || order.items?.reduce((sum, item) => sum + getItemIssuedPcs(item), 0) || totalPcsSum;
-  const totalIssuedBoxes = order.items?.reduce((sum, item) => sum + getItemIssuedBoxes(item), 0) || order.total_box_qty || 0;
 
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -466,12 +500,12 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
                 <input type="checkbox" checked={showBoxQty} onChange={e => setShowBoxQty(e.target.checked)} />
-                Order Qty (Box)
+                {isFMCD ? 'Order Qty (PCS)' : 'Order Qty (Box)'}
               </label>
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', color: '#10b981', fontWeight: 700 }}>
                 <input type="checkbox" checked={showIssuedQty} onChange={e => setShowIssuedQty(e.target.checked)} />
-                Qty Issued (Bill)
+                {isFMCD ? 'Qty Issued (PCS)' : 'Qty Issued (Bill)'}
               </label>
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', color: '#34d399', fontWeight: 700 }}>
@@ -479,10 +513,12 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                 Free PCS
               </label>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={showPcsPerBox} onChange={e => setShowPcsPerBox(e.target.checked)} />
-                Pcs / Box
-              </label>
+              {!isFMCD && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={showPcsPerBox} onChange={e => setShowPcsPerBox(e.target.checked)} />
+                  Pcs / Box
+                </label>
+              )}
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', color: '#38bdf8', fontWeight: 700 }}>
                 <input type="checkbox" checked={showTotalPcs} onChange={e => setShowTotalPcs(e.target.checked)} />
@@ -635,7 +671,10 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                 <div style={{ paddingLeft: 12 }}>
                   <div style={{ fontSize: '0.625rem', color: '#166534', fontWeight: 800, textTransform: 'uppercase' }}>Qty Issued by Bill</div>
                   <div style={{ fontWeight: 900, color: '#000000', fontSize: '0.85rem', marginTop: 1 }}>
-                    {totalIssuedBoxes} Boxes ({totalIssuedQtyPcs.toLocaleString('en-IN')} PCS)
+                    {isFMCD 
+                      ? `${totalIssuedQtyPcs.toLocaleString('en-IN')} PCS`
+                      : `${totalIssuedBoxes} Boxes (${totalIssuedQtyPcs.toLocaleString('en-IN')} PCS)`
+                    }
                   </div>
                 </div>
               </div>
@@ -688,15 +727,15 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                   <th style={{ borderRight: '1px solid #000000', padding: '5px 4px', width: 28 }}>Sr.</th>
                   <th style={{ borderRight: '1px solid #000000', padding: '5px 8px', textAlign: 'left' }}>Product Name</th>
                   {showMrp && <th style={{ borderRight: '1px solid #000000', padding: '5px 4px', width: 75 }}>MRP (₹)</th>}
-                  {showBoxQty && <th style={{ borderRight: '1px solid #000000', padding: '5px 4px', width: 85 }}>Order Qty (Box)</th>}
-                  {showIssuedQty && <th style={{ borderRight: '1px solid #000000', padding: '5px 4px', width: 100, color: '#166534', background: '#f0fdf4' }}>Qty Issued (Bill)</th>}
+                  {showBoxQty && <th style={{ borderRight: '1px solid #000000', padding: '5px 4px', width: 85 }}>{isFMCD ? 'Order Qty (PCS)' : 'Order Qty (Box)'}</th>}
+                  {showIssuedQty && <th style={{ borderRight: '1px solid #000000', padding: '5px 4px', width: 100, color: '#166534', background: '#f0fdf4' }}>{isFMCD ? 'Qty Issued (PCS)' : 'Qty Issued (Bill)'}</th>}
                   {showFreePcs && <th style={{ borderRight: '1px solid #000000', padding: '5px 4px', width: 75, color: '#059669' }}>Free PCS</th>}
-                  {showPcsPerBox && <th style={{ borderRight: '1px solid #000000', padding: '5px 4px', width: 75 }}>Pcs / Box</th>}
+                  {showPcsPerBox && !isFMCD && <th style={{ borderRight: '1px solid #000000', padding: '5px 4px', width: 75 }}>Pcs / Box</th>}
                   {showTotalPcs && <th style={{ padding: '5px 4px', width: 90, fontWeight: 900 }}>Total PCS</th>}
                 </tr>
               </thead>
               <tbody>
-                {order.items?.map((item, idx) => {
+                {effectiveItems?.map((item, idx) => {
                   const itemIssuedPcs = getItemIssuedPcs(item);
                   const itemIssuedBoxes = getItemIssuedBoxes(item);
                   const itemTotalPcs = item.total_qty_pcs || (item.box_qty * (item.pcs_per_box || 1) + (item.loose_pcs || 0));
@@ -711,17 +750,22 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                       {showMrp && <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 700 }}>₹{item.unit_price}</td>}
                       {showBoxQty && (
                         <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 900, fontSize: '0.8rem' }}>
-                          {item.box_qty > 0 && (item.loose_pcs || 0) > 0 
-                            ? `${item.box_qty} Box + ${item.loose_pcs} Pcs`
-                            : item.box_qty > 0 
-                              ? `${item.box_qty} Box`
-                              : `${item.loose_pcs || 0} Pcs`
+                          {isFMCD 
+                            ? `${itemTotalPcs} PCS`
+                            : (item.box_qty > 0 && (item.loose_pcs || 0) > 0 
+                                ? `${item.box_qty} Box + ${item.loose_pcs} Pcs`
+                                : item.box_qty > 0 
+                                  ? `${item.box_qty} Box`
+                                  : `${item.loose_pcs || 0} Pcs`)
                           }
                         </td>
                       )}
                       {showIssuedQty && (
                         <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 900, fontSize: '0.8rem', color: '#15803d', background: '#f0fdf4' }}>
-                          {itemIssuedBoxes} Box{itemIssuedPcs % (item.pcs_per_box || 1) > 0 ? ` + ${itemIssuedPcs % (item.pcs_per_box || 1)} Pcs` : ''}
+                          {isFMCD 
+                            ? `${itemIssuedPcs} PCS`
+                            : `${itemIssuedBoxes} Box${itemIssuedPcs % (item.pcs_per_box || 1) > 0 ? ` + ${itemIssuedPcs % (item.pcs_per_box || 1)} Pcs` : ''}`
+                          }
                         </td>
                       )}
                       {showFreePcs && (
@@ -729,7 +773,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                           {(item.free_pcs || 0) > 0 ? `${item.free_pcs} Free` : '0'}
                         </td>
                       )}
-                      {showPcsPerBox && <td style={{ borderRight: '1px solid #000000', padding: '5px 4px' }}>{item.pcs_per_box || 1}</td>}
+                      {showPcsPerBox && !isFMCD && <td style={{ borderRight: '1px solid #000000', padding: '5px 4px' }}>{item.pcs_per_box || 1}</td>}
                       {showTotalPcs && (
                         <td style={{ padding: '5px 4px', fontWeight: 900, fontSize: '0.825rem' }}>
                           {showIssuedQty ? itemIssuedPcs : itemTotalPcs}
@@ -744,20 +788,25 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
               <tfoot>
                 <tr style={{ background: '#f8fafc', fontWeight: 900, borderTop: '2px solid #000000' }}>
                   <td colSpan={2} style={{ borderRight: '1px solid #000000', padding: '6px 8px', textAlign: 'left', fontSize: '0.8rem' }}>
-                    TOTAL SUMMARY ({order.items?.length || 0} ITEMS)
+                    TOTAL SUMMARY ({effectiveItems?.length || 0} ITEMS)
                   </td>
                   {showMrp && <td style={{ borderRight: '1px solid #000000' }}></td>}
                   {showBoxQty && (
                     <td style={{ borderRight: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontSize: '0.825rem', fontWeight: 900 }}>
-                      {order.total_box_qty > 0 && (order.total_loose_pcs || 0) > 0
-                        ? `${order.total_box_qty} Boxes + ${order.total_loose_pcs} Pcs`
-                        : `${order.total_box_qty || 0} Boxes`
+                      {isFMCD
+                        ? `${itemsTotalPcs} PCS`
+                        : (order.total_box_qty > 0 && (order.total_loose_pcs || 0) > 0
+                            ? `${order.total_box_qty} Boxes + ${order.total_loose_pcs} Pcs`
+                            : `${order.total_box_qty || 0} Boxes`)
                       }
                     </td>
                   )}
                   {showIssuedQty && (
                     <td style={{ borderRight: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontSize: '0.825rem', fontWeight: 900, color: '#15803d', background: '#f0fdf4' }}>
-                      {totalIssuedBoxes} Boxes
+                      {isFMCD 
+                        ? `${totalIssuedQtyPcs} PCS` 
+                        : `${totalIssuedBoxes} Boxes`
+                      }
                     </td>
                   )}
                   {showFreePcs && (
@@ -765,10 +814,10 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                       {totalFreePcs > 0 ? `${totalFreePcs} Free` : '0'}
                     </td>
                   )}
-                  {showPcsPerBox && <td style={{ borderRight: '1px solid #000000' }}></td>}
+                  {showPcsPerBox && !isFMCD && <td style={{ borderRight: '1px solid #000000' }}></td>}
                   {showTotalPcs && (
                     <td style={{ padding: '6px 4px', textAlign: 'center', fontSize: '0.85rem', fontWeight: 900 }}>
-                      {showIssuedQty ? totalIssuedQtyPcs : totalPcsSum} PCS
+                      {showIssuedQty ? totalIssuedQtyPcs : itemsTotalPcs} PCS
                     </td>
                   )}
                 </tr>

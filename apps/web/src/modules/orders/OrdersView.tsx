@@ -870,12 +870,23 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
                     {/* Quantity */}
                     <td style={{ textAlign: 'right', fontWeight: 900, color: '#10b981', fontSize: '0.825rem', whiteSpace: 'nowrap' }}>
-                      {order.total_box_qty > 0 && (order.total_loose_pcs || 0) > 0
-                        ? `${order.total_box_qty} BOX, ${order.total_loose_pcs} PCS`
-                        : order.total_box_qty > 0
-                          ? `${order.total_box_qty} BOX`
-                          : `${order.total_loose_pcs || order.total_qty_pcs || 0} PCS`
-                      }
+                      {(() => {
+                        const isFMCD = Boolean(
+                          (order as any).company_segment?.toUpperCase() === 'FMCD' ||
+                          (order as any).segment?.toUpperCase() === 'FMCD' ||
+                          ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((order.company_name || (order as any).company_handle || '').toUpperCase()) ||
+                          ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (order.order_number || '').toUpperCase().startsWith(k))
+                        );
+                        if (isFMCD) {
+                          const totalPcs = order.items?.reduce((s, it) => s + (it.total_qty_pcs || (it.box_qty * (it.pcs_per_box || 1) + (it.loose_pcs || 0))), 0) || order.total_qty_pcs || order.total_box_qty || order.total_loose_pcs || 0;
+                          return `${totalPcs} PCS`;
+                        }
+                        return order.total_box_qty > 0 && (order.total_loose_pcs || 0) > 0
+                          ? `${order.total_box_qty} BOX, ${order.total_loose_pcs} PCS`
+                          : order.total_box_qty > 0
+                            ? `${order.total_box_qty} BOX`
+                            : `${order.total_loose_pcs || order.total_qty_pcs || 0} PCS`;
+                      })()}
                     </td>
 
                     {/* Section 6: Accounts Approval Badge */}
@@ -1282,17 +1293,34 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
           <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '0.85rem', marginBottom: '0.75rem' }}>
             <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.6rem' }}>ORDER SUMMARY</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              {[
-                { label: 'Total Boxes', value: selectedOrder.total_box_qty + ' Boxes', color: '#f8fafc' },
-                { label: 'Total Qty (Pcs)', value: selectedOrder.total_qty_pcs + ' PCS', color: '#38bdf8' },
-                { label: 'Loose PCS', value: (selectedOrder.total_loose_pcs || 0) + ' PCS', color: '#94a3b8' },
-                { label: 'Products', value: (selectedOrder.items?.length || 0) + ' SKU(s)', color: '#fbbf24' },
-              ].map(({ label, value, color }) => (
-                <div key={label} style={{ background: '#0b1120', padding: '0.5rem', borderRadius: 6 }}>
-                  <div style={{ fontSize: '0.62rem', color: '#64748b', marginBottom: 2 }}>{label}</div>
-                  <div style={{ fontWeight: 800, color, fontSize: '0.825rem' }}>{value}</div>
-                </div>
-              ))}
+              {(() => {
+                const isFMCD = Boolean(
+                  (selectedOrder as any).company_segment?.toUpperCase() === 'FMCD' ||
+                  (selectedOrder as any).segment?.toUpperCase() === 'FMCD' ||
+                  ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((selectedOrder.company_name || (selectedOrder as any).company_handle || '').toUpperCase()) ||
+                  ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (selectedOrder.order_number || '').toUpperCase().startsWith(k))
+                );
+                const totalPcs = selectedOrder.items?.reduce((s, it) => s + (it.total_qty_pcs || (it.box_qty * (it.pcs_per_box || 1) + (it.loose_pcs || 0))), 0) || selectedOrder.total_qty_pcs || selectedOrder.total_box_qty || 0;
+
+                const cards = isFMCD ? [
+                  { label: 'Total Qty (PCS)', value: totalPcs + ' PCS', color: '#38bdf8' },
+                  { label: 'Products', value: (selectedOrder.items?.length || 0) + ' SKU(s)', color: '#fbbf24' },
+                  { label: 'Segment', value: 'FMCD (Unit PCS)', color: '#34d399' },
+                  { label: 'Order Value', value: '₹' + Number(selectedOrder.total_amount || 0).toLocaleString('en-IN'), color: '#f8fafc' }
+                ] : [
+                  { label: 'Total Boxes', value: selectedOrder.total_box_qty + ' Boxes', color: '#f8fafc' },
+                  { label: 'Total Qty (Pcs)', value: (selectedOrder.total_qty_pcs || totalPcs) + ' PCS', color: '#38bdf8' },
+                  { label: 'Loose PCS', value: (selectedOrder.total_loose_pcs || 0) + ' PCS', color: '#94a3b8' },
+                  { label: 'Products', value: (selectedOrder.items?.length || 0) + ' SKU(s)', color: '#fbbf24' },
+                ];
+
+                return cards.map(({ label, value, color }) => (
+                  <div key={label} style={{ background: '#0b1120', padding: '0.5rem', borderRadius: 6 }}>
+                    <div style={{ fontSize: '0.62rem', color: '#64748b', marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontWeight: 800, color, fontSize: '0.825rem' }}>{value}</div>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
 
