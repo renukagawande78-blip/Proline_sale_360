@@ -36,6 +36,17 @@ export class BasePage {
     };
 
     const targetLabels = tabMap[tabName] || [tabName];
+
+    // Close any blocking modal overlay if open before navigating
+    const openModal = this.page.locator('.modal-overlay:not(.sidebar-overlay)').first();
+    if (await openModal.isVisible({ timeout: 300 }).catch(() => false)) {
+      const closeBtn = openModal.locator('button:has-text("Cancel"), button:has-text("Close"), button:has-text("✕")').first();
+      if (await closeBtn.isVisible({ timeout: 400 }).catch(() => false)) {
+        await closeBtn.click().catch(() => {});
+        await this.page.waitForTimeout(300);
+      }
+    }
+
     const isMobileNav = await this.page.locator('.mobile-bottom-nav').isVisible({ timeout: 600 }).catch(() => false);
 
     if (isMobileNav) {
