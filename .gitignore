@@ -13,3 +13,4 @@ apps/web/android/.gradle
 *.apk
 *service-account*.json
 !*service-account.example.json
+.env*

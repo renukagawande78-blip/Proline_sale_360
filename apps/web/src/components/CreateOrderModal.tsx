@@ -1488,6 +1488,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                         </div>
                       ) : (
                         <input 
+                          data-testid="item-box-qty-input"
                           type="number" 
                           min="0"
                           value={item.box_qty || ''}
@@ -1500,6 +1501,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                   )}
                   <td>
                     <input 
+                      data-testid="item-loose-pcs-input"
                       type="number" 
                       min="0"
                       value={item.loose_pcs || ''}
@@ -1516,6 +1518,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                         </div>
                       ) : (
                         <input 
+                          data-testid="item-free-pcs-input"
                           type="number" 
                           min="0"
                           value={item.free_pcs || ''}

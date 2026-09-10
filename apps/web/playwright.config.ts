@@ -48,8 +48,8 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: 'npm run dev',
-    url: BASE_URL,
+    command: 'npx vite --port 3002',
+    url: 'http://localhost:3002',
     reuseExistingServer: true,
     timeout: 30000
   }
