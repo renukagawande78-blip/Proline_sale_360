@@ -454,6 +454,58 @@ export const resolveSegmentForUser = (
   return 'ALL';
 };
 
+export const getOrderSegment = (order: Order): 'FMCG' | 'FMCD' => {
+  if ((order as any).segment) {
+    const s = String((order as any).segment).toUpperCase();
+    if (s.includes('FMCD') && !s.includes('FMCG')) return 'FMCD';
+    if (s.includes('FMCG')) return 'FMCG';
+  }
+  if ((order as any).is_fmcd) return 'FMCD';
+  
+  const comp = (order.company_name || (order as any).company_handle || '').toLowerCase();
+  const ordNo = (order.order_number || '').toUpperCase();
+  
+  if (
+    comp.includes('whirlpool') || 
+    comp.includes('daikin') || 
+    comp.includes('cruise') || 
+    comp.includes('akai') ||
+    comp.includes('hell') ||
+    ordNo.startsWith('WH') ||
+    ordNo.startsWith('DA') ||
+    ordNo.startsWith('CR') ||
+    ordNo.startsWith('AK') ||
+    ordNo.includes('FMCD') ||
+    (order.remarks || '').toLowerCase().includes('fmcd')
+  ) {
+    return 'FMCD';
+  }
+  
+  if (order.items && order.items.length > 0) {
+    const isAnyItemFMCD = order.items.some(it => {
+      const pName = (it.product_name || '').toLowerCase();
+      const pCode = (it.product_code || '').toUpperCase();
+      return (
+        pName.includes('ac') ||
+        pName.includes('air conditioner') ||
+        pName.includes('refrigerator') ||
+        pName.includes('sound bar') ||
+        pName.includes('soundbar') ||
+        pName.includes('tv') ||
+        pName.includes('washing machine') ||
+        pCode.includes('FMCD') ||
+        pCode.startsWith('AK-') ||
+        pCode.startsWith('WP-') ||
+        pCode.startsWith('DK-') ||
+        pCode.startsWith('CR-')
+      );
+    });
+    if (isAnyItemFMCD) return 'FMCD';
+  }
+
+  return 'FMCG';
+};
+
 export const MOCK_ZONES: ZoneMaster[] = OFFICIAL_ZONE_MASTERS;
 
 const DEFAULT_ZONE: ZoneMaster = OFFICIAL_ZONE_MASTERS[0] || {
@@ -1825,6 +1877,8 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         order_date: o.order_date || o.created_at,
         company_id: o.company_id || comp?.id || 'c01',
         company_name: comp?.company_name || 'Proline Foods',
+        company_segment: comp?.segment || (o as any).segment || 'FMCG',
+        segment: comp?.segment || (o as any).segment || 'FMCG',
         agency_id: o.agency_id || ag?.id || embeddedAgencyInfo?.agency_id || '',
         agency_name: ag?.agency_name || embeddedAgencyInfo?.agency_name || (o as any).agency_name || 'Agency Partner',
         agency_code: ag?.agency_code || embeddedAgencyInfo?.agency_code || (o as any).agency_code || 'AG-001',
