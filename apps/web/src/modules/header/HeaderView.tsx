@@ -32,6 +32,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
     markAsRead, 
     sendTestNotification, 
     clearAll,
+    fcmToken,
     roleFilter,
     setRoleFilter,
     categoryFilter,
@@ -39,6 +40,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
   } = useNotifications();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -302,6 +304,52 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* FCM Push Notification Device Token Card (When available on Mobile) */}
+              {fcmToken && (
+                <div style={{
+                  marginBottom: '0.5rem',
+                  padding: '0.45rem 0.65rem',
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(56, 189, 248, 0.08))',
+                  border: '1px solid rgba(52, 211, 153, 0.3)',
+                  borderRadius: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.4rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', overflow: 'hidden' }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981', flexShrink: 0 }} />
+                    <div style={{ fontSize: '0.65rem', color: '#f8fafc', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      FCM Registered: <span style={{ fontFamily: 'monospace', color: '#38bdf8' }}>{fcmToken.slice(0, 14)}...</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (navigator.clipboard) {
+                        navigator.clipboard.writeText(fcmToken);
+                        setCopiedToken(true);
+                        setTimeout(() => setCopiedToken(false), 2000);
+                      }
+                    }}
+                    style={{
+                      background: copiedToken ? '#10b981' : 'rgba(56, 189, 248, 0.2)',
+                      border: '1px solid #38bdf8',
+                      color: copiedToken ? '#ffffff' : '#38bdf8',
+                      padding: '0.2rem 0.45rem',
+                      borderRadius: 4,
+                      fontSize: '0.625rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Copy FCM Registration Token to test with Firebase Console"
+                  >
+                    {copiedToken ? '✓ Copied' : 'Copy Token'}
+                  </button>
+                </div>
+              )}
 
               {/* Role Scope Tabs */}
               <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.5rem', background: '#0f172a', padding: '0.2rem', borderRadius: 8, border: '1px solid #334155' }}>
