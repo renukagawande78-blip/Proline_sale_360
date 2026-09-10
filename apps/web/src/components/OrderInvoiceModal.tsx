@@ -77,13 +77,24 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
       }
     }).catch(err => console.warn('Supabase fetch error in order modal:', err));
 
-    // If order items are missing or empty, fetch from order_items table
+    // If order items are missing or empty, fetch from order_items table with joined products
     if (!order.items || order.items.length === 0) {
       (async () => {
         try {
-          const { data: itemsData } = await supabase.from('order_items').select('*').eq('order_id', order.id);
+          const { data: itemsData } = await supabase
+            .from('order_items')
+            .select('*, products(id, product_name, product_code, mrp_price, unit_price, pcs_per_box)')
+            .eq('order_id', order.id);
           if (itemsData && itemsData.length > 0) {
-            setLiveItems(itemsData);
+            const mapped = itemsData.map((it: any) => ({
+              ...it,
+              product_name: it.products?.product_name || it.product_name || 'Product Item',
+              product_code: it.products?.product_code || it.product_code || 'SKU',
+              pcs_per_box: it.pcs_per_box || it.products?.pcs_per_box || 1,
+              unit_price: Number(it.unit_price || it.products?.unit_price || 0),
+              mrp_price: Number(it.products?.mrp_price || it.mrp_price || it.unit_price || it.products?.unit_price || 0)
+            }));
+            setLiveItems(mapped);
           }
         } catch (err) {
           console.warn('Fetch order items error:', err);
@@ -747,7 +758,11 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                         <div style={{ fontWeight: 800, fontSize: '0.775rem' }}>{item.product_name}</div>
                         {item.remark && <div style={{ fontSize: '0.65rem', color: '#475569' }}>Note: {item.remark}</div>}
                       </td>
-                      {showMrp && <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 700 }}>₹{item.unit_price}</td>}
+                      {showMrp && (
+                        <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 700 }}>
+                          ₹{Number(item.mrp_price != null && Number(item.mrp_price) > 0 ? item.mrp_price : (item.mrp != null && Number(item.mrp) > 0 ? item.mrp : item.unit_price || 0)).toLocaleString('en-IN')}
+                        </td>
+                      )}
                       {showBoxQty && (
                         <td style={{ borderRight: '1px solid #000000', padding: '5px 4px', fontWeight: 900, fontSize: '0.8rem' }}>
                           {isFMCD 
