@@ -374,23 +374,70 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
 
   // 4. Mapping Audit: Detect Mismatches and Unmapped Agencies
   const mappingAuditList = useMemo(() => {
+    const normRegion = (r?: string) => {
+      const s = (r || '').trim().toLowerCase();
+      if (s.includes('rural') || s.includes('south gujarat')) return 'rural';
+      if (s.includes('city') || s.includes('surat')) return 'city';
+      return s;
+    };
+
+    const normZone = (z?: string) => {
+      const clean = (z || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (clean.includes('citya') || clean.includes('cta') || clean.includes('zncta')) return 'city-a';
+      if (clean.includes('cityb') || clean.includes('ctb') || clean.includes('znctb')) return 'city-b';
+      if (clean.includes('cityc') || clean.includes('ctc') || clean.includes('znctc')) return 'city-c';
+      if (clean.includes('cityd') || clean.includes('ctd') || clean.includes('znctd')) return 'city-d';
+      if (clean.includes('citye') || clean.includes('cte') || clean.includes('zncte')) return 'city-e';
+      if (clean.includes('uppersouth') || clean.includes('ups') || clean.includes('znups')) return 'upper-south';
+      if (clean.includes('south') || clean.includes('sou') || clean.includes('znsou')) return 'south';
+      if (clean.includes('east') || clean.includes('eas') || clean.includes('zneas')) return 'east';
+      if (clean.includes('north') || clean.includes('nor') || clean.includes('znnor')) return 'north';
+      if (clean.includes('other') || clean.includes('oth') || clean.includes('znoth')) return 'other';
+      return clean;
+    };
+
+    const normCity = (c?: string) => (c || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
     return localAgencies.map(ag => {
       const agAreaRaw = (ag.area_name || '').trim();
-      const agAreaNorm = normalizeAreaName(agAreaRaw) || agAreaRaw;
-      const agArea = agAreaNorm.toLowerCase();
-      const agCity = (ag.city || '').trim().toLowerCase();
-      const agZone = (ag.zone_name || '').trim().toLowerCase().replace(/zone/g, '').replace(/[^a-z0-9-]/g, '').trim();
-      const agRegionRaw = (ag.zone_region || '').trim().toLowerCase();
-      const agRegion = agRegionRaw.includes('rural') ? 'rural' : (agRegionRaw.includes('city') ? 'city' : agRegionRaw);
+      const agAreaNorm = (normalizeAreaName(agAreaRaw) || agAreaRaw).trim().toLowerCase();
+      const agCityNorm = normCity(ag.city);
+      const agZoneNorm = normZone(ag.zone_name);
+      const agRegion = normRegion(ag.zone_region);
 
       // Check if area exists in Area Master
       const matchedArea = areasList.find(a => {
         const aName = (a.area_name || '').trim().toLowerCase();
         const aNorm = (normalizeAreaName(a.area_name) || a.area_name).trim().toLowerCase();
-        return agArea && (agArea === aName || agArea === aNorm || aName.includes(agArea) || agArea.includes(aName));
+        return agAreaNorm && (
+          agAreaNorm === aName || 
+          agAreaNorm === aNorm || 
+          (agAreaNorm.length >= 3 && (aName.includes(agAreaNorm) || agAreaNorm.includes(aName))) ||
+          (agAreaNorm.length >= 3 && (aNorm.includes(agAreaNorm) || agAreaNorm.includes(aNorm)))
+        );
       });
 
-      if (!agArea || agArea === 'n/a' || !matchedArea) {
+      if (!agAreaNorm || agAreaNorm === 'n/a' || !matchedArea) {
+        // Fallback resolution via canonical zone dictionary
+        const resolved = resolveOfficialZone(ag.area_name || ag.city || ag.address, ag.city);
+        if (resolved && resolved.zoneName && resolved.zoneName !== 'Other Z') {
+          return {
+            agency: ag,
+            status: 'MAPPED_OK',
+            severity: 'OK' as const,
+            reason: `Cleanly mapped via Area Master to ${resolved.matchedArea} (${resolved.zoneCode || resolved.zoneName})`,
+            matchedArea: {
+              id: `resolved_${ag.id}`,
+              area_code: resolved.zoneCode,
+              area_name: resolved.matchedArea,
+              city: ag.city || 'Surat',
+              zone_code: resolved.zoneCode,
+              region: resolved.region,
+              description: 'Auto-resolved from official zone master'
+            } as AreaMaster
+          };
+        }
+
         return {
           agency: ag,
           status: 'UNMAPPED_AREA',
@@ -400,15 +447,18 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         };
       }
 
-      // Check city mismatch (normalize city variations like Surat, Surat Rural, SURAT)
-      const matchedCity = (matchedArea.city || '').trim().toLowerCase();
-      const isCityMatch = !agCity || agCity === matchedCity || 
-        (agCity.includes('surat') && matchedCity.includes('surat')) ||
-        (agCity.includes('navsari') && matchedCity.includes('navsari')) ||
-        (agCity.includes('vapi') && matchedCity.includes('vapi')) ||
-        (agCity.includes('valsad') && matchedCity.includes('valsad')) ||
-        (agCity.includes('bharuch') && matchedCity.includes('bharuch')) ||
-        (agCity.includes('ankleshwar') && matchedCity.includes('ankleshwar'));
+      // Check city mismatch
+      const matchedCityNorm = normCity(matchedArea.city);
+      const isCityMatch = !agCityNorm || !matchedCityNorm || 
+        agCityNorm === matchedCityNorm ||
+        agCityNorm.includes(matchedCityNorm) || 
+        matchedCityNorm.includes(agCityNorm) ||
+        (agCityNorm.includes('surat') && matchedCityNorm.includes('surat')) ||
+        (agCityNorm.includes('navsari') && matchedCityNorm.includes('navsari')) ||
+        (agCityNorm.includes('vapi') && matchedCityNorm.includes('vapi')) ||
+        (agCityNorm.includes('valsad') && matchedCityNorm.includes('valsad')) ||
+        (agCityNorm.includes('bharuch') && matchedCityNorm.includes('bharuch')) ||
+        (agCityNorm.includes('ankleshwar') && matchedCityNorm.includes('ankleshwar'));
 
       if (!isCityMatch) {
         return {
@@ -420,16 +470,14 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         };
       }
 
-      // Check zone mismatch (normalize Zone format like City-A, City-A Zone, ZN-CTA)
-      const matchedZone = (matchedArea.zone_code || '').trim().toLowerCase().replace(/zone/g, '').replace(/[^a-z0-9-]/g, '').trim();
-      const isZoneMatch = !agZone || agZone === matchedZone || 
-        (agZone.includes('city-a') && matchedZone.includes('city-a')) ||
-        (agZone.includes('city-b') && matchedZone.includes('city-b')) ||
-        (agZone.includes('city-c') && matchedZone.includes('city-c')) ||
-        (agZone.includes('city-d') && matchedZone.includes('city-d')) ||
-        (agZone.includes('rural-a') && matchedZone.includes('rural-a')) ||
-        (agZone.includes('rural-b') && matchedZone.includes('rural-b')) ||
-        (agZone.includes('outstation') && matchedZone.includes('outstation'));
+      // Check zone mismatch
+      const matchedZoneNorm = normZone(matchedArea.zone_code || (matchedArea as any).zone_name);
+      const isZoneMatch = !agZoneNorm || !matchedZoneNorm || 
+        agZoneNorm === matchedZoneNorm || 
+        agZoneNorm === 'other' || 
+        matchedZoneNorm === 'other' ||
+        agZoneNorm.includes(matchedZoneNorm) ||
+        matchedZoneNorm.includes(agZoneNorm);
 
       if (!isZoneMatch) {
         return {
@@ -441,10 +489,8 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         };
       }
 
-      // Check region mismatch (normalize 'Surat City' vs 'City', 'Surat Rural' vs 'Rural')
-      const matchedRegionRaw = (matchedArea.region || '').trim().toLowerCase();
-      const matchedRegion = matchedRegionRaw.includes('rural') ? 'surat rural' : (matchedRegionRaw.includes('city') ? 'surat city' : matchedRegionRaw);
-
+      // Check region mismatch
+      const matchedRegion = normRegion(matchedArea.region);
       if (agRegion && matchedRegion && agRegion !== matchedRegion) {
         return {
           agency: ag,
