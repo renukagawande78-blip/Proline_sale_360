@@ -73,30 +73,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     : (userAssignedSegment === 'FMCD' ? fmcdOrders : fmcgOrders);
 
   const totalOrdersCount = displayedOrders.length;
-  const totalVolumePcs = displayedOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
+  
+  const calcMetrics = (orderList: Order[]) => {
+    const totalPcs = orderList.reduce((sum, o) => {
+      if (o.total_qty_pcs != null && o.total_qty_pcs > 0) return sum + o.total_qty_pcs;
+      const itemsPcs = (o.items || []).reduce((iSum, it) => iSum + (it.total_qty_pcs || ((it.box_qty || 0) * (it.pcs_per_box || 1) + (it.loose_pcs || 0))), 0);
+      return sum + (itemsPcs || o.total_qty_pcs || 0);
+    }, 0);
+
+    const totalBoxes = orderList.reduce((sum, o) => {
+      if (o.total_box_qty != null && o.total_box_qty > 0) return sum + o.total_box_qty;
+      const itemsBoxes = (o.items || []).reduce((iSum, it) => iSum + (it.box_qty || 0), 0);
+      return sum + itemsBoxes;
+    }, 0);
+
+    return { totalPcs, totalBoxes };
+  };
+
+  const formatVolume = (boxes: number, pcs: number, segment: 'FMCG' | 'FMCD' | 'ALL') => {
+    if (segment === 'FMCD') {
+      return `${pcs.toLocaleString()} PCS`;
+    }
+    if (segment === 'FMCG') {
+      return `${boxes.toLocaleString()} Boxes | ${pcs.toLocaleString()} PCS`;
+    }
+    return `${boxes.toLocaleString()} Boxes | ${pcs.toLocaleString()} PCS`;
+  };
+
+  const { totalPcs: totalVolumePcs, totalBoxes: totalVolumeBoxes } = calcMetrics(displayedOrders);
 
   // 1. Pending for Approval (New / Submitted orders awaiting sign-off)
   const pendingApprovalOrders = displayedOrders.filter(o => 
     o.status === 'SUBMITTED' || o.status === 'DRAFT' || o.status === 'WAIT_FOR_STOCK' || (o.status as string) === 'PENDING'
   );
-  const pendingApprovalVolume = pendingApprovalOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
+  const { totalPcs: pendingApprovalPcs, totalBoxes: pendingApprovalBoxes } = calcMetrics(pendingApprovalOrders);
 
   // 2. Pending for Billing (Approved orders waiting for B2B Invoice creation)
   const pendingBillingOrders = displayedOrders.filter(o => 
     o.status === 'APPROVED' || o.status === 'ACCOUNTS_APPROVED' || o.status === 'INVENTORY_AUDITED' || (o.status as string) === 'SALES_ADMIN_APPROVED'
   );
-  const pendingBillingVolume = pendingBillingOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
+  const { totalPcs: pendingBillingPcs, totalBoxes: pendingBillingBoxes } = calcMetrics(pendingBillingOrders);
 
   // 3. Pending for Dispatch (Billed orders waiting for Vehicle loading & Dispatch)
   const pendingDispatchOrders = displayedOrders.filter(o => 
     o.status === 'BILLED' || o.status === 'DISPATCH_PENDING' || o.status === 'READY_FOR_PICKUP' || o.status === 'READY_FOR_SELF_PICKUP' || o.status === 'PARTIALLY_DISPATCHED'
   );
-  const pendingDispatchVolume = pendingDispatchOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
+  const { totalPcs: pendingDispatchPcs, totalBoxes: pendingDispatchBoxes } = calcMetrics(pendingDispatchOrders);
 
   // 4. Secondary Pipeline Statuses
   const heldOrders = displayedOrders.filter(o => o.status === 'HELD');
   const completedOrders = displayedOrders.filter(o => o.status === 'COMPLETED' || o.status === 'DELIVERED');
-  const completedVolumePcs = completedOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
+  const { totalPcs: completedVolumePcs, totalBoxes: completedVolumeBoxes } = calcMetrics(completedOrders);
 
   return (
     <div className="page-body">
@@ -351,7 +378,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="kpi-subtext" style={{ color: '#94a3b8' }}>
-            <ArrowUpRight size={14} style={{ color: '#38bdf8' }} /> {totalVolumePcs.toLocaleString()} Total PCS in {effectiveSegment === 'ALL' ? 'pipeline' : effectiveSegment}
+            <ArrowUpRight size={14} style={{ color: '#38bdf8' }} /> {formatVolume(totalVolumeBoxes, totalVolumePcs, effectiveSegment)} in {effectiveSegment === 'ALL' ? 'pipeline' : effectiveSegment}
           </div>
         </div>
 
@@ -367,7 +394,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="kpi-subtext" style={{ color: '#94a3b8' }}>
-            {pendingApprovalVolume.toLocaleString()} PCS awaiting review
+            {formatVolume(pendingApprovalBoxes, pendingApprovalPcs, effectiveSegment)} awaiting review
           </div>
         </div>
 
@@ -383,7 +410,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="kpi-subtext" style={{ color: '#94a3b8' }}>
-            {pendingBillingVolume.toLocaleString()} PCS approved & awaiting invoice
+            {formatVolume(pendingBillingBoxes, pendingBillingPcs, effectiveSegment)} approved & awaiting invoice
           </div>
         </div>
 
@@ -399,7 +426,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="kpi-subtext" style={{ color: '#94a3b8' }}>
-            {pendingDispatchVolume.toLocaleString()} PCS billed & ready for vehicle
+            {formatVolume(pendingDispatchBoxes, pendingDispatchPcs, effectiveSegment)} billed & ready for vehicle
           </div>
         </div>
       </div>
@@ -463,11 +490,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ) : (
                 displayedOrders.slice(0, 10).map(order => {
                   const seg = getOrderSegment(order);
-                  const billingQty = (order.billing_total_qty != null && order.billing_total_qty > 0)
+                  const billingPcs = (order.billing_total_qty != null && order.billing_total_qty > 0)
                     ? order.billing_total_qty
                     : (order.items || []).reduce((sum, it) => sum + (it.issued_qty_pcs || it.total_qty_pcs || 0), 0)
                     || order.total_qty_pcs
                     || 0;
+                  const billingBoxes = order.total_box_qty || (order.items || []).reduce((sum, it) => sum + (it.box_qty || 0), 0) || 0;
+                  const billingQtyText = seg === 'FMCD'
+                    ? `${billingPcs.toLocaleString()} PCS`
+                    : (billingBoxes > 0 ? `${billingBoxes.toLocaleString()} Boxes | ${billingPcs.toLocaleString()} PCS` : `${billingPcs.toLocaleString()} PCS`);
 
                   return (
                     <tr key={order.id}>
@@ -499,7 +530,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <span style={{ color: '#94a3b8', fontWeight: 700 }}>⏳ BILLING PENDING</span>
                         )}
                       </td>
-                      <td><strong style={{ color: '#38bdf8' }}>{order.invoice_number ? `${billingQty.toLocaleString()} PCS` : '—'}</strong></td>
+                      <td><strong style={{ color: '#38bdf8' }}>{order.invoice_number ? billingQtyText : '—'}</strong></td>
                       <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
                       <td>
                         <button 
