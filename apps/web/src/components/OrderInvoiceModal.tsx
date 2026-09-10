@@ -280,19 +280,50 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
       {/* Embedded Print CSS */}
       <style>{`
         @media print {
-          body {
+          html, body {
             background: #ffffff !important;
             color: #000000 !important;
             margin: 0 !important;
             padding: 0 !important;
+            height: auto !important;
+            overflow: visible !important;
           }
           body * {
             visibility: hidden;
           }
-          #invoice-sheet, #invoice-sheet * {
-            visibility: visible;
+          .modal-overlay {
+            position: static !important;
+            display: block !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            border: none !important;
+            z-index: auto !important;
+          }
+          .modal-card, .print-container {
+            position: static !important;
+            display: block !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
           }
           #invoice-sheet {
+            display: block !important;
+            visibility: visible !important;
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
@@ -302,18 +333,30 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
             padding: 0 !important;
             box-shadow: none !important;
             border: none !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            overflow: visible !important;
+            max-height: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          .no-print, .modal-overlay, .modal-card {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
+          #invoice-sheet * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .no-print, .no-print * {
             display: none !important;
+            visibility: hidden !important;
+          }
+          table, tr, td, th {
+            page-break-inside: avoid;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           @page {
             size: A4 portrait;
-            margin: 8mm 8mm 8mm 8mm;
+            margin: 6mm 6mm 6mm 6mm;
           }
         }
       `}</style>
