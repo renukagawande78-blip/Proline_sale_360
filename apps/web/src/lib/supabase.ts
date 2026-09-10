@@ -1782,7 +1782,30 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
 
     const formattedOrders: Order[] = rawOrders.map((o: any) => {
       const comp = compMap.get(o.company_id);
-      const ag = agencyMap.get(o.agency_id);
+      
+      // Parse embedded agency metadata from remarks if present
+      let embeddedAgencyInfo: any = null;
+      if (o.remarks && typeof o.remarks === 'string') {
+        const agMatch = o.remarks.match(/<!--AGENCY_INFO:(.*?)-->/);
+        if (agMatch && agMatch[1]) {
+          try {
+            embeddedAgencyInfo = JSON.parse(agMatch[1]);
+          } catch (e) {}
+        }
+      }
+
+      let ag = agencyMap.get(o.agency_id);
+      if (!ag && embeddedAgencyInfo?.agency_id) {
+        ag = agencyMap.get(embeddedAgencyInfo.agency_id);
+      }
+      if (!ag && (embeddedAgencyInfo?.agency_name || (o as any).agency_name)) {
+        const targetName = (embeddedAgencyInfo?.agency_name || (o as any).agency_name || '').trim().toLowerCase();
+        ag = (agenciesData || []).find((a: any) => 
+          (a.agency_name || '').trim().toLowerCase() === targetName ||
+          (embeddedAgencyInfo?.agency_code && (a.agency_code || '').trim().toLowerCase() === embeddedAgencyInfo.agency_code.trim().toLowerCase())
+        );
+      }
+
       const usr = userMap.get(o.salesperson_id);
       const latestDispatchDetails = [...(o.order_history || [])]
         .reverse()
@@ -1800,16 +1823,16 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         id: o.id,
         order_number: o.order_number,
         order_date: o.order_date || o.created_at,
-        company_id: o.company_id || 'c01',
+        company_id: o.company_id || comp?.id || 'c01',
         company_name: comp?.company_name || 'Proline Foods',
-        agency_id: o.agency_id || ag?.id || (agenciesData && agenciesData[0]?.id) || 'ag_001',
-        agency_name: ag?.agency_name || (o as any).agency_name || (agenciesData && agenciesData[0]?.agency_name) || 'Agency Partner',
-        agency_code: ag?.agency_code || (o as any).agency_code || (agenciesData && agenciesData[0]?.agency_code) || 'AG-001',
-        area_id: o.area_id || ag?.area_id || (agenciesData && agenciesData[0]?.area_id) || 'ar_01',
-        area_name: ag?.area_name || ag?.city || (agenciesData && agenciesData[0]?.area_name) || 'Surat Area',
-        zone_name: ag?.zone_name || (o as any).zone_name || (agenciesData && agenciesData[0]?.zone_name) || undefined,
-        zone_region: ag?.zone_region || (o as any).zone_region || (agenciesData && agenciesData[0]?.zone_region) || undefined,
-        salesperson_id: o.salesperson_id || 'u12',
+        agency_id: o.agency_id || ag?.id || embeddedAgencyInfo?.agency_id || '',
+        agency_name: ag?.agency_name || embeddedAgencyInfo?.agency_name || (o as any).agency_name || 'Agency Partner',
+        agency_code: ag?.agency_code || embeddedAgencyInfo?.agency_code || (o as any).agency_code || 'AG-001',
+        area_id: o.area_id || ag?.area_id || embeddedAgencyInfo?.area_id || '',
+        area_name: ag?.area_name || embeddedAgencyInfo?.area_name || ag?.city || embeddedAgencyInfo?.city || 'Surat Area',
+        zone_name: ag?.zone_name || (o as any).zone_name || undefined,
+        zone_region: ag?.zone_region || (o as any).zone_region || undefined,
+        salesperson_id: o.salesperson_id || usr?.id || 'u12',
         salesperson_name: usr?.full_name || 'Sales Representative',
         asm_id: o.asm_id || undefined,
         status: o.status || 'DRAFT',
@@ -1959,7 +1982,23 @@ export const saveOrderToSupabase = async (order: Order): Promise<{ success: bool
     };
 
     if (isValidUuid(order.company_id)) orderPayload.company_id = order.company_id;
-    if (isValidUuid(order.agency_id)) orderPayload.agency_id = order.agency_id;
+
+    // Resolve agency_id UUID if missing or formatted as legacy string
+    let targetAgencyId = order.agency_id;
+    if (!isValidUuid(targetAgencyId) && (order.agency_name || order.agency_code)) {
+      try {
+        const { data: matchedAgencies } = await supabase
+          .from('agencies')
+          .select('id, agency_name, agency_code')
+          .or(`agency_name.ilike.%${order.agency_name || ''}%,agency_code.eq.${order.agency_code || 'NONE'}`);
+        if (matchedAgencies && matchedAgencies.length > 0) {
+          targetAgencyId = matchedAgencies[0].id;
+        }
+      } catch (err) {
+        console.warn('Error resolving agency UUID in saveOrder:', err);
+      }
+    }
+    if (isValidUuid(targetAgencyId)) orderPayload.agency_id = targetAgencyId;
     if (isValidUuid(order.area_id)) orderPayload.area_id = order.area_id;
     if (isValidUuid(order.salesperson_id)) orderPayload.salesperson_id = order.salesperson_id;
     if (isValidUuid(order.asm_id)) orderPayload.asm_id = order.asm_id;

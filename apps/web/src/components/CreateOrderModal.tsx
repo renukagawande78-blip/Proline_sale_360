@@ -33,7 +33,7 @@ export const SearchableAgencySelect: React.FC<SearchableAgencySelectProps> = ({ 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const activeAgencies = ((agencies && agencies.length > 0) ? agencies : MOCK_AGENCIES).filter(a => a.active !== false);
-  const selectedAgency = activeAgencies.find(a => a.id === selectedAgencyId) || activeAgencies[0] || null;
+  const selectedAgency = activeAgencies.find(a => a.id === selectedAgencyId) || (selectedAgencyId ? activeAgencies.find(a => a.agency_name === selectedAgencyId) : null) || activeAgencies[0] || null;
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -793,16 +793,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         setSelectedSegments([bSeg]);
       }
     }
-  }, [isOpen]);
 
-  // 2. Keep agency selection valid when selectedSegments / agencies pool changes
-  useEffect(() => {
-    if (!isOpen || orderToEdit) return;
-    const isCurrentAgencyValid = allowedAgenciesForSegment.some(a => a.id === agencyId);
-    if (!isCurrentAgencyValid && allowedAgenciesForSegment.length > 0) {
-      setAgencyId(allowedAgenciesForSegment[0].id);
+    // Initialize agency if not set
+    if (!agencyId && activeAgenciesPool.length > 0) {
+      setAgencyId(activeAgenciesPool[0].id);
     }
-  }, [allowedAgenciesForSegment, isOpen]);
+  }, [isOpen]);
 
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
   const [remarks, setRemarks] = useState('');
@@ -1224,6 +1220,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       remarks: 'Order created'
     };
 
+    const agencyMeta = `<!--AGENCY_INFO:${JSON.stringify({
+      agency_id: selectedAgency?.id || agencyId,
+      agency_name: selectedAgency?.agency_name || orderToEdit?.agency_name || '',
+      agency_code: selectedAgency?.agency_code || orderToEdit?.agency_code || '',
+      area_name: selectedAgency?.area_name || selectedAgency?.city || orderToEdit?.area_name || '',
+      city: selectedAgency?.city || ''
+    })}-->`;
+    const cleanRemarks = (remarks || '').replace(/<!--AGENCY_INFO:.*?-->/g, '').trim();
+    const finalRemarks = `${cleanRemarks} ${agencyMeta}`.trim();
+
     const newOrder: Order = {
       ...(orderToEdit || {}),
       id: finalOrderId,
@@ -1231,8 +1237,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       order_date: orderToEdit ? orderToEdit.order_date : new Date().toISOString().replace('T', ' ').substring(0, 16),
       company_id: resolvedCompany?.id || selectedCompanyIds[0] || orderToEdit?.company_id || 'ee1d810b-aa74-4dd8-bf1a-de5f31212ebd',
       company_name: resolvedCompany?.company_name || orderToEdit?.company_name,
-      agency_id: agencyId,
+      agency_id: selectedAgency?.id || agencyId,
       agency_name: selectedAgency?.agency_name || orderToEdit?.agency_name,
+      agency_code: selectedAgency?.agency_code || orderToEdit?.agency_code,
       area_id: selectedAgency?.area_id || orderToEdit?.area_id || '',
       area_name: selectedAgency?.area_name || orderToEdit?.area_name || 'Delhi NCR Territory',
       salesperson_id: finalSalespersonId,
@@ -1243,7 +1250,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       total_loose_pcs: totalLoosePcs,
       total_qty_pcs: totalQtyPcs,
       total_amount: totalAmount,
-      remarks: remarks,
+      remarks: finalRemarks,
       delivery_type: deliveryType,
       items: itemsWithFormattedIds,
       need_accounts_approval: orderToEdit?.need_accounts_approval ?? false,
@@ -1385,7 +1392,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <SearchableAgencySelect 
               selectedAgencyId={agencyId}
               onSelectAgency={setAgencyId}
-              agencies={allowedAgenciesForSegment}
+              agencies={activeAgenciesPool}
               selectedSegments={selectedSegments}
             />
           </div>

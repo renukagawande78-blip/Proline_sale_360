@@ -103,7 +103,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
     }
   }, [order?.id, order?.agency_id, order?.agency_name, order?.invoice_number, order?.status, isFMCD, agencies]);
 
-  const agency = liveAgency || (agencies?.find(a => a.id === order.agency_id)) || MOCK_AGENCIES.find(a => a.id === order.agency_id) || {};
+  const agency = liveAgency || (agencies?.find(a => (order?.agency_id && a.id === order.agency_id) || (order?.agency_name && a.agency_name === order.agency_name))) || MOCK_AGENCIES.find(a => (order?.agency_id && a.id === order.agency_id) || (order?.agency_name && a.agency_name === order.agency_name)) || {};
 
   // Clean Agency Address check: omit if null/empty/whitespace
   const rawAddress = agency?.address || agency?.agency_address || '';
