@@ -11,10 +11,11 @@ import {
   Truck,
   BarChart3,
   Layers,
-  Sparkles
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { getOrderAccessPermission, getOrderSegment, resolveSegmentForUser } from '../../lib/supabase';
+import { getOrderAccessPermission, getOrderSegment, resolveSegmentForUser, checkIsSuperAdmin } from '../../lib/supabase';
 import { Order } from '../../types';
 import { HoldReasonDirectoryModal } from '../../components/HoldReasonDirectoryModal';
 
@@ -36,12 +37,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const { currentUser } = useAuth();
   const [isHoldDirectoryOpen, setIsHoldDirectoryOpen] = useState(false);
   
+  const role = currentUser?.role_name || 'SALES_PERSON';
+  const isSuperAdmin = checkIsSuperAdmin(currentUser);
+
   // Initialize segment based on user profile or default to FMCG
   const userAssignedSegment = resolveSegmentForUser(currentUser);
   const initialSegment = userAssignedSegment === 'FMCD' ? 'FMCD' : 'FMCG';
   const [activeSegment, setActiveSegment] = useState<'FMCG' | 'FMCD' | 'ALL'>(initialSegment);
 
-  const role = currentUser?.role_name || 'SALES_PERSON';
   const roleDashboard = role === 'SUPER_ADMIN' ? {
     title: 'Super Admin Control Dashboard', focus: 'Approvals, holds, exceptions, company-wide order flow'
   } : role === 'BILLING' || role === 'ACCOUNTS' ? {
@@ -62,12 +65,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const fmcgOrders = scopeOrders.filter(o => getOrderSegment(o) === 'FMCG');
   const fmcdOrders = scopeOrders.filter(o => getOrderSegment(o) === 'FMCD');
 
-  // Currently displayed orders based on active tab
-  const displayedOrders = activeSegment === 'ALL'
-    ? scopeOrders
-    : activeSegment === 'FMCD'
-      ? fmcdOrders
-      : fmcgOrders;
+  // Currently displayed orders:
+  // Non-super admins strictly see only their single assigned segment tab/data
+  const effectiveSegment = isSuperAdmin ? activeSegment : (userAssignedSegment === 'FMCD' ? 'FMCD' : 'FMCG');
+  const displayedOrders = isSuperAdmin
+    ? (activeSegment === 'ALL' ? scopeOrders : activeSegment === 'FMCD' ? fmcdOrders : fmcgOrders)
+    : (userAssignedSegment === 'FMCD' ? fmcdOrders : fmcgOrders);
 
   const totalOrdersCount = displayedOrders.length;
   const totalVolumePcs = displayedOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
@@ -133,7 +136,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2-Segment Tab Control: Tab 1 is FMCG, Tab 2 is FMCD (plus ALL view) */}
+      {/* Segment Tab Control: Super Admin sees FMCG & FMCD tabs; other users see their single assigned segment */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -147,121 +150,187 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         padding: '0.45rem 0.65rem',
         boxShadow: '0 4px 20px rgba(0,0,0,0.25)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-          {/* Tab 1: FMCG */}
-          <button
-            type="button"
-            data-testid="tab-segment-fmcg"
-            onClick={() => setActiveSegment('FMCG')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.55rem',
-              padding: '0.55rem 1.15rem',
-              borderRadius: 10,
-              fontSize: '0.85rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              border: activeSegment === 'FMCG' ? '1px solid #10b981' : '1px solid transparent',
-              background: activeSegment === 'FMCG' ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.15))' : 'transparent',
-              color: activeSegment === 'FMCG' ? '#34d399' : '#94a3b8',
-              boxShadow: activeSegment === 'FMCG' ? '0 0 16px rgba(16, 185, 129, 0.3)' : 'none',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <span>🍪 FMCG (Food & Consumer Goods)</span>
-            <span style={{
-              fontSize: '0.725rem',
-              fontWeight: 800,
-              padding: '0.15rem 0.55rem',
-              borderRadius: 12,
-              background: activeSegment === 'FMCG' ? '#10b981' : 'rgba(148, 163, 184, 0.15)',
-              color: activeSegment === 'FMCG' ? '#064e3b' : '#94a3b8'
-            }}>
-              {fmcgOrders.length}
-            </span>
-          </button>
+        {isSuperAdmin ? (
+          /* Super Admin: Both FMCG & FMCD Tabs + All View */
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+            {/* Tab 1: FMCG */}
+            <button
+              type="button"
+              data-testid="tab-segment-fmcg"
+              onClick={() => setActiveSegment('FMCG')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.55rem',
+                padding: '0.55rem 1.15rem',
+                borderRadius: 10,
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                border: activeSegment === 'FMCG' ? '1px solid #10b981' : '1px solid transparent',
+                background: activeSegment === 'FMCG' ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.15))' : 'transparent',
+                color: activeSegment === 'FMCG' ? '#34d399' : '#94a3b8',
+                boxShadow: activeSegment === 'FMCG' ? '0 0 16px rgba(16, 185, 129, 0.3)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <span>🍪 FMCG (Food & Consumer Goods)</span>
+              <span style={{
+                fontSize: '0.725rem',
+                fontWeight: 800,
+                padding: '0.15rem 0.55rem',
+                borderRadius: 12,
+                background: activeSegment === 'FMCG' ? '#10b981' : 'rgba(148, 163, 184, 0.15)',
+                color: activeSegment === 'FMCG' ? '#064e3b' : '#94a3b8'
+              }}>
+                {fmcgOrders.length}
+              </span>
+            </button>
 
-          {/* Tab 2: FMCD */}
-          <button
-            type="button"
-            data-testid="tab-segment-fmcd"
-            onClick={() => setActiveSegment('FMCD')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.55rem',
-              padding: '0.55rem 1.15rem',
-              borderRadius: 10,
-              fontSize: '0.85rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              border: activeSegment === 'FMCD' ? '1px solid #f59e0b' : '1px solid transparent',
-              background: activeSegment === 'FMCD' ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15))' : 'transparent',
-              color: activeSegment === 'FMCD' ? '#fbbf24' : '#94a3b8',
-              boxShadow: activeSegment === 'FMCD' ? '0 0 16px rgba(245, 158, 11, 0.3)' : 'none',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <span>⚡ FMCD (Appliances & Durables)</span>
-            <span style={{
-              fontSize: '0.725rem',
-              fontWeight: 800,
-              padding: '0.15rem 0.55rem',
-              borderRadius: 12,
-              background: activeSegment === 'FMCD' ? '#f59e0b' : 'rgba(148, 163, 184, 0.15)',
-              color: activeSegment === 'FMCD' ? '#78350f' : '#94a3b8'
-            }}>
-              {fmcdOrders.length}
-            </span>
-          </button>
+            {/* Tab 2: FMCD */}
+            <button
+              type="button"
+              data-testid="tab-segment-fmcd"
+              onClick={() => setActiveSegment('FMCD')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.55rem',
+                padding: '0.55rem 1.15rem',
+                borderRadius: 10,
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                border: activeSegment === 'FMCD' ? '1px solid #f59e0b' : '1px solid transparent',
+                background: activeSegment === 'FMCD' ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15))' : 'transparent',
+                color: activeSegment === 'FMCD' ? '#fbbf24' : '#94a3b8',
+                boxShadow: activeSegment === 'FMCD' ? '0 0 16px rgba(245, 158, 11, 0.3)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <span>⚡ FMCD (Appliances & Durables)</span>
+              <span style={{
+                fontSize: '0.725rem',
+                fontWeight: 800,
+                padding: '0.15rem 0.55rem',
+                borderRadius: 12,
+                background: activeSegment === 'FMCD' ? '#f59e0b' : 'rgba(148, 163, 184, 0.15)',
+                color: activeSegment === 'FMCD' ? '#78350f' : '#94a3b8'
+              }}>
+                {fmcdOrders.length}
+              </span>
+            </button>
 
-          {/* Tab 3: ALL DATA */}
-          <button
-            type="button"
-            data-testid="tab-segment-all"
-            onClick={() => setActiveSegment('ALL')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.55rem',
-              padding: '0.55rem 1rem',
-              borderRadius: 10,
-              fontSize: '0.85rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              border: activeSegment === 'ALL' ? '1px solid #38bdf8' : '1px solid transparent',
-              background: activeSegment === 'ALL' ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(37, 99, 235, 0.15))' : 'transparent',
-              color: activeSegment === 'ALL' ? '#38bdf8' : '#94a3b8',
-              boxShadow: activeSegment === 'ALL' ? '0 0 16px rgba(56, 189, 248, 0.3)' : 'none',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <span>🌐 All Segments</span>
-            <span style={{
-              fontSize: '0.725rem',
-              fontWeight: 800,
-              padding: '0.15rem 0.55rem',
-              borderRadius: 12,
-              background: activeSegment === 'ALL' ? '#38bdf8' : 'rgba(148, 163, 184, 0.15)',
-              color: activeSegment === 'ALL' ? '#0c4a6e' : '#94a3b8'
-            }}>
-              {scopeOrders.length}
-            </span>
-          </button>
-        </div>
+            {/* Tab 3: ALL DATA */}
+            <button
+              type="button"
+              data-testid="tab-segment-all"
+              onClick={() => setActiveSegment('ALL')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.55rem',
+                padding: '0.55rem 1rem',
+                borderRadius: 10,
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                border: activeSegment === 'ALL' ? '1px solid #38bdf8' : '1px solid transparent',
+                background: activeSegment === 'ALL' ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(37, 99, 235, 0.15))' : 'transparent',
+                color: activeSegment === 'ALL' ? '#38bdf8' : '#94a3b8',
+                boxShadow: activeSegment === 'ALL' ? '0 0 16px rgba(56, 189, 248, 0.3)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <span>🌐 All Segments</span>
+              <span style={{
+                fontSize: '0.725rem',
+                fontWeight: 800,
+                padding: '0.15rem 0.55rem',
+                borderRadius: 12,
+                background: activeSegment === 'ALL' ? '#38bdf8' : 'rgba(148, 163, 184, 0.15)',
+                color: activeSegment === 'ALL' ? '#0c4a6e' : '#94a3b8'
+              }}>
+                {scopeOrders.length}
+              </span>
+            </button>
+          </div>
+        ) : (
+          /* Non-Super Admin: Shows ONLY their single assigned segment tab */
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {userAssignedSegment === 'FMCD' ? (
+              <div 
+                data-testid="tab-segment-fmcd-single"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  padding: '0.55rem 1.15rem',
+                  borderRadius: 10,
+                  fontSize: '0.85rem',
+                  fontWeight: 800,
+                  border: '1px solid #f59e0b',
+                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15))',
+                  color: '#fbbf24',
+                  boxShadow: '0 0 16px rgba(245, 158, 11, 0.3)'
+                }}
+              >
+                <span>⚡ FMCD (Appliances & Durables)</span>
+                <span style={{
+                  fontSize: '0.725rem',
+                  fontWeight: 800,
+                  padding: '0.15rem 0.55rem',
+                  borderRadius: 12,
+                  background: '#f59e0b',
+                  color: '#78350f'
+                }}>
+                  {fmcdOrders.length} Orders
+                </span>
+              </div>
+            ) : (
+              <div 
+                data-testid="tab-segment-fmcg-single"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  padding: '0.55rem 1.15rem',
+                  borderRadius: 10,
+                  fontSize: '0.85rem',
+                  fontWeight: 800,
+                  border: '1px solid #10b981',
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.15))',
+                  color: '#34d399',
+                  boxShadow: '0 0 16px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                <span>🍪 FMCG (Food & Consumer Goods)</span>
+                <span style={{
+                  fontSize: '0.725rem',
+                  fontWeight: 800,
+                  padding: '0.15rem 0.55rem',
+                  borderRadius: 12,
+                  background: '#10b981',
+                  color: '#064e3b'
+                }}>
+                  {fmcgOrders.length} Orders
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-          <span>Active Pipeline:</span>
+          <span>Active Scope:</span>
           <span style={{ 
             fontWeight: 800,
             padding: '0.2rem 0.6rem',
             borderRadius: 6,
-            background: activeSegment === 'FMCD' ? 'rgba(245, 158, 11, 0.15)' : activeSegment === 'FMCG' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
-            border: activeSegment === 'FMCD' ? '1px solid rgba(245, 158, 11, 0.3)' : activeSegment === 'FMCG' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)',
-            color: activeSegment === 'FMCD' ? '#fbbf24' : activeSegment === 'FMCG' ? '#34d399' : '#38bdf8'
+            background: effectiveSegment === 'FMCD' ? 'rgba(245, 158, 11, 0.15)' : effectiveSegment === 'FMCG' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+            border: effectiveSegment === 'FMCD' ? '1px solid rgba(245, 158, 11, 0.3)' : effectiveSegment === 'FMCG' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)',
+            color: effectiveSegment === 'FMCD' ? '#fbbf24' : effectiveSegment === 'FMCG' ? '#34d399' : '#38bdf8'
           }}>
-            {activeSegment === 'ALL' ? `Combined (${displayedOrders.length} Orders)` : `${activeSegment} (${displayedOrders.length} Orders)`}
+            {effectiveSegment === 'ALL' ? `Combined (${displayedOrders.length} Orders)` : `${effectiveSegment} (${displayedOrders.length} Orders)`}
           </span>
         </div>
       </div>
@@ -273,7 +342,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div className="kpi-title" style={{ color: '#38bdf8', fontWeight: 700 }}>
-                {activeSegment === 'ALL' ? 'TOTAL ORDERS' : `TOTAL ${activeSegment} ORDERS`}
+                {effectiveSegment === 'ALL' ? 'TOTAL ORDERS' : `TOTAL ${effectiveSegment} ORDERS`}
               </div>
               <div className="kpi-value">{totalOrdersCount}</div>
             </div>
@@ -282,7 +351,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="kpi-subtext" style={{ color: '#94a3b8' }}>
-            <ArrowUpRight size={14} style={{ color: '#38bdf8' }} /> {totalVolumePcs.toLocaleString()} Total PCS in {activeSegment === 'ALL' ? 'pipeline' : activeSegment}
+            <ArrowUpRight size={14} style={{ color: '#38bdf8' }} /> {totalVolumePcs.toLocaleString()} Total PCS in {effectiveSegment === 'ALL' ? 'pipeline' : effectiveSegment}
           </div>
         </div>
 
@@ -348,11 +417,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   fontWeight: 800,
                   padding: '0.15rem 0.5rem',
                   borderRadius: 6,
-                  background: activeSegment === 'FMCD' ? 'rgba(245, 158, 11, 0.15)' : activeSegment === 'FMCG' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
-                  border: activeSegment === 'FMCD' ? '1px solid rgba(245, 158, 11, 0.3)' : activeSegment === 'FMCG' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)',
-                  color: activeSegment === 'FMCD' ? '#fbbf24' : activeSegment === 'FMCG' ? '#34d399' : '#38bdf8'
+                  background: effectiveSegment === 'FMCD' ? 'rgba(245, 158, 11, 0.15)' : effectiveSegment === 'FMCG' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                  border: effectiveSegment === 'FMCD' ? '1px solid rgba(245, 158, 11, 0.3)' : effectiveSegment === 'FMCG' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)',
+                  color: effectiveSegment === 'FMCD' ? '#fbbf24' : effectiveSegment === 'FMCG' ? '#34d399' : '#38bdf8'
                 }}>
-                  {activeSegment}
+                  {effectiveSegment}
                 </span>
               </h3>
             </div>
@@ -377,17 +446,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem 1rem', color: '#94a3b8' }}>
                     <div style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc', marginBottom: 4 }}>
-                      No orders found in {activeSegment} segment
+                      No orders found in {effectiveSegment} segment
                     </div>
                     <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1rem' }}>
-                      Orders created under {activeSegment} brands will appear here in real-time.
+                      Orders created under {effectiveSegment} brands will appear here in real-time.
                     </div>
                     <button 
                       className="btn btn-primary" 
                       onClick={onOpenCreateOrder}
                       style={{ fontSize: '0.8rem', padding: '0.4rem 0.85rem' }}
                     >
-                      <Plus size={14} /> Create {activeSegment === 'ALL' ? '' : activeSegment} Order
+                      <Plus size={14} /> Create {effectiveSegment === 'ALL' ? '' : effectiveSegment} Order
                     </button>
                   </td>
                 </tr>
