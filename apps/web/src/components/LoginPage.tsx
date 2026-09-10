@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
-import { APP_VERSION, APP_BUILD_DATETIME } from '../config/version';
+import { APP_VERSION, APP_BUILD_DATETIME, APK_DOWNLOAD_URL } from '../config/version';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -358,8 +358,9 @@ export const LoginPage: React.FC = () => {
               </div>
             </div>
             <a
-              href="/proline-oms-app.apk"
-              download="proline-oms-app.apk"
+              href={APK_DOWNLOAD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -375,6 +376,7 @@ export const LoginPage: React.FC = () => {
                 whiteSpace: 'nowrap',
                 flexShrink: 0
               }}
+              title="Download Android APK from Google Drive"
             >
               <Download size={13} /> Download APK
             </a>

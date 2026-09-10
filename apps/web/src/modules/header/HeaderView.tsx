@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap, X, Clock, Tag } from 'lucide-react';
+import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap, X, Clock, Tag, Smartphone, Download } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications, getRoleBadge, getCategoryBadge } from '../../context/NotificationContext';
 import { RoleName, GlobalFilterState, NotificationCategory } from '../../types';
 import { resolveSegmentForUser } from '../../lib/supabase';
-import { APP_VERSION, APP_BUILD_DATETIME } from '../../config/version';
+import { APP_VERSION, APP_BUILD_DATETIME, APK_DOWNLOAD_URL } from '../../config/version';
+import { Capacitor } from '@capacitor/core';
 
 interface HeaderViewProps {
   onToggleSidebarCollapse?: () => void;
@@ -483,6 +484,43 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
           )}
         </div>
 
+        {/* APK Download Icon Button */}
+        {!Capacitor.isNativePlatform() && (
+          <a
+            href={APK_DOWNLOAD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Download Android APK (Google Drive)"
+            style={{
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.12))',
+              border: '1px solid rgba(52, 211, 153, 0.35)',
+              color: '#34d399',
+              padding: '0.45rem 0.65rem',
+              borderRadius: 8,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              textDecoration: 'none',
+              fontSize: '0.75rem',
+              fontWeight: 800,
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.15)'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+              e.currentTarget.style.color = '#ffffff';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.12))';
+              e.currentTarget.style.color = '#34d399';
+            }}
+          >
+            <Smartphone size={16} />
+            <span>APK</span>
+          </a>
+        )}
+
         {/* 3. 3-DOT OPTIONS & ACCOUNT MENU */}
         <div style={{ position: 'relative' }} ref={menuRef}>
           <button 
@@ -563,6 +601,36 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
               {/* Options Menu */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 
+                {/* Download Android APK Option */}
+                <a
+                  href={APK_DOWNLOAD_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setShowMenu(false)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.65rem',
+                    width: '100%',
+                    padding: '0.6rem 0.75rem',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(52, 211, 153, 0.3)',
+                    borderRadius: 8,
+                    color: '#34d399',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                    boxSizing: 'border-box',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(16, 185, 129, 0.22)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)'}
+                  title="Download latest APK from Google Drive"
+                >
+                  <Smartphone size={15} /> Download Android APK (Drive)
+                </a>
+
                 {/* Passwords & Authority Option */}
                 {isAdmin && onOpenUserManagement && (
                   <button 

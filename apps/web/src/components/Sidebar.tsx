@@ -17,12 +17,15 @@ import {
   User as UserIcon,
   LogOut,
   Clock,
-  Tag
+  Tag,
+  Smartphone,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PermissionControl } from '../types';
 import { resolveSegmentForUser } from '../lib/supabase';
-import { APP_VERSION, APP_BUILD_DATETIME } from '../config/version';
+import { APP_VERSION, APP_BUILD_DATETIME, APK_DOWNLOAD_URL } from '../config/version';
+import { Capacitor } from '@capacitor/core';
 
 interface SidebarProps {
   currentTab: string;
@@ -316,6 +319,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               </div>
 
+              {/* Download Android APK Button */}
+              {!Capacitor.isNativePlatform() && (
+                <a
+                  href={APK_DOWNLOAD_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.45rem',
+                    padding: '0.38rem 0.65rem',
+                    borderRadius: '6px',
+                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.1))',
+                    border: '1px solid rgba(52, 211, 153, 0.35)',
+                    color: '#34d399',
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    textDecoration: 'none',
+                    boxSizing: 'border-box',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                    e.currentTarget.style.color = '#ffffff';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.1))';
+                    e.currentTarget.style.color = '#34d399';
+                  }}
+                  title="Download Android APK from Google Drive"
+                >
+                  <Smartphone size={13} />
+                  <span>Download APK</span>
+                </a>
+              )}
+
               {/* Sign Out Button */}
               <button
                 data-testid="logout-button"
@@ -360,6 +401,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {(currentUser?.full_name || 'U').charAt(0).toUpperCase()}
               </div>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: userSegment === 'FMCG' ? '#10b981' : (userSegment === 'FMCD' ? '#fbbf24' : '#38bdf8'), boxShadow: '0 0 8px currentColor' }} title={`Segment: ${userSegment}`}></div>
+              
+              {!Capacitor.isNativePlatform() && (
+                <a
+                  href={APK_DOWNLOAD_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Download Android APK from Google Drive"
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(52, 211, 153, 0.35)',
+                    color: '#34d399',
+                    borderRadius: 6,
+                    padding: '0.35rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textDecoration: 'none'
+                  }}
+                >
+                  <Smartphone size={13} />
+                </a>
+              )}
+
               <span style={{ fontSize: '0.55rem', color: '#38bdf8', fontWeight: 800, fontFamily: 'monospace' }}>{APP_VERSION}</span>
               <button
                 data-testid="logout-button"
