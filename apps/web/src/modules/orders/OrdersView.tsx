@@ -939,14 +939,14 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         >
                           <FileText size={13} /> Details
                         </button>
-                        {isSalesAdmin && onOpenPODModal && ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) && !order.pod_status && (
+                        {(isBillingOrAccounts || isSuperAdmin) && onOpenPODModal && ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) && !order.pod_status && (
                           <button
                             onClick={event => {
                               event.stopPropagation();
                               onOpenPODModal(order);
                             }}
                             style={{ background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', color: '#ffffff', padding: '0.3rem 0.55rem', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', fontWeight: 900, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(16,185,129,0.35)' }}
-                            title="Verify proof of delivery"
+                            title="Verify proof of delivery (Billing)"
                           >
                             <CheckCircle2 size={12} /> Verify POD
                           </button>
@@ -1353,13 +1353,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               </button>
             )}
 
-            {isSalesAdmin && (selectedOrder.status === 'OUT_FOR_DELIVERY' || selectedOrder.status === 'DISPATCHED') && onOpenPODModal && (
+            {(isBillingOrAccounts || isSuperAdmin) && (selectedOrder.status === 'OUT_FOR_DELIVERY' || selectedOrder.status === 'DISPATCHED') && onOpenPODModal && (
               <button
                 type="button"
                 onClick={() => onOpenPODModal(selectedOrder)}
                 style={{ width: '100%', padding: '0.65rem', background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', borderRadius: 8, color: '#ffffff', cursor: 'pointer', fontWeight: 900, fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', boxShadow: '0 4px 12px rgba(16,185,129,0.25)' }}
               >
-                <CheckCircle2 size={15} /> Verify POD After Delivery
+                <CheckCircle2 size={15} /> Verify POD After Delivery (Billing)
               </button>
             )}
 

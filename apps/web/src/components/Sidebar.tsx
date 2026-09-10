@@ -76,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'accounts', label: 'Accounts & Billing', icon: Receipt, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'ACCOUNTS', 'BILLING'] },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, fallbackRoles: ['ALL'] },
     { id: 'returns', label: 'Returns & Damage', icon: PackageX, fallbackRoles: ['ALL'] },
-    { id: 'pod', label: 'POD Queue', icon: FileCheck2, fallbackRoles: ['SUPER_ADMIN', 'SALES_ADMIN'] },
+    { id: 'pod', label: 'POD Queue', icon: FileCheck2, fallbackRoles: ['SUPER_ADMIN', 'BILLING', 'ACCOUNTS', 'SALES_ADMIN'] },
     { id: 'tracker', label: 'Order Tracker', icon: ScanSearch, fallbackRoles: ['ALL'] },
     { id: 'masters', label: 'Master Data', icon: Building2, permissionKey: 'party_view', fallbackRoles: ['ALL'] }
   ];
@@ -89,7 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return item.id === 'orders' || item.id === 'tracker' || item.id === 'reports';
     }
 
-    // 2. Sales Admin operational dashboard and review tools
+    // 2. Sales Admin operational dashboard and review tools (includes POD Queue to review unverified exceptions)
     if (role === 'SALES_ADMIN') {
       if (item.id === 'accounts' || item.id === 'dispatch') {
         return false;
@@ -105,9 +105,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return true;
     }
 
-    // 4. Billing & Accounts dashboard and invoicing tools
+    // 4. Billing & Accounts dashboard and invoicing tools (includes POD Queue for POD verification)
     if (role === 'BILLING' || role === 'ACCOUNTS') {
-      if (item.id === 'orders' || item.id === 'dispatch' || item.id === 'pod' || item.id === 'zones' || item.id === 'masters') {
+      if (item.id === 'orders' || item.id === 'dispatch' || item.id === 'zones' || item.id === 'masters') {
         return false;
       }
       return true;

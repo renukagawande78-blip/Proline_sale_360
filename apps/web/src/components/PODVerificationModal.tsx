@@ -42,10 +42,13 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
       const note = details.trim() || issueDescriptions[issueType] || 'Delivery exception reported during drop';
       onConfirmPOD(order.id, 'ISSUE_RAISED', issueType, note);
       addNotification({
-        title: `⚠️ Delivery Exception Raised: ${order.order_number}`,
-        message: `Delivery Issue (${issueType}) reported for ${order.agency_name}. Exception alert sent to Chirag Sir (Super Admin) & Sales Admin Exception Desk. Notes: "${note}"`,
+        title: `⚠️ Delivery Exception Raised by Billing: ${order.order_number}`,
+        message: `Billing reported Delivery Issue (${issueType}) for ${order.agency_name}. Forwarded to Sales Admin for resolution. Remarks: "${note}"`,
         event_type: 'POD_ISSUE_RAISED',
-        order_id: order.id
+        order_id: order.id,
+        target_roles: ['SALES_ADMIN', 'SUPER_ADMIN'],
+        category: 'POD',
+        brand_name: order.company_name
       });
     }
     onClose();

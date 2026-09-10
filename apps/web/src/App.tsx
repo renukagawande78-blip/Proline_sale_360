@@ -821,7 +821,8 @@ const MainLayout: React.FC = () => {
 
   const handleConfirmPOD = (orderId: string, podStatus: 'CLEAN' | 'ISSUE_RAISED', issueType?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN' | 'OTHER', details?: string) => {
     const timestamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const verifier = currentUser?.full_name || 'Sales Admin';
+    const isBilling = currentUser?.role_name === 'BILLING' || currentUser?.role_name === 'ACCOUNTS';
+    const verifier = currentUser?.full_name || (isBilling ? 'Billing Executive' : 'Billing Team');
     const target = orders.find(order => order.id === orderId);
     const podHistoryEntry = podStatus === 'ISSUE_RAISED' ? {
       id: generateUuid(), order_id: orderId, action: 'POD_QUERY_RAISED', performed_by: verifier,
@@ -838,7 +839,7 @@ const MainLayout: React.FC = () => {
       pod_query_raised_at: podStatus === 'ISSUE_RAISED' ? timestamp : o.pod_query_raised_at,
       need_accounts_approval: podStatus === 'ISSUE_RAISED',
       accounts_approval_status: podStatus === 'ISSUE_RAISED' ? 'PENDING' : o.accounts_approval_status,
-      accounts_approval_message: podStatus === 'ISSUE_RAISED' ? `POD ${issueType || 'ISSUE'}: ${details || 'Sales Admin requests a decision.'}` : o.accounts_approval_message,
+      accounts_approval_message: podStatus === 'ISSUE_RAISED' ? `POD ${issueType || 'ISSUE'} (Billing): ${details || 'Billing reports delivery exception.'}` : o.accounts_approval_message,
       accounts_approval_requested_by: podStatus === 'ISSUE_RAISED' ? verifier : o.accounts_approval_requested_by,
       accounts_approval_requested_at: podStatus === 'ISSUE_RAISED' ? timestamp : o.accounts_approval_requested_at,
       order_history: podHistoryEntry ? [...(o.order_history || []), podHistoryEntry] : o.order_history
@@ -848,10 +849,10 @@ const MainLayout: React.FC = () => {
       if (target) {
         addNotification({
           title: `✅ POD Verified & Order Completed: ${target.order_number}`,
-          message: `Shipment delivered & verified with store stamp for ${target.agency_name}. Salesperson (${target.salesperson_name}) target credited.`,
+          message: `Shipment delivered & verified with store stamp by Billing for ${target.agency_name}. Salesperson (${target.salesperson_name}) target credited.`,
           event_type: 'POD_VERIFIED',
           order_id: orderId,
-          target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'ACCOUNTS', 'SUPER_ADMIN'],
+          target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'ACCOUNTS', 'BILLING', 'SUPER_ADMIN'],
           category: 'POD',
           brand_name: target.company_name
         });
@@ -861,18 +862,18 @@ const MainLayout: React.FC = () => {
         status: 'POD_ISSUE_RAISED',
         need_accounts_approval: true,
         accounts_approval_status: 'PENDING',
-        accounts_approval_message: `POD ${issueType || 'ISSUE'}: ${details || 'Sales Admin requests a decision.'}`,
+        accounts_approval_message: `POD ${issueType || 'ISSUE'} (Billing): ${details || 'Billing reports delivery exception.'}`,
         accounts_approval_requested_by: verifier,
         accounts_approval_requested_at: timestamp,
         order_history: podHistoryEntry ? [...(target?.order_history || []), podHistoryEntry] : target?.order_history
       });
       if (target) {
         addNotification({
-          title: `🚨 POD Query Raised: ${target.order_number}`,
-          message: `Delivery exception reported by ${verifier}: [${issueType || 'ISSUE'}] ${details || 'Store stamp missing / exception'}. Super Admin action needed.`,
+          title: `🚨 POD Query Raised by Billing: ${target.order_number}`,
+          message: `Delivery exception reported by Billing (${verifier}): [${issueType || 'ISSUE'}] ${details || 'Store stamp missing / exception'}. Sales Admin review required.`,
           event_type: 'POD_QUERY_RAISED',
           order_id: orderId,
-          target_roles: ['SUPER_ADMIN', 'SALES_ADMIN'],
+          target_roles: ['SALES_ADMIN', 'SUPER_ADMIN'],
           category: 'POD',
           brand_name: target.company_name
         });
