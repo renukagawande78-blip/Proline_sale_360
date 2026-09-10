@@ -590,7 +590,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                   >
                     <div>
                       <div style={{ fontSize: '0.825rem', fontWeight: 700, color: isSelected ? '#38bdf8' : isAlreadyChosen ? '#94a3b8' : '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span>[{prodSegment}] {p?.product_name || 'Product Item'}</span>
+                        <span>{p?.product_name || 'Product Item'}</span>
                         {isAlreadyChosen && (
                           <span style={{ fontSize: '0.625rem', color: '#fbbf24', background: 'rgba(251, 191, 36, 0.15)', padding: '0.1rem 0.35rem', borderRadius: 4, fontWeight: 800 }}>
                             Already in Order
