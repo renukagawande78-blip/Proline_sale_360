@@ -11,6 +11,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { ReturnsRegisterView } from './modules/returns/ReturnsRegisterView';
 import { OrderTrackerView } from './modules/tracker/OrderTrackerView';
 import { PODQueueView } from './modules/pod/PODQueueView';
+import { SettingsView } from './modules/settings/SettingsView';
 import { CreateOrderModal } from './components/CreateOrderModal';
 import { OrderApprovalModal } from './components/OrderApprovalModal';
 import { DispatchModal } from './components/DispatchModal';
@@ -1352,6 +1353,7 @@ const MainLayout: React.FC = () => {
           }}
           onOpenUserManagement={() => setIsUserMgmtOpen(true)}
           onOpenGlobalFilter={() => setIsGlobalFilterOpen(true)}
+          onNavigateToSettings={() => setCurrentTab('settings')}
           globalFilterState={globalFilterState}
           searchQuery={globalSearchQuery}
           onSearchChange={setGlobalSearchQuery}
@@ -1504,6 +1506,10 @@ const MainLayout: React.FC = () => {
             orders={globallyFilteredOrders}
             onReleaseHold={handleReleaseHold}
           />
+        )}
+
+        {currentTab === 'settings' && (
+          <SettingsView />
         )}
       </div>
 

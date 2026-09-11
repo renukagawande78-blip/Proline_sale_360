@@ -5,4 +5,5 @@ export * from './dispatch';
 export * from './accounts';
 export * from './reports';
 export * from './header';
+export * from './settings';
 

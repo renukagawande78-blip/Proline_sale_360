@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap, X, Clock, Tag, Smartphone, Download } from 'lucide-react';
+import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap, X, Clock, Tag, Smartphone, Download, Settings as SettingsIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications, getRoleBadge, getCategoryBadge } from '../../context/NotificationContext';
 import { RoleName, GlobalFilterState, NotificationCategory } from '../../types';
@@ -11,6 +11,7 @@ interface HeaderViewProps {
   onToggleSidebarCollapse?: () => void;
   onOpenUserManagement?: () => void;
   onOpenGlobalFilter?: () => void;
+  onNavigateToSettings?: () => void;
   globalFilterState?: GlobalFilterState;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
@@ -20,6 +21,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
   onToggleSidebarCollapse, 
   onOpenUserManagement, 
   onOpenGlobalFilter,
+  onNavigateToSettings,
   globalFilterState,
   searchQuery = '',
   onSearchChange
@@ -679,6 +681,36 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
                   <Smartphone size={15} /> Download Android APK (Drive)
                 </a>
 
+                {/* App Settings & Releases Page Option */}
+                {onNavigateToSettings && (
+                  <button 
+                    onClick={() => {
+                      setShowMenu(false);
+                      onNavigateToSettings();
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.65rem',
+                      width: '100%',
+                      padding: '0.6rem 0.75rem',
+                      background: 'rgba(56, 189, 248, 0.08)',
+                      border: '1px solid rgba(56, 189, 248, 0.2)',
+                      borderRadius: 8,
+                      color: '#38bdf8',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.18)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)'}
+                  >
+                    <SettingsIcon size={15} /> App Settings & Releases
+                  </button>
+                )}
+
                 {/* Passwords & Authority Option */}
                 {isAdmin && onOpenUserManagement && (
                   <button 
@@ -695,13 +727,15 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
                       background: 'transparent',
                       border: 'none',
                       borderRadius: 8,
-                      color: '#38bdf8',
+                      color: '#cbd5e1',
                       fontSize: '0.8rem',
                       fontWeight: 700,
                       cursor: 'pointer',
                       textAlign: 'left',
                       transition: 'background 0.15s ease'
                     }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
                     <KeyRound size={15} /> User Passwords & Authority
                   </button>

@@ -6,6 +6,7 @@ interface HeaderProps {
   onToggleSidebarCollapse?: () => void;
   onOpenUserManagement?: () => void;
   onOpenGlobalFilter?: () => void;
+  onNavigateToSettings?: () => void;
   globalFilterState?: GlobalFilterState;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
