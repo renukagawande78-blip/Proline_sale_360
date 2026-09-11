@@ -316,70 +316,96 @@ export const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        {/* Android App Download Banner (Minimized & Responsive) */}
+        {/* Android App Download Banner (Versioned Titles: Release & Debug) */}
         {!Capacitor.isNativePlatform() && (
           <div 
             style={{ 
               marginTop: '1.25rem', 
-              padding: '0.65rem 0.85rem', 
+              padding: '0.75rem 0.85rem', 
               background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(56, 189, 248, 0.08))', 
               border: '1px solid rgba(52, 211, 153, 0.3)', 
               borderRadius: 12, 
               display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              gap: '0.5rem'
+              flexDirection: 'column',
+              gap: '0.55rem'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div 
-                style={{ 
-                  width: 32, 
-                  height: 32, 
-                  borderRadius: 8, 
-                  background: 'linear-gradient(135deg, #10b981, #059669)', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  color: 'white', 
-                  flexShrink: 0,
-                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)'
-                }}
-              >
-                <Smartphone size={17} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap' }}>
-                  Android App
-                </span>
-                <span style={{ fontSize: '0.65rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', padding: '0.1rem 0.35rem', borderRadius: 4, fontWeight: 700 }}>
-                  v1.0
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div 
+                  style={{ 
+                    width: 28, 
+                    height: 28, 
+                    borderRadius: 7, 
+                    background: 'linear-gradient(135deg, #10b981, #059669)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    color: 'white', 
+                    flexShrink: 0,
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)'
+                  }}
+                >
+                  <Smartphone size={15} />
+                </div>
+                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#f8fafc' }}>
+                  Android APK Packages
                 </span>
               </div>
+              <span style={{ fontSize: '0.65rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.15)', padding: '0.1rem 0.4rem', borderRadius: 4, fontWeight: 800, fontFamily: 'monospace' }}>
+                {APP_VERSION}
+              </span>
             </div>
-            <a
-              href={APK_DOWNLOAD_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                padding: '0.45rem 0.75rem',
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                color: 'white',
-                borderRadius: 8,
-                fontSize: '0.75rem',
-                fontWeight: 800,
-                textDecoration: 'none',
-                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
-                whiteSpace: 'nowrap',
-                flexShrink: 0
-              }}
-              title="Download Android APK from Google Drive"
-            >
-              <Download size={13} /> Download APK
-            </a>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+              <a
+                href={APK_DOWNLOAD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.3rem',
+                  padding: '0.42rem 0.5rem',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white',
+                  borderRadius: 7,
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  textDecoration: 'none',
+                  boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                  textAlign: 'center'
+                }}
+                title="proline-oms-app-v1.0_release.apk (Production Release)"
+              >
+                <Download size={12} /> v1.0 Release (.apk)
+              </a>
+
+              <a
+                href={APK_DOWNLOAD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.3rem',
+                  padding: '0.42rem 0.5rem',
+                  background: 'rgba(56, 189, 248, 0.15)',
+                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                  color: '#38bdf8',
+                  borderRadius: 7,
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  textDecoration: 'none',
+                  textAlign: 'center'
+                }}
+                title="proline-oms-app-v1.0_debug.apk (Direct Debug Build)"
+              >
+                <Download size={12} /> v1.0 Debug (.apk)
+              </a>
+            </div>
           </div>
         )}
 
