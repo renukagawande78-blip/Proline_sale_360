@@ -59,7 +59,7 @@ const RELEASES_DATA: ReleaseInfo[] = [
       'POD Verification Reassigned to Billing: Billing Executives verify delivered orders with store stamp directly in POD Queue.',
       'Unverified Exception Routing: Delivery issues (Shortage, Damaged, Good Return) with remarks are routed directly to Sales Admin desk for GRN creation or delivery reattempt.',
       'Super Admin View-Only Mode: Super Admin has complete audit visibility into POD queries without redundant proceed action buttons.',
-      'Direct Google Drive APK Cloud Repository: Versioned packages synced directly with cloud and local endpoints.'
+      'Direct APK Download Hub: Release & Debug packages served directly from application repository.'
     ]
   },
   {
@@ -77,7 +77,7 @@ const RELEASES_DATA: ReleaseInfo[] = [
     debugApkPath: '/proline-oms-app-v2.13.0_debug.apk',
     debugApkSize: '16 MB',
     changes: [
-      'Google Drive Centralized APK Link: Added direct cloud download touchpoints in Login, Header, and Sidebar.',
+      'Direct APK Downloads: Added direct download touchpoints in Login, Header, and Sidebar.',
       'Territory Reconciliation Fix: Resolved false region mismatch errors across 957 cleanly mapped agencies.',
       'Dual-Segment Dashboard Role Scoping: Super Admin sees FMCG & FMCD tabs; standard users see single assigned segment.',
       'FMCG vs FMCD KPI Units: FMCG displays Boxes | PCS metrics while FMCD displays Direct PCS.'
@@ -118,11 +118,10 @@ export const SettingsView: React.FC = () => {
           </p>
         </div>
 
-        {/* Global Google Drive Cloud Button */}
+        {/* Global Direct Download Button */}
         <a
-          href={APK_DOWNLOAD_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/proline-oms-app-v1.0_release.apk"
+          download="proline-oms-app-v1.0_release.apk"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -137,9 +136,9 @@ export const SettingsView: React.FC = () => {
             boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
             transition: 'all 0.2s ease'
           }}
-          title="Open Google Drive APK Cloud Folder"
+          title="Download latest Production APK"
         >
-          <Smartphone size={16} /> Open Google Drive APK Folder <ExternalLink size={14} />
+          <Download size={16} /> Download Latest Release (.apk)
         </a>
       </div>
 
@@ -239,30 +238,6 @@ export const SettingsView: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: '#94a3b8' }}>
                     <Clock size={13} /> Release Date: <strong style={{ color: '#cbd5e1' }}>{rel.releaseDate}</strong>
                   </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <a
-                    href={APK_DOWNLOAD_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                      padding: '0.45rem 0.85rem',
-                      background: 'rgba(56, 189, 248, 0.12)',
-                      border: '1px solid rgba(56, 189, 248, 0.35)',
-                      color: '#38bdf8',
-                      borderRadius: 8,
-                      fontSize: '0.75rem',
-                      fontWeight: 800,
-                      textDecoration: 'none'
-                    }}
-                    title="View file in Google Drive repository"
-                  >
-                    <ExternalLink size={13} /> View on Drive
-                  </a>
                 </div>
               </div>
 

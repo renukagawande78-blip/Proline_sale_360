@@ -359,9 +359,8 @@ export const LoginPage: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
               <a
-                href={APK_DOWNLOAD_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+                href="/proline-oms-app-v1.0_release.apk"
+                download="proline-oms-app-v1.0_release.apk"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -377,15 +376,14 @@ export const LoginPage: React.FC = () => {
                   boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
                   textAlign: 'center'
                 }}
-                title="proline-oms-app-v1.0_release.apk (Production Release)"
+                title="Download proline-oms-app-v1.0_release.apk"
               >
                 <Download size={12} /> v1.0 Release (.apk)
               </a>
 
               <a
-                href={APK_DOWNLOAD_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+                href="/proline-oms-app-v1.0_debug.apk"
+                download="proline-oms-app-v1.0_debug.apk"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -401,7 +399,7 @@ export const LoginPage: React.FC = () => {
                   textDecoration: 'none',
                   textAlign: 'center'
                 }}
-                title="proline-oms-app-v1.0_debug.apk (Direct Debug Build)"
+                title="Download proline-oms-app-v1.0_debug.apk"
               >
                 <Download size={12} /> v1.0 Debug (.apk)
               </a>

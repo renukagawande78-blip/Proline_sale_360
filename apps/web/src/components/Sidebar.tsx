@@ -325,9 +325,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {/* Download Android APK Button */}
               {!Capacitor.isNativePlatform() && (
                 <a
-                  href={APK_DOWNLOAD_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="/proline-oms-app-v1.0_release.apk"
+                  download="proline-oms-app-v1.0_release.apk"
                   style={{
                     width: '100%',
                     display: 'flex',
@@ -353,9 +352,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.1))';
                     e.currentTarget.style.color = '#34d399';
                   }}
-                  title="Download Android APK from Google Drive"
+                  title="Download Android APK (Direct .apk)"
                 >
-                  <Smartphone size={13} />
+                  <Download size={13} />
                   <span>Download APK</span>
                 </a>
               )}
@@ -407,10 +406,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               
               {!Capacitor.isNativePlatform() && (
                 <a
-                  href={APK_DOWNLOAD_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Download Android APK from Google Drive"
+                  href="/proline-oms-app-v1.0_release.apk"
+                  download="proline-oms-app-v1.0_release.apk"
+                  title="Download Android APK (Direct .apk)"
                   style={{
                     background: 'rgba(16, 185, 129, 0.15)',
                     border: '1px solid rgba(52, 211, 153, 0.35)',
@@ -423,7 +421,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     textDecoration: 'none'
                   }}
                 >
-                  <Smartphone size={13} />
+                  <Download size={13} />
                 </a>
               )}
 

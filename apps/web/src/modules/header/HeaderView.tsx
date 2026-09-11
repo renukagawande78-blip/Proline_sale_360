@@ -537,10 +537,9 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
         {/* APK Download Icon Button */}
         {!Capacitor.isNativePlatform() && (
           <a
-            href={APK_DOWNLOAD_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Download Android APK (Google Drive)"
+            href="/proline-oms-app-v1.0_release.apk"
+            download="proline-oms-app-v1.0_release.apk"
+            title="Download Android APK (Direct .apk)"
             style={{
               background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.12))',
               border: '1px solid rgba(52, 211, 153, 0.35)',
@@ -566,7 +565,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
               e.currentTarget.style.color = '#34d399';
             }}
           >
-            <Smartphone size={16} />
+            <Download size={16} />
             <span>APK</span>
           </a>
         )}
@@ -653,9 +652,8 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
                 
                 {/* Download Android APK Option */}
                 <a
-                  href={APK_DOWNLOAD_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="/proline-oms-app-v1.0_release.apk"
+                  download="proline-oms-app-v1.0_release.apk"
                   onClick={() => setShowMenu(false)}
                   style={{
                     display: 'flex',
@@ -676,9 +674,9 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(16, 185, 129, 0.22)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)'}
-                  title="Download latest APK from Google Drive"
+                  title="Download latest Android APK package"
                 >
-                  <Smartphone size={15} /> Download Android APK (Drive)
+                  <Download size={15} /> Download Android APK (.apk)
                 </a>
 
                 {/* App Settings & Releases Page Option */}
