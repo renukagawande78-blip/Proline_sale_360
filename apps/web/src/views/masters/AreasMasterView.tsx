@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   MapPin, 
   Building2, 
-  Map, 
+  Map as MapIcon, 
   Search, 
   Plus, 
   Trash2, 
@@ -94,13 +94,14 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
     reason: string;
     matchedArea: AreaMaster | null;
   } | null>(null);
-  const [resolveMode, setResolveMode] = useState<'CREATE_IN_MASTER' | 'MAP_EXISTING_AREA'>('CREATE_IN_MASTER');
+  const [resolveMode, setResolveMode] = useState<'UPDATE_AS_PER_AREA' | 'CREATE_IN_MASTER' | 'MAP_EXISTING_AREA'>('UPDATE_AS_PER_AREA');
   const [selectedExistingAreaId, setSelectedExistingAreaId] = useState('');
   const [resolveAreaName, setResolveAreaName] = useState('');
   const [resolveCity, setResolveCity] = useState('Surat');
   const [resolveZoneCode, setResolveZoneCode] = useState('City-A');
   const [resolveRegion, setResolveRegion] = useState<'Surat City' | 'Surat Rural' | 'City' | 'Rural' | 'Other'>('Surat City');
 
+  const [isBulkUpdatingAsPerArea, setIsBulkUpdatingAsPerArea] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -577,6 +578,133 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
     setTimeout(() => setSuccessNotice(null), 3000);
   };
 
+  // Update single agency as per Area Master directly (one-click)
+  const handleUpdateAgencyAsPerArea = async (ag: Agency, matchedArea: AreaMaster | null) => {
+    let targetArea = matchedArea;
+
+    if (!targetArea) {
+      const rawArea = (ag.area_name || '').trim();
+      const normArea = (normalizeAreaName(rawArea) || rawArea).trim().toLowerCase();
+      
+      targetArea = areasList.find(a => {
+        const aName = (a.area_name || '').trim().toLowerCase();
+        const aNorm = (normalizeAreaName(a.area_name) || a.area_name).trim().toLowerCase();
+        return normArea && (normArea === aName || normArea === aNorm || aName.includes(normArea) || normArea.includes(aName));
+      }) || null;
+
+      if (!targetArea) {
+        const resolved = resolveOfficialZone(ag.area_name || ag.city || ag.address, ag.city);
+        const cityPrefix = (ag.city || 'SUR').substring(0, 3).toUpperCase();
+        const generatedCode = `AR-${cityPrefix}-${Math.floor(Math.random() * 899 + 100)}`;
+        const finalAreaName = ag.area_name && ag.area_name !== 'Missing Area' && ag.area_name !== 'N/A' ? ag.area_name : (ag.city || 'Surat');
+        const isRural = (resolved.region || '').toLowerCase().includes('rural') || ['Upper South', 'South', 'East', 'North'].includes(resolved.zoneName);
+        const finalRegion = (ag.zone_region as any) || (resolved.region === 'Other' ? 'Other' : (isRural ? 'Surat Rural' : 'Surat City'));
+        const finalCity = ag.city || (finalRegion === 'Surat City' ? 'Surat' : finalAreaName);
+        const finalZone = ag.zone_name || resolved.zoneName || 'City-A';
+
+        targetArea = {
+          id: `ar_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          area_code: generatedCode,
+          area_name: finalAreaName,
+          city: finalCity,
+          zone_code: finalZone,
+          region: finalRegion,
+          description: `Auto-registered area for agency ${ag.agency_name}`,
+          created_at: new Date().toISOString()
+        };
+
+        await saveAreaToSupabase(targetArea);
+        setAreasList(prev => deduplicateAreas([targetArea!, ...prev]));
+      }
+    }
+
+    const updatedAgency: Agency = {
+      ...ag,
+      area_name: targetArea.area_name,
+      city: targetArea.city,
+      zone_name: targetArea.zone_code,
+      zone_region: targetArea.region
+    };
+
+    await saveAgencyToSupabase(updatedAgency);
+    setLocalAgencies(prev => prev.map(a => a.id === ag.id ? updatedAgency : a));
+
+    setSuccessNotice(`⚡ Updated agency "${ag.agency_name}" as per Area Master (${targetArea.area_name} → Zone: ${targetArea.zone_code}, City: ${targetArea.city})!`);
+    setTimeout(() => setSuccessNotice(null), 3500);
+  };
+
+  // Bulk update all mismatched agencies as per Area Master
+  const handleUpdateAllAgenciesAsPerArea = async () => {
+    if (mappingErrors.length === 0) return;
+    setIsBulkUpdatingAsPerArea(true);
+
+    let updatedCount = 0;
+    const newAreasToSave: AreaMaster[] = [];
+    const agencyMap = new Map(localAgencies.map(a => [a.id, a]));
+
+    for (const item of mappingErrors) {
+      const ag = item.agency;
+      let targetArea = item.matchedArea;
+
+      if (!targetArea) {
+        const rawArea = (ag.area_name || '').trim();
+        const normArea = (normalizeAreaName(rawArea) || rawArea).trim().toLowerCase();
+        
+        targetArea = areasList.find(a => {
+          const aName = (a.area_name || '').trim().toLowerCase();
+          const aNorm = (normalizeAreaName(a.area_name) || a.area_name).trim().toLowerCase();
+          return normArea && (normArea === aName || normArea === aNorm || aName.includes(normArea) || normArea.includes(aName));
+        }) || null;
+
+        if (!targetArea) {
+          const resolved = resolveOfficialZone(ag.area_name || ag.city || ag.address, ag.city);
+          const cityPrefix = (ag.city || 'SUR').substring(0, 3).toUpperCase();
+          const generatedCode = `AR-${cityPrefix}-${Math.floor(Math.random() * 899 + 100)}`;
+          const finalAreaName = ag.area_name && ag.area_name !== 'Missing Area' && ag.area_name !== 'N/A' ? ag.area_name : (ag.city || 'Surat');
+          const isRural = (resolved.region || '').toLowerCase().includes('rural') || ['Upper South', 'South', 'East', 'North'].includes(resolved.zoneName);
+          const finalRegion = (ag.zone_region as any) || (resolved.region === 'Other' ? 'Other' : (isRural ? 'Surat Rural' : 'Surat City'));
+          const finalCity = ag.city || (finalRegion === 'Surat City' ? 'Surat' : finalAreaName);
+          const finalZone = ag.zone_name || resolved.zoneName || 'City-A';
+
+          targetArea = {
+            id: `ar_bulk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            area_code: generatedCode,
+            area_name: finalAreaName,
+            city: finalCity,
+            zone_code: finalZone,
+            region: finalRegion,
+            description: `Auto-registered area for agency ${ag.agency_name}`,
+            created_at: new Date().toISOString()
+          };
+
+          newAreasToSave.push(targetArea);
+          await saveAreaToSupabase(targetArea);
+        }
+      }
+
+      const updatedAgency: Agency = {
+        ...ag,
+        area_name: targetArea.area_name,
+        city: targetArea.city,
+        zone_name: targetArea.zone_code,
+        zone_region: targetArea.region
+      };
+
+      agencyMap.set(ag.id, updatedAgency);
+      await saveAgencyToSupabase(updatedAgency);
+      updatedCount++;
+    }
+
+    if (newAreasToSave.length > 0) {
+      setAreasList(prev => deduplicateAreas([...newAreasToSave, ...prev]));
+    }
+    setLocalAgencies(Array.from(agencyMap.values()));
+    setIsBulkUpdatingAsPerArea(false);
+
+    setSuccessNotice(`🎉 Successfully updated ${updatedCount} agencies as per Area Master! All agencies are now cleanly mapped.`);
+    setTimeout(() => setSuccessNotice(null), 5000);
+  };
+
   // Open Mapping Resolution Modal
   const handleOpenResolveMapping = (item: {
     agency: Agency;
@@ -584,14 +712,18 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
     matchedArea: AreaMaster | null;
   }) => {
     setResolvingAgencyItem(item);
-    setResolveMode('CREATE_IN_MASTER');
+    if (item.matchedArea) {
+      setResolveMode('UPDATE_AS_PER_AREA');
+    } else {
+      setResolveMode('CREATE_IN_MASTER');
+    }
     setResolveAreaName(item.agency.area_name || '');
     const resolved = resolveOfficialZone(item.agency.area_name || item.agency.city);
     setResolveCity(item.agency.city || ((resolved.region || '').toLowerCase().includes('city') ? 'Surat' : resolved.matchedArea));
     setResolveZoneCode(item.agency.zone_name || resolved.zoneName);
     setResolveRegion(resolved.region);
     if (areasList.length > 0) {
-      setSelectedExistingAreaId(areasList[0].id);
+      setSelectedExistingAreaId(item.matchedArea ? item.matchedArea.id : areasList[0].id);
     }
   };
 
@@ -602,7 +734,22 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
 
     const ag = resolvingAgencyItem.agency;
 
-    if (resolveMode === 'CREATE_IN_MASTER') {
+    if (resolveMode === 'UPDATE_AS_PER_AREA') {
+      const targetArea = resolvingAgencyItem.matchedArea || areasList.find(a => a.id === selectedExistingAreaId);
+      if (!targetArea) return;
+
+      const updatedAgency: Agency = {
+        ...ag,
+        area_name: targetArea.area_name,
+        city: targetArea.city,
+        zone_name: targetArea.zone_code,
+        zone_region: targetArea.region
+      };
+      await saveAgencyToSupabase(updatedAgency);
+      setLocalAgencies(prev => prev.map(a => a.id === ag.id ? updatedAgency : a));
+
+      setSuccessNotice(`⚡ Updated agency "${ag.agency_name}" as per Area Master (${targetArea.area_name} → Zone: ${targetArea.zone_code}, City: ${targetArea.city})!`);
+    } else if (resolveMode === 'CREATE_IN_MASTER') {
       if (!resolveAreaName.trim()) return;
 
       const cityPrefix = (resolveCity || 'SUR').substring(0, 3).toUpperCase();
@@ -970,7 +1117,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
             whiteSpace: 'nowrap'
           }}
         >
-          <Map size={15} /> Region-wise Breakdown ({regionWiseStats.length})
+          <MapIcon size={15} /> Region-wise Breakdown ({regionWiseStats.length})
         </button>
 
         <button
@@ -1387,27 +1534,56 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
       {/* ========================================================================= */}
       {activeMainTab === 'MAPPING_ERRORS' && (
         <div style={{ background: '#141f36', borderRadius: '16px', border: '1px solid #1e293b', padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
             <div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <ShieldAlert color="#f43f5e" size={20} />
                 Territory Mapping Audit & Data Not Matched
               </h3>
               <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 3 }}>
-                Agencies whose Locality, City, Zone, or Region do not match records in the Area Master. Click <strong>"Fix Mapping / Update Area Master"</strong> to sync them.
+                Agencies whose Locality, City, Zone, or Region do not match records in the Area Master. Click <strong>"Update as per Area"</strong> to sync them directly.
               </p>
             </div>
-            <span style={{
-              background: mappingErrors.length > 0 ? 'rgba(244, 63, 94, 0.15)' : 'rgba(52, 211, 153, 0.15)',
-              color: mappingErrors.length > 0 ? '#fb7185' : '#34d399',
-              border: mappingErrors.length > 0 ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid rgba(52, 211, 153, 0.3)',
-              padding: '0.35rem 0.85rem',
-              borderRadius: 8,
-              fontWeight: 800,
-              fontSize: '0.8rem'
-            }}>
-              {mappingErrors.length === 0 ? '✅ All Agencies Cleanly Mapped' : `⚠️ ${mappingErrors.length} Mapping Issues Found`}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+              {mappingErrors.length > 0 && (
+                <button
+                  onClick={handleUpdateAllAgenciesAsPerArea}
+                  disabled={isBulkUpdatingAsPerArea}
+                  style={{
+                    padding: '0.45rem 1.15rem',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    color: '#ffffff',
+                    fontWeight: 900,
+                    fontSize: '0.825rem',
+                    cursor: isBulkUpdatingAsPerArea ? 'wait' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  title="Update all mismatched agencies to match official Area Master zone & city in one click"
+                >
+                  <Sparkles size={14} />
+                  {isBulkUpdatingAsPerArea 
+                    ? 'Updating as per Area...' 
+                    : `⚡ Update All (${mappingErrors.length}) as per Area`}
+                </button>
+              )}
+              <span style={{
+                background: mappingErrors.length > 0 ? 'rgba(244, 63, 94, 0.15)' : 'rgba(52, 211, 153, 0.15)',
+                color: mappingErrors.length > 0 ? '#fb7185' : '#34d399',
+                border: mappingErrors.length > 0 ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid rgba(52, 211, 153, 0.3)',
+                padding: '0.35rem 0.85rem',
+                borderRadius: 8,
+                fontWeight: 800,
+                fontSize: '0.8rem'
+              }}>
+                {mappingErrors.length === 0 ? '✅ All Agencies Cleanly Mapped' : `⚠️ ${mappingErrors.length} Mapping Issues Found`}
+              </span>
+            </div>
           </div>
 
           {mappingErrors.length === 0 ? (
@@ -1429,57 +1605,86 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {mappingErrors.map(({ agency: ag, reason, status }) => (
-                    <tr key={ag.id} style={{ borderBottom: '1px solid #1e293b', background: 'rgba(244, 63, 94, 0.04)' }}>
-                      <td style={{ padding: '0.85rem 1rem' }}>
-                        <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>{ag.agency_name}</strong>
-                        <div style={{ fontSize: '0.725rem', color: '#38bdf8', fontWeight: 700 }}>Code: {ag.agency_code || 'N/A'}</div>
-                      </td>
-                      <td style={{ padding: '0.85rem 1rem' }}>
-                        <div style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.85rem' }}>{ag.area_name || 'Missing Area'}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>{ag.city || 'Gujarat'}</div>
-                      </td>
-                      <td style={{ padding: '0.85rem 1rem' }}>
-                        <span style={{ color: '#c084fc', fontWeight: 700, fontSize: '0.8rem' }}>{ag.zone_name || 'N/A'}</span>
-                        <div style={{ color: '#94a3b8', fontSize: '0.725rem' }}>{ag.zone_region || 'N/A'}</div>
-                      </td>
-                      <td style={{ padding: '0.85rem 1rem' }}>
-                        <span style={{
-                          padding: '0.25rem 0.65rem',
-                          borderRadius: 6,
-                          fontSize: '0.725rem',
-                          fontWeight: 800,
-                          background: 'rgba(244, 63, 94, 0.15)',
-                          color: '#fb7185',
-                          border: '1px solid rgba(244, 63, 94, 0.3)',
-                          display: 'inline-block'
-                        }}>
-                          {reason}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
-                        <button
-                          onClick={() => handleOpenResolveMapping({ agency: ag, reason, matchedArea: null })}
-                          style={{
-                            padding: '0.45rem 0.95rem',
-                            borderRadius: '8px',
-                            border: 'none',
-                            background: 'linear-gradient(135deg, #38bdf8, #0284c7)',
-                            color: '#ffffff',
+                  {mappingErrors.map(({ agency: ag, reason, status, matchedArea }) => {
+                    const targetZone = matchedArea?.zone_code || ag.zone_name || 'Official Zone';
+                    const targetCity = matchedArea?.city || ag.city || 'Surat';
+
+                    return (
+                      <tr key={ag.id} style={{ borderBottom: '1px solid #1e293b', background: 'rgba(244, 63, 94, 0.04)' }}>
+                        <td style={{ padding: '0.85rem 1rem' }}>
+                          <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>{ag.agency_name}</strong>
+                          <div style={{ fontSize: '0.725rem', color: '#38bdf8', fontWeight: 700 }}>Code: {ag.agency_code || 'N/A'}</div>
+                        </td>
+                        <td style={{ padding: '0.85rem 1rem' }}>
+                          <div style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.85rem' }}>{ag.area_name || 'Missing Area'}</div>
+                          <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>{ag.city || 'Gujarat'}</div>
+                        </td>
+                        <td style={{ padding: '0.85rem 1rem' }}>
+                          <span style={{ color: '#c084fc', fontWeight: 700, fontSize: '0.8rem' }}>{ag.zone_name || 'N/A'}</span>
+                          <div style={{ color: '#94a3b8', fontSize: '0.725rem' }}>{ag.zone_region || 'N/A'}</div>
+                        </td>
+                        <td style={{ padding: '0.85rem 1rem' }}>
+                          <span style={{
+                            padding: '0.25rem 0.65rem',
+                            borderRadius: 6,
+                            fontSize: '0.725rem',
                             fontWeight: 800,
-                            fontSize: '0.775rem',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.35rem',
-                            boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)'
-                          }}
-                        >
-                          <Edit3 size={13} /> Fix & Update Area Master
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                            background: 'rgba(244, 63, 94, 0.15)',
+                            color: '#fb7185',
+                            border: '1px solid rgba(244, 63, 94, 0.3)',
+                            display: 'inline-block'
+                          }}>
+                            {reason}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => handleUpdateAgencyAsPerArea(ag, matchedArea)}
+                              style={{
+                                padding: '0.45rem 0.9rem',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: 'linear-gradient(135deg, #10b981, #059669)',
+                                color: '#ffffff',
+                                fontWeight: 800,
+                                fontSize: '0.775rem',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={`Update agency to match Area Master: Zone '${targetZone}' & City '${targetCity}'`}
+                            >
+                              <CheckCircle2 size={13} /> Update as per Area
+                            </button>
+                            <button
+                              onClick={() => handleOpenResolveMapping({ agency: ag, reason, matchedArea })}
+                              style={{
+                                padding: '0.45rem 0.75rem',
+                                borderRadius: '8px',
+                                border: '1px solid #334155',
+                                background: '#0f172a',
+                                color: '#94a3b8',
+                                fontWeight: 700,
+                                fontSize: '0.75rem',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title="Custom manual mapping modal"
+                            >
+                              <Edit3 size={12} /> Edit
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1609,7 +1814,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
       {activeMainTab === 'REGION_WISE' && (
         <div style={{ background: '#141f36', borderRadius: '16px', border: '1px solid #1e293b', padding: '1.25rem' }}>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f8fafc', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Map color="#34d399" size={20} />
+            <MapIcon color="#34d399" size={20} />
             Region-wise Agency Count & Territory Distribution
           </h3>
           <div className="table-responsive">
@@ -2033,7 +2238,28 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
             </div>
 
             {/* Resolution Strategy Picker */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: resolvingAgencyItem.matchedArea ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0.6rem', marginBottom: '1.25rem' }}>
+              {resolvingAgencyItem.matchedArea && (
+                <button
+                  type="button"
+                  onClick={() => setResolveMode('UPDATE_AS_PER_AREA')}
+                  style={{
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: 10,
+                    border: resolveMode === 'UPDATE_AS_PER_AREA' ? '2px solid #10b981' : '1px solid #1e293b',
+                    background: resolveMode === 'UPDATE_AS_PER_AREA' ? 'rgba(16, 185, 129, 0.15)' : '#0b1329',
+                    color: resolveMode === 'UPDATE_AS_PER_AREA' ? '#34d399' : '#94a3b8',
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <div style={{ fontWeight: 900 }}>Option 1: Update as per Area</div>
+                  <div style={{ fontSize: '0.68rem', marginTop: 2, opacity: 0.85 }}>Sync agency to Area Master</div>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setResolveMode('CREATE_IN_MASTER')}
@@ -2049,8 +2275,8 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                   textAlign: 'left'
                 }}
               >
-                <div style={{ fontWeight: 900 }}>Option 1: Add to Master</div>
-                <div style={{ fontSize: '0.68rem', marginTop: 2, opacity: 0.85 }}>Register this locality in Area Master</div>
+                <div style={{ fontWeight: 900 }}>Option 2: Add to Master</div>
+                <div style={{ fontSize: '0.68rem', marginTop: 2, opacity: 0.85 }}>Register locality in Area Master</div>
               </button>
 
               <button
@@ -2059,22 +2285,49 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                 style={{
                   padding: '0.65rem 0.85rem',
                   borderRadius: 10,
-                  border: resolveMode === 'MAP_EXISTING_AREA' ? '2px solid #34d399' : '1px solid #1e293b',
-                  background: resolveMode === 'MAP_EXISTING_AREA' ? 'rgba(52, 211, 153, 0.15)' : '#0b1329',
-                  color: resolveMode === 'MAP_EXISTING_AREA' ? '#34d399' : '#94a3b8',
+                  border: resolveMode === 'MAP_EXISTING_AREA' ? '2px solid #fbbf24' : '1px solid #1e293b',
+                  background: resolveMode === 'MAP_EXISTING_AREA' ? 'rgba(251, 191, 36, 0.15)' : '#0b1329',
+                  color: resolveMode === 'MAP_EXISTING_AREA' ? '#fbbf24' : '#94a3b8',
                   fontWeight: 800,
                   fontSize: '0.75rem',
                   cursor: 'pointer',
                   textAlign: 'left'
                 }}
               >
-                <div style={{ fontWeight: 900 }}>Option 2: Map to Existing</div>
+                <div style={{ fontWeight: 900 }}>Option 3: Map to Existing</div>
                 <div style={{ fontSize: '0.68rem', marginTop: 2, opacity: 0.85 }}>Pick an existing verified Area</div>
               </button>
             </div>
 
             <form onSubmit={handleConfirmResolveMapping} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {resolveMode === 'CREATE_IN_MASTER' ? (
+              {resolveMode === 'UPDATE_AS_PER_AREA' ? (
+                <div style={{ background: '#0b1329', border: '1px solid #334155', borderRadius: 12, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <CheckCircle2 size={16} /> Official Area Master Values (Will Be Applied to Agency):
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', fontSize: '0.775rem' }}>
+                    <div style={{ background: '#141f36', padding: '0.6rem', borderRadius: 8 }}>
+                      <div style={{ color: '#94a3b8', fontSize: '0.7rem' }}>Locality Area:</div>
+                      <div style={{ color: '#fbbf24', fontWeight: 800, marginTop: 2 }}>{resolvingAgencyItem.matchedArea?.area_name || resolvingAgencyItem.agency.area_name}</div>
+                    </div>
+                    <div style={{ background: '#141f36', padding: '0.6rem', borderRadius: 8 }}>
+                      <div style={{ color: '#94a3b8', fontSize: '0.7rem' }}>City / District:</div>
+                      <div style={{ color: '#f8fafc', fontWeight: 800, marginTop: 2 }}>{resolvingAgencyItem.matchedArea?.city || resolvingAgencyItem.agency.city}</div>
+                    </div>
+                    <div style={{ background: '#141f36', padding: '0.6rem', borderRadius: 8 }}>
+                      <div style={{ color: '#94a3b8', fontSize: '0.7rem' }}>Official Zone:</div>
+                      <div style={{ color: '#38bdf8', fontWeight: 800, marginTop: 2 }}>{resolvingAgencyItem.matchedArea?.zone_code || resolvingAgencyItem.agency.zone_name}</div>
+                    </div>
+                    <div style={{ background: '#141f36', padding: '0.6rem', borderRadius: 8 }}>
+                      <div style={{ color: '#94a3b8', fontSize: '0.7rem' }}>Region Scope:</div>
+                      <div style={{ color: '#c084fc', fontWeight: 800, marginTop: 2 }}>{resolvingAgencyItem.matchedArea?.region || resolvingAgencyItem.agency.zone_region}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: 2 }}>
+                    Clicking "Apply & Update as per Area" will immediately update this agency's record in the live database.
+                  </div>
+                </div>
+              ) : resolveMode === 'CREATE_IN_MASTER' ? (
                 <>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.35rem' }}>
@@ -2177,7 +2430,9 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
                   type="submit"
                   style={{ padding: '0.65rem 1.35rem', borderRadius: 10, background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: '#fff', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)' }}
                 >
-                  {resolveMode === 'CREATE_IN_MASTER' ? 'Register in Master & Fix Agency' : 'Apply Area Mapping'}
+                  {resolveMode === 'UPDATE_AS_PER_AREA' 
+                    ? '⚡ Apply & Update Agency as per Area' 
+                    : (resolveMode === 'CREATE_IN_MASTER' ? 'Register in Master & Fix Agency' : 'Apply Area Mapping')}
                 </button>
               </div>
             </form>
