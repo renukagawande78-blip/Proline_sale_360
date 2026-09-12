@@ -612,41 +612,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
           )}
         </div>
 
-        {/* APK Download Icon Button */}
-        {!Capacitor.isNativePlatform() && (
-          <a
-            href="/proline-oms-app-v1.0_release.apk"
-            download="proline-oms-app-v1.0_release.apk"
-            title="Download Android APK (Direct .apk)"
-            style={{
-              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.12))',
-              border: '1px solid rgba(52, 211, 153, 0.35)',
-              color: '#34d399',
-              padding: '0.45rem 0.65rem',
-              borderRadius: 8,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              textDecoration: 'none',
-              fontSize: '0.75rem',
-              fontWeight: 800,
-              transition: 'all 0.2s ease',
-              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.15)'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-              e.currentTarget.style.color = '#ffffff';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.12))';
-              e.currentTarget.style.color = '#34d399';
-            }}
-          >
-            <Download size={16} />
-            <span>APK</span>
-          </a>
-        )}
+
 
         {/* 3. 3-DOT OPTIONS & ACCOUNT MENU */}
         <div style={{ position: 'relative' }} ref={menuRef}>
@@ -728,35 +694,6 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
               {/* Options Menu */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 
-                {/* Download Android APK Option */}
-                <a
-                  href="/proline-oms-app-v1.0_release.apk"
-                  download="proline-oms-app-v1.0_release.apk"
-                  onClick={() => setShowMenu(false)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.65rem',
-                    width: '100%',
-                    padding: '0.6rem 0.75rem',
-                    background: 'rgba(16, 185, 129, 0.12)',
-                    border: '1px solid rgba(52, 211, 153, 0.3)',
-                    borderRadius: 8,
-                    color: '#34d399',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    cursor: 'pointer',
-                    boxSizing: 'border-box',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(16, 185, 129, 0.22)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)'}
-                  title="Download latest Android APK package"
-                >
-                  <Download size={15} /> Download Android APK (.apk)
-                </a>
-
                 {/* Passwords & Authority Option */}
                 {isAdmin && onOpenUserManagement && (
                   <button 
