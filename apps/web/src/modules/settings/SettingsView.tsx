@@ -34,9 +34,6 @@ interface ReleaseInfo {
   releaseApkName: string;
   releaseApkPath: string;
   releaseApkSize: string;
-  debugApkName: string;
-  debugApkPath: string;
-  debugApkSize: string;
   changes: string[];
 }
 
@@ -51,15 +48,12 @@ const RELEASES_DATA: ReleaseInfo[] = [
     badgeBg: 'rgba(52, 211, 153, 0.15)',
     releaseApkName: 'proline-oms-app-v1.0_release.apk',
     releaseApkPath: '/proline-oms-app-v1.0_release.apk',
-    releaseApkSize: '12 MB',
-    debugApkName: 'proline-oms-app-v1.0_debug.apk',
-    debugApkPath: '/proline-oms-app-v1.0_debug.apk',
-    debugApkSize: '16 MB',
+    releaseApkSize: '9.0 MB',
     changes: [
       'POD Verification Reassigned to Billing: Billing Executives verify delivered orders with store stamp directly in POD Queue.',
       'Unverified Exception Routing: Delivery issues (Shortage, Damaged, Good Return) with remarks are routed directly to Sales Admin desk for GRN creation or delivery reattempt.',
       'Super Admin View-Only Mode: Super Admin has complete audit visibility into POD queries without redundant proceed action buttons.',
-      'Direct APK Download Hub: Release & Debug packages served directly from application repository.'
+      'Direct APK Download Hub: Official Release APK package served directly from application repository.'
     ]
   },
   {
@@ -72,10 +66,7 @@ const RELEASES_DATA: ReleaseInfo[] = [
     badgeBg: 'rgba(56, 189, 248, 0.15)',
     releaseApkName: 'proline-oms-app-v2.13.0_release.apk',
     releaseApkPath: '/proline-oms-app-v2.13.0_release.apk',
-    releaseApkSize: '12 MB',
-    debugApkName: 'proline-oms-app-v2.13.0_debug.apk',
-    debugApkPath: '/proline-oms-app-v2.13.0_debug.apk',
-    debugApkSize: '16 MB',
+    releaseApkSize: '9.0 MB',
     changes: [
       'Direct APK Downloads: Added direct download touchpoints in Login, Header, and Sidebar.',
       'Territory Reconciliation Fix: Resolved false region mismatch errors across 957 cleanly mapped agencies.',
@@ -301,67 +292,6 @@ export const SettingsView: React.FC = () => {
                       title="Copy Direct Download Link URL"
                     >
                       {copiedPath === rel.releaseApkName ? <Check size={13} /> : <Copy size={13} />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* 2. Direct Debug APK */}
-                <div style={{ background: '#1e293b', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: 10, padding: '0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#38bdf8', background: 'rgba(56, 189, 248, 0.15)', padding: '0.15rem 0.4rem', borderRadius: 4 }}>
-                        DEBUG BUILD
-                      </span>
-                      <span style={{ fontSize: '0.725rem', color: '#94a3b8', fontWeight: 700 }}>
-                        Size: <strong style={{ color: '#f8fafc' }}>{rel.debugApkSize}</strong>
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.825rem', fontWeight: 800, color: '#f8fafc', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                      {rel.debugApkName}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>
-                      Pre-signed direct sideload build for testing and live inspection.
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.4rem' }}>
-                    <a
-                      href={rel.debugApkPath}
-                      download={rel.debugApkName}
-                      style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.35rem',
-                        padding: '0.5rem',
-                        background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
-                        color: '#ffffff',
-                        borderRadius: 6,
-                        fontSize: '0.75rem',
-                        fontWeight: 800,
-                        textDecoration: 'none',
-                        boxShadow: '0 2px 8px rgba(56, 189, 248, 0.3)'
-                      }}
-                      title={`Download ${rel.debugApkName}`}
-                    >
-                      <Download size={13} /> Direct Download (.apk)
-                    </a>
-                    <button
-                      onClick={() => handleCopy(window.location.origin + rel.debugApkPath, rel.debugApkName)}
-                      style={{
-                        padding: '0.5rem 0.65rem',
-                        background: '#0f172a',
-                        border: '1px solid #334155',
-                        color: copiedPath === rel.debugApkName ? '#38bdf8' : '#94a3b8',
-                        borderRadius: 6,
-                        cursor: 'pointer',
-                        fontSize: '0.7rem',
-                        fontWeight: 700
-                      }}
-                      title="Copy Direct Download Link URL"
-                    >
-                      {copiedPath === rel.debugApkName ? <Check size={13} /> : <Copy size={13} />}
                     </button>
                   </div>
                 </div>

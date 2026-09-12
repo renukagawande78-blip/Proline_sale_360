@@ -357,7 +357,7 @@ export const LoginPage: React.FC = () => {
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+            <div>
               <a
                 href="/proline-oms-app-v1.0_release.apk"
                 download="proline-oms-app-v1.0_release.apk"
@@ -365,43 +365,21 @@ export const LoginPage: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '0.3rem',
-                  padding: '0.42rem 0.5rem',
+                  gap: '0.4rem',
+                  padding: '0.5rem 0.75rem',
                   background: 'linear-gradient(135deg, #10b981, #059669)',
                   color: 'white',
                   borderRadius: 7,
-                  fontSize: '0.7rem',
+                  fontSize: '0.75rem',
                   fontWeight: 800,
                   textDecoration: 'none',
                   boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
-                  textAlign: 'center'
+                  textAlign: 'center',
+                  width: '100%'
                 }}
                 title="Download proline-oms-app-v1.0_release.apk"
               >
-                <Download size={12} /> v1.0 Release (.apk)
-              </a>
-
-              <a
-                href="/proline-oms-app-v1.0_debug.apk"
-                download="proline-oms-app-v1.0_debug.apk"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.3rem',
-                  padding: '0.42rem 0.5rem',
-                  background: 'rgba(56, 189, 248, 0.15)',
-                  border: '1px solid rgba(56, 189, 248, 0.35)',
-                  color: '#38bdf8',
-                  borderRadius: 7,
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                  textDecoration: 'none',
-                  textAlign: 'center'
-                }}
-                title="Download proline-oms-app-v1.0_debug.apk"
-              >
-                <Download size={12} /> v1.0 Debug (.apk)
+                <Download size={14} /> Download Android Release APK (.apk)
               </a>
             </div>
           </div>
