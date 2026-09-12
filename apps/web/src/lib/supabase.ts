@@ -100,8 +100,7 @@ export const checkIsSuperAdmin = (user: any): boolean => {
     role === 'SUPER_ADMIN' ||
     name.includes('chirag') ||
     name.includes('harshad') ||
-    (email.includes('admin') && role !== 'SALES_ADMIN') ||
-    user?.company_handle === 'All'
+    (email.includes('admin') && role !== 'SALES_ADMIN')
   );
 };
 

@@ -571,6 +571,34 @@ const MainLayout: React.FC = () => {
     return true;
   });
 
+  // POD Queue Orders — same as stageScopedOrders but NEVER excludes by status
+  // This ensures COMPLETED/DELIVERED/DISPATCHED orders all appear in the correct POD sections
+  const podQueueOrders = accessibleOrders.filter(o => {
+    // POD queue only cares about orders that are in dispatch, delivery, or completed lifecycle
+    if (!['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'DELIVERED', 'COMPLETED', 'POD_ISSUE_RAISED'].includes(o.status) && o.pod_status !== 'CLEAN' && o.pod_status !== 'ISSUE_RAISED') {
+      return false;
+    }
+    // Search Query Filter
+    if (globalSearchQuery.trim()) {
+      const q = globalSearchQuery.trim().toLowerCase();
+      const matches =
+        (o.order_number || '').toLowerCase().includes(q) ||
+        (o.agency_name || '').toLowerCase().includes(q) ||
+        (o.company_name || '').toLowerCase().includes(q) ||
+        (o.invoice_number || '').toLowerCase().includes(q) ||
+        (o.vehicle_number || '').toLowerCase().includes(q);
+      if (!matches) return false;
+    }
+    // Brand / Company Filter
+    if (globalFilterState.companyId && globalFilterState.companyId !== 'ALL') {
+      const selectedComp = companiesPool.find(c => c.id === globalFilterState.companyId);
+      const matchesId = o.company_id === globalFilterState.companyId;
+      const matchesName = selectedComp && (o.company_name || '').toLowerCase() === (selectedComp.company_name || '').toLowerCase();
+      if (!matchesId && !matchesName) return false;
+    }
+    return true;
+  });
+
   // Handlers
   const handleOpenEditOrder = (order: Order) => {
     setOrderToEdit(order);
@@ -1626,7 +1654,7 @@ const MainLayout: React.FC = () => {
         {currentTab === 'pod' && (
           <PODQueueView
             key="page_pod"
-            orders={globallyFilteredOrders}
+            orders={podQueueOrders}
             onVerifyPOD={(order) => setSelectedOrderForPOD(order)}
             onResolveQuery={handleResolveException}
           />

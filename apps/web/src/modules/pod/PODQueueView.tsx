@@ -12,21 +12,32 @@ interface PODQueueViewProps {
 
 export const PODQueueView: React.FC<PODQueueViewProps> = ({ orders, onVerifyPOD, onResolveQuery }) => {
   const { currentUser, hasPermission } = useAuth();
-  const canViewAll = checkIsSuperAdmin(currentUser);
   const isSuperAdminUser = checkIsSuperAdmin(currentUser);
   const isBillingUser = currentUser?.role_name === 'BILLING' || currentUser?.role_name === 'ACCOUNTS';
+  const isDispatchManager = currentUser?.role_name === 'DISPATCH_MANAGER';
   const isSalesAdminUser = currentUser?.role_name === 'SALES_ADMIN';
-  const canVerifyPOD = hasPermission('pod_verification');
+  // canVerifyPOD: only BILLING, ACCOUNTS, SUPER_ADMIN, or those with explicit pod_verification permission
+  const canVerifyPOD = isSuperAdminUser || isBillingUser || hasPermission('pod_verification');
 
-  const scopedOrders = orders.filter(order => canViewAll || isCompanyAllowedForUser(order.company_name, currentUser?.company_handle));
-  const verified = scopedOrders.filter(order => order.pod_status === 'CLEAN' || order.status === 'COMPLETED' || order.status === 'DELIVERED');
+  // Scope: Super Admin, Billing, Dispatch see all orders; others filtered by brand
+  const canViewAll = isSuperAdminUser || isBillingUser || isDispatchManager;
+  const scopedOrders = orders.filter(order =>
+    canViewAll || isCompanyAllowedForUser(order.company_name, currentUser?.company_handle)
+  );
+
+  // Verified: pod marked clean, or order completed/delivered (with or without pod_status)
+  const verified = scopedOrders.filter(order =>
+    order.pod_status === 'CLEAN' ||
+    order.status === 'COMPLETED' ||
+    order.status === 'DELIVERED'
+  );
   const exceptions = scopedOrders.filter(order => order.pod_status === 'ISSUE_RAISED' || order.status === 'POD_ISSUE_RAISED');
-  const pending = scopedOrders.filter(order => 
-    ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) && 
-    order.status !== 'COMPLETED' && 
-    order.status !== 'DELIVERED' && 
-    order.pod_status !== 'CLEAN' && 
-    order.pod_status !== 'ISSUE_RAISED' && 
+  const pending = scopedOrders.filter(order =>
+    ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) &&
+    order.status !== 'COMPLETED' &&
+    order.status !== 'DELIVERED' &&
+    order.pod_status !== 'CLEAN' &&
+    order.pod_status !== 'ISSUE_RAISED' &&
     order.status !== 'POD_ISSUE_RAISED'
   );
 

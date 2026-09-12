@@ -40,7 +40,7 @@ export const getDefaultPermissions = (role: RoleName): PermissionControl => {
       company_order_form: true,
       order_transfer_to_dispatch: true,
       order_transfer_out_for_delivery: false,
-      pod_verification: true,
+      pod_verification: false,
       user_authority: false
     };
   }
@@ -82,7 +82,7 @@ export const getDefaultPermissions = (role: RoleName): PermissionControl => {
       company_order_form: false,
       order_transfer_to_dispatch: true,
       order_transfer_out_for_delivery: true,
-      pod_verification: true,
+      pod_verification: false,
       user_authority: false
     };
   }
@@ -661,6 +661,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const hasPermission = (key: keyof PermissionControl): boolean => {
     if (!currentUser) return false;
+    // Super Admin always has all permissions
+    const role = currentUser.role_name;
+    if (role === 'SUPER_ADMIN' || (currentUser.full_name || '').toLowerCase().includes('chirag') || (currentUser.full_name || '').toLowerCase().includes('harshad')) {
+      return true;
+    }
+    // BILLING and ACCOUNTS always have pod_verification
+    if (key === 'pod_verification' && (role === 'BILLING' || role === 'ACCOUNTS')) {
+      return true;
+    }
     const targetKey = key === 'order_entry' ? 'add_order' : key;
     const perms = currentUser.permissions || getDefaultPermissions(currentUser.role_name);
     return !!perms[targetKey];
