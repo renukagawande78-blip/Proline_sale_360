@@ -32,7 +32,7 @@ module.exports = async function handler(req, res) {
         if (isUuid) {
           queryUrl = `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(identifier)}&select=id,brand_scope`;
         } else {
-          queryUrl = `${SUPABASE_URL}/rest/v1/users?email=ilike.*${encodeURIComponent(identifier)}*&select=id,brand_scope`;
+          queryUrl = `${SUPABASE_URL}/rest/v1/users?or=(email.ilike.*${encodeURIComponent(identifier)}*,full_name.ilike.*${encodeURIComponent(identifier)}*)&select=id,brand_scope`;
         }
 
         const userFetch = await fetch(queryUrl, {
@@ -69,25 +69,8 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // 2. Persist token to Supabase users
+    // 2. Persist token to Supabase users via brand_scope <!--FCM_TOKEN:...-->
     if (targetUserId) {
-      // A. Try updating fcm_token column
-      try {
-        await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(targetUserId)}`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            fcm_token: token,
-            updated_at: new Date().toISOString()
-          })
-        });
-      } catch {}
-
-      // B. Update brand_scope with <!--FCM_TOKEN:...-->
       const cleanedScope = (currentScope || 'All').replace(/<!--FCM_TOKEN:.*?-->/g, '').trim();
       const updatedScope = `${cleanedScope} <!--FCM_TOKEN:${token}-->`.trim();
       try {

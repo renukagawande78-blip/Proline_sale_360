@@ -404,12 +404,20 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.warn('Channel creation error:', err);
       });
 
-      PushNotifications.requestPermissions().then(result => {
+      PushNotifications.checkPermissions().then(result => {
         if (result.receive === 'granted') {
           PushNotifications.register();
+        } else {
+          PushNotifications.requestPermissions().then(res => {
+            if (res.receive === 'granted') {
+              PushNotifications.register();
+            }
+          }).catch(err => {
+            console.warn('Push notification permissions error:', err);
+          });
         }
-      }).catch(err => {
-        console.warn('Push notification permissions error:', err);
+      }).catch(() => {
+        PushNotifications.register().catch(() => {});
       });
 
       const regListener = PushNotifications.addListener('registration', token => {

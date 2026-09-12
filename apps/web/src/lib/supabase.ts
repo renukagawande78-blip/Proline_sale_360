@@ -1145,18 +1145,18 @@ export const updateUserFcmToken = async (userIdOrEmail: string, token: string): 
   // 2. Also directly update in Supabase client-side for immediate consistency
   try {
     const isUuid = isValidUuid(userIdOrEmail);
-    let query = supabase.from('users').select('id, brand_scope, email');
+    let query = supabase.from('users').select('id, brand_scope, email, full_name');
     if (isUuid) {
       query = query.eq('id', userIdOrEmail);
     } else {
-      query = query.or(`id.eq.${userIdOrEmail},email.ilike.${userIdOrEmail}`);
+      query = query.or(`email.ilike.%${userIdOrEmail}%,full_name.ilike.%${userIdOrEmail}%`);
     }
     const { data: users, error: findError } = await query;
 
     if (!findError && users && users.length > 0) {
       const user = users[0];
       const existingScope = (user.brand_scope || '').replace(/<!--FCM_TOKEN:.*?-->/g, '').trim();
-      const updatedBrandScope = `${existingScope}<!--FCM_TOKEN:${token}-->`.trim();
+      const updatedBrandScope = `${existingScope} <!--FCM_TOKEN:${token}-->`.trim();
 
       const { error: updateError } = await supabase
         .from('users')
@@ -1169,7 +1169,7 @@ export const updateUserFcmToken = async (userIdOrEmail: string, token: string): 
       if (updateError) {
         console.warn('[FCM] Supabase update brand_scope warning:', updateError.message);
       } else {
-        console.log(`[FCM] Successfully persisted FCM token for user ${user.id} in Supabase!`);
+        console.log(`[FCM] Successfully persisted FCM token for user ${user.id} (${user.full_name || user.email}) in Supabase!`);
         return true;
       }
     }

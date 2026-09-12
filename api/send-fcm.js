@@ -136,7 +136,8 @@ module.exports = async function handler(req, res) {
 
     // Fetch registered tokens from Supabase users via REST API
     try {
-      let queryUrl = `${SUPABASE_URL}/rest/v1/users?select=id,role_name,brand_scope,fcm_token`;
+      // Note: users table stores device push tokens embedded in brand_scope as <!--FCM_TOKEN:...-->
+      let queryUrl = `${SUPABASE_URL}/rest/v1/users?select=id,role_name,brand_scope`;
       if (targetUserId) {
         queryUrl += `&id=eq.${encodeURIComponent(targetUserId)}`;
       }
@@ -150,12 +151,17 @@ module.exports = async function handler(req, res) {
       if (Array.isArray(dbUsers)) {
         dbUsers.forEach(u => {
           if (!targetRoles || targetRoles.length === 0 || targetRoles.includes(u.role_name)) {
-            if (u.fcm_token && typeof u.fcm_token === 'string' && u.fcm_token.length > 20) {
-              recipientTokens.add(u.fcm_token.trim());
-            }
+            // Extract token from brand_scope <!--FCM_TOKEN:...-->
             const fcmMatch = (u.brand_scope || '').match(/<!--FCM_TOKEN:(.*?)-->/);
             if (fcmMatch && fcmMatch[1]) {
-              recipientTokens.add(fcmMatch[1].trim());
+              const cleaned = fcmMatch[1].trim();
+              if (cleaned.length > 20) {
+                recipientTokens.add(cleaned);
+              }
+            }
+            // Also check u.fcm_token in case column is added in future
+            if (u.fcm_token && typeof u.fcm_token === 'string' && u.fcm_token.length > 20) {
+              recipientTokens.add(u.fcm_token.trim());
             }
           }
         });

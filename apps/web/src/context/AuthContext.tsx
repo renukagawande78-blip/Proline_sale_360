@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { RoleName, User, PermissionControl, PermissionGroup } from '../types';
-import { supabase, deduplicateUsers, saveUserToSupabase } from '../lib/supabase';
+import { supabase, deduplicateUsers, saveUserToSupabase, updateUserFcmToken } from '../lib/supabase';
 
 export const getDefaultPermissions = (role: RoleName): PermissionControl => {
   if (role === 'SUPER_ADMIN' || role === 'ACCOUNTS') {
@@ -463,12 +463,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setCurrentUser(userWithPerms);
+
+    // Automatically sync FCM push notification token for the logged-in user in database
+    try {
+      const existingToken = typeof window !== 'undefined' ? localStorage.getItem('proline_oms_fcm_token') : null;
+      if (existingToken && userWithPerms.id) {
+        updateUserFcmToken(userWithPerms.id, existingToken);
+      }
+    } catch (_) {}
+
     return { success: true };
   };
 
   const logout = async () => {
+    // Preserve device-level FCM token across user logouts so subsequent logins retain push capability
+    const savedFcmToken = typeof window !== 'undefined' ? localStorage.getItem('proline_oms_fcm_token') : null;
+    const savedFcmUser = typeof window !== 'undefined' ? localStorage.getItem('proline_oms_fcm_user') : null;
+
     // 1. Clear all localStorage — removes Supabase auth tokens + any app cache
     try { localStorage.clear(); } catch (_) {}
+
+    // Restore device push notification token
+    if (savedFcmToken) {
+      try { localStorage.setItem('proline_oms_fcm_token', savedFcmToken); } catch (_) {}
+    }
+    if (savedFcmUser) {
+      try { localStorage.setItem('proline_oms_fcm_user', savedFcmUser); } catch (_) {}
+    }
 
     // 2. Clear sessionStorage
     try { sessionStorage.clear(); } catch (_) {}
