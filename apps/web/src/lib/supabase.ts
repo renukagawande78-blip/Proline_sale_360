@@ -1815,20 +1815,20 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         id: row.id,
         order_id: row.order_id,
         product_id: row.product_id,
-        product_name: prod?.product_name || 'Product Item',
-        product_code: prod?.product_code || 'SKU',
+        product_name: row.product_name || prod?.product_name || 'Product Item',
+        product_code: row.product_code || prod?.product_code || 'SKU',
         pcs_per_box: Number(row.pcs_per_box || prod?.pcs_per_box || 1),
         box_qty: Number(row.box_qty || 0),
         loose_pcs: Number(row.loose_pcs || 0),
-        free_pcs: 0,
+        free_pcs: Number(row.free_pcs || 0),
         total_qty_pcs: Number(row.total_qty_pcs || 0),
         unit_price: Number(row.unit_price || prod?.unit_price || 0),
-        mrp_price: Number(prod?.mrp_price || prod?.unit_price || row.unit_price || 0),
+        mrp_price: Number(row.mrp_price || prod?.mrp_price || prod?.unit_price || row.unit_price || 0),
         total_price: Number(row.total_price || 0),
         dispatched_qty_pcs: Number(row.dispatched_qty_pcs || 0),
         issued_qty_pcs: Number(row.issued_qty_pcs || 0),
         pending_qty_pcs: Number(row.pending_qty_pcs || 0),
-        remark: ''
+        remark: row.remark || ''
       });
     });
 
@@ -2011,7 +2011,20 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
 
 export const saveOrderToSupabase = async (order: Order): Promise<{ success: boolean; error: string | null; data?: any }> => {
   try {
-    const orderId = (order.id && isValidUuid(order.id)) ? order.id : generateUuid();
+    let orderId = (order.id && isValidUuid(order.id)) ? order.id : '';
+    if (!orderId && order.order_number) {
+      try {
+        const { data: existing } = await supabase.from('orders').select('id').eq('order_number', order.order_number).limit(1);
+        if (existing && existing.length > 0 && existing[0].id) {
+          orderId = existing[0].id;
+        }
+      } catch (err) {
+        console.warn('Error checking existing order by order_number:', err);
+      }
+    }
+    if (!orderId) {
+      orderId = generateUuid();
+    }
     const nowIso = new Date().toISOString();
 
     const orderPayload: Record<string, any> = {
@@ -2063,21 +2076,37 @@ export const saveOrderToSupabase = async (order: Order): Promise<{ success: bool
       return { success: false, error: orderError.message };
     }
 
-    // Save Order Items
+    // 1. Purge existing order_items for this order to permanently remove deleted products
+    try {
+      await supabase.from('order_items').delete().eq('order_id', orderId);
+      if (order.order_number && order.order_number !== orderId) {
+        await supabase.from('order_items').delete().eq('order_id', order.order_number);
+      }
+    } catch (delErr) {
+      console.warn('Notice while cleaning existing order_items for order:', delErr);
+    }
+
+    // 2. Save current Order Items
     if (order.items && order.items.length > 0) {
       const itemsPayload = order.items.map(item => {
         const itemId = (item.id && isValidUuid(item.id)) ? item.id : generateUuid();
         const payloadItem: Record<string, any> = {
           id: itemId,
           order_id: orderId,
+          product_name: item.product_name || null,
+          product_code: item.product_code || null,
           pcs_per_box: Number(item.pcs_per_box || 1),
           box_qty: Number(item.box_qty || 0),
           loose_pcs: Number(item.loose_pcs || 0),
+          free_pcs: Number(item.free_pcs || 0),
+          total_qty_pcs: Number(item.total_qty_pcs || 0),
           unit_price: Number(item.unit_price || 0),
+          mrp_price: Number(item.mrp_price || item.unit_price || 0),
           total_price: Number(item.total_price || 0),
           dispatched_qty_pcs: Number(item.dispatched_qty_pcs || 0),
           issued_qty_pcs: Number(item.issued_qty_pcs || 0),
-          pending_qty_pcs: Number(item.pending_qty_pcs || 0)
+          pending_qty_pcs: Number(item.pending_qty_pcs || 0),
+          remark: item.remark || null
         };
         if (isValidUuid(item.product_id)) payloadItem.product_id = item.product_id;
         return payloadItem;

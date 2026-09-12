@@ -803,6 +803,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
   const [remarks, setRemarks] = useState('');
   const [items, setItems] = useState<Array<{
+    id?: string;
     product_id: string;
     pcs_per_box: number;
     box_qty: number;
@@ -952,6 +953,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           const resolvedProdId = foundProd?.id || item.product_id || item.product_name || '';
 
           return {
+            id: item.id,
             product_id: resolvedProdId,
             pcs_per_box: item.pcs_per_box || foundProd?.pcs_per_box || 24,
             box_qty: item.box_qty || 0,
@@ -1109,7 +1111,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     }
 
     return {
-      id: `item-${idx + 1}`,
+      id: item.id || `item-${idx + 1}`,
       product_id: item.product_id || '',
       product_name: prod?.product_name || rawItem.product_name || '',
       product_code: prod?.product_code || rawItem.product_code || '',
@@ -1153,10 +1155,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       alert('Please enter at least 1 Box or 1 PCS quantity for all selected product lines.');
       return;
     }
-    const resolvedCompany = selectedCompanyIds.length === 1 
-      ? (activeCompaniesPool.find(c => c.id === selectedCompanyIds[0]) || MOCK_COMPANIES.find(c => c.id === selectedCompanyIds[0]))
-      : (allowedBrandsForActiveSalesperson.length === 1
-          ? allowedBrandsForActiveSalesperson[0]
+    const resolvedCompany = (selectedCompanyIds.length === 1 && selectedCompanyIds[0] !== 'ALL')
+      ? ((activeCompaniesPool || []).find(c => c.id === selectedCompanyIds[0]) || 
+         (liveCompanies || []).find(c => c.id === selectedCompanyIds[0]) || 
+         MOCK_COMPANIES.find(c => c.id === selectedCompanyIds[0]))
+      : (allowedBrandsForActiveSalesperson.length === 1 
+          ? allowedBrandsForActiveSalesperson[0] 
           : { id: allowedBrandsForActiveSalesperson[0]?.id || 'ee1d810b-aa74-4dd8-bf1a-de5f31212ebd', company_name: `${selectedSegments.join(' & ')} Multi-Brand`, company_code: allowedBrandsForActiveSalesperson[0]?.company_code || 'PRG' });
     
     const selectedAgency = activeAgenciesPool.find(a => a.id === agencyId) || MOCK_AGENCIES.find(a => a.id === agencyId);
@@ -1172,7 +1176,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
     const generatedOrderNumber = `${brandCode}-${dateStr}-${seqStr}`;
     const finalOrderNumber = orderToEdit ? orderToEdit.order_number : generatedOrderNumber;
-    const finalOrderId = (orderToEdit && isValidUuid(orderToEdit.id)) ? orderToEdit.id : generateUuid();
+    const finalOrderId = (orderToEdit && orderToEdit.id) ? orderToEdit.id : generateUuid();
 
     // Format Product Item ID
     const itemsWithFormattedIds: OrderItem[] = processedItems.map((item, idx) => {

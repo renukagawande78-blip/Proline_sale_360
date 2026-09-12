@@ -513,15 +513,25 @@ const MainLayout: React.FC = () => {
 
   const handleCreateOrder = async (orderData: Order) => {
     setOrders(prev => {
-      const exists = prev.some(o => o.id === orderData.id);
+      const exists = prev.some(o => o.id === orderData.id || (orderData.order_number && o.order_number === orderData.order_number));
       if (exists) {
-        return prev.map(o => o.id === orderData.id ? { ...o, ...orderData } : o);
+        return prev.map(o => (o.id === orderData.id || (orderData.order_number && o.order_number === orderData.order_number)) ? { ...o, ...orderData } : o);
       }
       return [orderData, ...prev];
     });
     setIsCreateOpen(false);
     const isEditing = !!orderToEdit;
     setOrderToEdit(null);
+
+    // Immediately sync localStorage to prevent stale items in current session
+    try {
+      const currentStored = JSON.parse(localStorage.getItem('proline_oms_orders_v3') || '[]');
+      const existsInStorage = currentStored.some((o: any) => o.id === orderData.id || (orderData.order_number && o.order_number === orderData.order_number));
+      const updatedStored = existsInStorage
+        ? currentStored.map((o: any) => (o.id === orderData.id || (orderData.order_number && o.order_number === orderData.order_number)) ? { ...o, ...orderData } : o)
+        : [orderData, ...currentStored];
+      localStorage.setItem('proline_oms_orders_v3', JSON.stringify(updatedStored));
+    } catch {}
 
     // Persist to Supabase
     try {
