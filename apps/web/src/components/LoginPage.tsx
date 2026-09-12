@@ -5,6 +5,7 @@ import { useNotifications } from '../context/NotificationContext';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { APP_VERSION, APP_BUILD_DATETIME, APK_DOWNLOAD_URL } from '../config/version';
+import { updateUserFcmToken } from '../lib/supabase';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -57,6 +58,10 @@ export const LoginPage: React.FC = () => {
         setErrorMsg(res.error || 'Invalid credentials. Please check user ID / email and password.');
       } else {
         handleEnableNotifications();
+        const existingToken = typeof window !== 'undefined' ? localStorage.getItem('proline_oms_fcm_token') : null;
+        if (existingToken) {
+          updateUserFcmToken(usernameInput, existingToken);
+        }
         addNotification({
           title: '🔔 Notifications Active',
           message: `Logged in as ${usernameInput}. Realtime order alerts are live.`,

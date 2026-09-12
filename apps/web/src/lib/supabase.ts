@@ -1027,20 +1027,32 @@ export const fetchUsersFromSupabase = async (): Promise<any[]> => {
     }
     if (!data || data.length === 0) return [];
 
-    return data.map((u: any, idx: number) => ({
-      sno: u.sno || idx + 1,
-      id: String(u.id || `u_${idx + 1}`),
-      full_name: u.full_name || u.name || u.user_name || 'System User',
-      email: u.email || `${u.id}@proline.com`,
-      role_name: u.role_name || u.role || 'SALES_PERSON',
-      role: u.role_name || u.role || 'SALES_PERSON',
-      phone: u.phone || u.mobile || '',
-      permission_group_id: u.permission_group_id || 'pg_sales_person',
-      permission_group_name: u.permission_group_name || 'Sales Person Group',
-      company_handle: u.company_handle || u.company_handles || u.brand_handle || u.brand_scope || 'All',
-      password: u.password || '1234',
-      active: u.active !== false
-    }));
+    return data.map((u: any, idx: number) => {
+      let fcm_token = u.fcm_token || '';
+      let brandScopeStr = u.brand_scope || u.company_handle || u.brand_handle || '';
+      const fcmMatch = String(brandScopeStr).match(/<!--FCM_TOKEN:(.*?)-->/);
+      if (fcmMatch && fcmMatch[1]) {
+        fcm_token = fcmMatch[1];
+        brandScopeStr = brandScopeStr.replace(/<!--FCM_TOKEN:.*?-->/g, '').trim();
+      }
+
+      return {
+        sno: u.sno || idx + 1,
+        id: String(u.id || `u_${idx + 1}`),
+        full_name: u.full_name || u.name || u.user_name || 'System User',
+        email: u.email || `${u.id}@proline.com`,
+        role_name: u.role_name || u.role || 'SALES_PERSON',
+        role: u.role_name || u.role || 'SALES_PERSON',
+        phone: u.phone || u.mobile || '',
+        permission_group_id: u.permission_group_id || 'pg_sales_person',
+        permission_group_name: u.permission_group_name || 'Sales Person Group',
+        company_handle: brandScopeStr || u.company_handle || u.company_handles || u.brand_handle || 'All',
+        brand_scope: brandScopeStr || 'All',
+        password: u.password || '1234',
+        active: u.active !== false,
+        fcm_token: fcm_token || undefined
+      };
+    });
   } catch (err: any) {
     console.error('Error fetching users from Supabase:', err?.message || err);
     return [];
@@ -1105,6 +1117,66 @@ export const deleteUserFromSupabase = async (userId: string): Promise<{ success:
     console.error('Error deleting user from Supabase:', err?.message || err);
     return { success: false, error: err?.message || 'Failed to delete user' };
   }
+};
+
+export const updateUserFcmToken = async (userIdOrEmail: string, token: string): Promise<boolean> => {
+  if (!userIdOrEmail || !token) return false;
+  console.log(`[FCM] Updating FCM token for user "${userIdOrEmail}"...`);
+
+  // Persist locally for instant lookup
+  try {
+    localStorage.setItem('proline_oms_fcm_token', token);
+    localStorage.setItem('proline_oms_fcm_user', userIdOrEmail);
+  } catch (e) {
+    // ignore
+  }
+
+  // 1. Call serverless backend API /api/register-fcm
+  try {
+    fetch('/api/register-fcm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: userIdOrEmail, token })
+    }).catch(err => console.warn('[FCM] /api/register-fcm fetch error (non-fatal):', err));
+  } catch (e) {
+    // non-fatal
+  }
+
+  // 2. Also directly update in Supabase client-side for immediate consistency
+  try {
+    const isUuid = isValidUuid(userIdOrEmail);
+    let query = supabase.from('users').select('id, brand_scope, email');
+    if (isUuid) {
+      query = query.eq('id', userIdOrEmail);
+    } else {
+      query = query.or(`id.eq.${userIdOrEmail},email.ilike.${userIdOrEmail}`);
+    }
+    const { data: users, error: findError } = await query;
+
+    if (!findError && users && users.length > 0) {
+      const user = users[0];
+      const existingScope = (user.brand_scope || '').replace(/<!--FCM_TOKEN:.*?-->/g, '').trim();
+      const updatedBrandScope = `${existingScope}<!--FCM_TOKEN:${token}-->`.trim();
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          brand_scope: updatedBrandScope,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.warn('[FCM] Supabase update brand_scope warning:', updateError.message);
+      } else {
+        console.log(`[FCM] Successfully persisted FCM token for user ${user.id} in Supabase!`);
+        return true;
+      }
+    }
+  } catch (err: any) {
+    console.warn('[FCM] Error updating token in Supabase directly:', err?.message || err);
+  }
+  return true;
 };
 
 // ============================================================================

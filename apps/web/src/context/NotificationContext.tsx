@@ -3,7 +3,7 @@ import { NotificationItem, RoleName, NotificationCategory } from '../types';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuth } from './AuthContext';
-import { supabase } from '../lib/supabase';
+import { supabase, updateUserFcmToken } from '../lib/supabase';
 
 // Helper to resolve target roles and category based on user rules
 export const resolveNotificationMeta = (
@@ -291,13 +291,29 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [roleFilter, setRoleFilter] = useState<'MY_ROLE' | 'ALL' | RoleName>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | NotificationCategory>('ALL');
   const [activeToast, setActiveToast] = useState<NotificationItem | null>(null);
-  const [fcmToken, setFcmToken] = useState<string | undefined>(undefined);
+  const [fcmToken, setFcmToken] = useState<string | undefined>(() => {
+    try {
+      return localStorage.getItem('proline_oms_fcm_token') || undefined;
+    } catch {
+      return undefined;
+    }
+  });
   const [webNotificationPermission, setWebNotificationPermission] = useState<NotificationPermission | 'unsupported'>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       return Notification.permission;
     }
     return 'unsupported';
   });
+
+  // Automatically update FCM token in database whenever user logs in or token is acquired
+  useEffect(() => {
+    const userIdentifier = currentUser?.id || currentUser?.email;
+    const tokenToSave = fcmToken || (typeof window !== 'undefined' ? localStorage.getItem('proline_oms_fcm_token') : null);
+    if (userIdentifier && tokenToSave) {
+      console.log(`[FCM] Active user session (${userIdentifier}), ensuring FCM token is synced to database...`);
+      updateUserFcmToken(userIdentifier, tokenToSave);
+    }
+  }, [currentUser?.id, currentUser?.email, fcmToken]);
 
   // Automatically unlock browser audio on first user gesture anywhere
   useEffect(() => {
@@ -388,6 +404,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const regListener = PushNotifications.addListener('registration', token => {
         console.log('Firebase Push Notification Registration Token:', token.value);
         setFcmToken(token.value);
+        try {
+          localStorage.setItem('proline_oms_fcm_token', token.value);
+        } catch {}
+        const userIdentifier = currentUser?.id || currentUser?.email;
+        if (userIdentifier) {
+          updateUserFcmToken(userIdentifier, token.value);
+        }
       });
 
       const errListener = PushNotifications.addListener('registrationError', err => {
@@ -418,10 +441,32 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
       });
 
+      const actionListener = PushNotifications.addListener('pushNotificationActionPerformed', notification => {
+        console.log('Push notification action performed:', notification.actionId);
+        const notifData = notification.notification;
+        const title = notifData.title || 'Proline OMS Alert';
+        const body = notifData.body || '';
+        const meta = resolveNotificationMeta('PUSH_EVENT', title, body);
+
+        const newItem: NotificationItem = {
+          id: 'push_action_' + Date.now(),
+          title,
+          message: body,
+          event_type: 'PUSH_EVENT',
+          is_read: false,
+          created_at: 'Just now',
+          target_roles: meta.target_roles,
+          category: meta.category
+        };
+        setNotifications(prev => [newItem, ...prev]);
+        setActiveToast(newItem);
+      });
+
       return () => {
         regListener.then(handle => handle.remove()).catch(() => {});
         errListener.then(handle => handle.remove()).catch(() => {});
         pushListener.then(handle => handle.remove()).catch(() => {});
+        actionListener.then(handle => handle.remove()).catch(() => {});
       };
     }
   }, [currentUser?.role_name]);
@@ -512,6 +557,24 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
     } catch (e) {
       console.warn('Notification broadcast notice:', e);
+    }
+
+    // Dispatch FCM push notification to mobile devices via /api/send-fcm
+    try {
+      fetch('/api/send-fcm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: item.title,
+          message: item.message,
+          category: newItem.category,
+          order_id: newItem.order_id,
+          target_roles: newItem.target_roles,
+          brand_name: newItem.brand_name
+        })
+      }).catch(err => console.warn('[FCM] /api/send-fcm dispatch notice:', err));
+    } catch (e) {
+      // non-fatal
     }
   };
 

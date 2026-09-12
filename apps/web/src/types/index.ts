@@ -214,6 +214,8 @@ export interface User {
   active?: boolean;
   permissions?: PermissionControl;
   assigned_segment?: SegmentType | 'ALL';
+  fcm_token?: string;
+  brand_scope?: string;
 }
 
 export type SegmentType = 'FMCG' | 'FMCD' | 'COMPANY';
