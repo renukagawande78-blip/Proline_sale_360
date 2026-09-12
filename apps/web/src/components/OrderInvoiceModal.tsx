@@ -82,10 +82,17 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
     if (!order.items || order.items.length === 0) {
       (async () => {
         try {
+          let targetOrderId = (order.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.id)) ? order.id : null;
+          if (!targetOrderId && order.order_number) {
+            const { data: ord } = await supabase.from('orders').select('id').eq('order_number', order.order_number).maybeSingle();
+            if (ord?.id) targetOrderId = ord.id;
+          }
+          if (!targetOrderId) return;
+
           const { data: itemsData } = await supabase
             .from('order_items')
             .select('*, products(id, product_name, product_code, mrp_price, unit_price, pcs_per_box)')
-            .eq('order_id', order.id);
+            .eq('order_id', targetOrderId);
           if (itemsData && itemsData.length > 0) {
             const mapped = itemsData.map((it: any) => ({
               ...it,
