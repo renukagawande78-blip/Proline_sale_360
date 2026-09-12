@@ -240,7 +240,11 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
             <button
               type="button"
-              onClick={() => setDispatchFilter('cleared')}
+              onClick={() => {
+                setDispatchFilter('cleared');
+                setDeliveryModeFilter('ALL');
+                setSelectedZoneFilter('ALL');
+              }}
               style={{
                 fontSize: '0.75rem',
                 fontWeight: 800,
@@ -256,7 +260,11 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setDispatchFilter('awaiting_billing')}
+              onClick={() => {
+                setDispatchFilter('awaiting_billing');
+                setDeliveryModeFilter('ALL');
+                setSelectedZoneFilter('ALL');
+              }}
               style={{
                 padding: '0.4rem 0.85rem',
                 borderRadius: 8,
@@ -688,17 +696,41 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
           };
 
           if (filteredOrders.length === 0) {
+            const hasPoolOrders = currentPoolOrders.length > 0;
             return (
               <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#94a3b8' }}>
                 <Truck size={36} color="#64748b" style={{ marginBottom: '0.75rem' }} />
                 <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: 4 }}>
                   No Orders Found
                 </h3>
-                <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                  {dispatchFilter === 'cleared'
-                    ? 'No orders matching the selected delivery mode or zone are cleared for dispatch.'
-                    : 'No orders matching the selected delivery mode or zone are awaiting Stage 4 billing.'}
+                <p style={{ fontSize: '0.8rem', color: '#64748b', maxWidth: 480, margin: '0 auto 1rem' }}>
+                  {hasPoolOrders
+                    ? `There are ${currentPoolOrders.length} order(s) in this queue, but none match the active delivery mode ("${deliveryModeFilter}") or zone filter.`
+                    : dispatchFilter === 'cleared'
+                    ? 'No orders are currently cleared for dispatch. When bill details are issued in Accounts & Billing, orders immediately move here.'
+                    : 'No orders are currently awaiting Stage 4 billing.'}
                 </p>
+                {hasPoolOrders && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryModeFilter('ALL');
+                      setSelectedZoneFilter('ALL');
+                    }}
+                    style={{
+                      background: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid #38bdf8',
+                      color: '#38bdf8',
+                      padding: '0.45rem 1rem',
+                      borderRadius: 8,
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Show All Delivery Modes & Zones ({currentPoolOrders.length} Orders)
+                  </button>
+                )}
               </div>
             );
           }

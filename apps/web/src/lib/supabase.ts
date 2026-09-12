@@ -2176,7 +2176,7 @@ export const updateOrderAccountsApprovalInSupabase = async (
     if (accountsData.invoice_date !== undefined) payload.invoice_date = accountsData.invoice_date;
     if (accountsData.invoice_amount !== undefined) payload.invoice_amount = accountsData.invoice_amount;
     if (accountsData.credit_days !== undefined) payload.credit_days = accountsData.credit_days;
-    if (accountsData.billing_total_qty !== undefined) payload.billing_total_qty = accountsData.billing_total_qty;
+    // NOTE: billing_total_qty is stored in remarks metadata via dispatchMeta, not as a separate database column
 
     // Collect dispatch metadata if provided so it survives on the order
     const dispatchMeta: Record<string, any> = {};
@@ -2198,7 +2198,11 @@ export const updateOrderAccountsApprovalInSupabase = async (
         : cleanRemarks;
     }
 
-    const { error } = await supabase.from('orders').update(payload).eq('id', orderId);
+    let { error } = await supabase.from('orders').update(payload).eq('id', orderId);
+    if (error && accountsData.order_number) {
+      const fb = await supabase.from('orders').update(payload).eq('order_number', accountsData.order_number);
+      if (!fb.error) error = null;
+    }
     if (error) {
       console.error('Supabase updateOrderAccountsApproval error:', error.message);
       return { success: false, error: error.message };

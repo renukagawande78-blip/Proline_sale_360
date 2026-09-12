@@ -1228,8 +1228,8 @@ const MainLayout: React.FC = () => {
       ...item,
       issued_qty_pcs: Math.max(0, Math.min(item.total_qty_pcs || 0, billedQtyByItem[item.id] || 0))
     }));
-    setOrders(prev => prev.map(o => o.id === orderId ? {
-      ...o,
+    const updatedOrder: Order = {
+      ...order,
       status: 'BILLED',
       invoice_number: invoiceNumber,
       invoice_date: invoiceDate,
@@ -1239,9 +1239,19 @@ const MainLayout: React.FC = () => {
       credit_days: creditDays,
       remarks: remark,
       items: updatedItems
-    } : o));
+    };
+
+    setOrders(prev => {
+      const next = prev.map(o => (o.id === orderId || o.order_number === order.order_number) ? updatedOrder : o);
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     updateOrderAccountsApprovalInSupabase(orderId, {
       status: 'BILLED',
+      order_number: order.order_number,
       invoice_number: invoiceNumber,
       invoice_date: invoiceDate,
       invoice_amount: invoiceAmount,
@@ -1249,7 +1259,13 @@ const MainLayout: React.FC = () => {
       credit_days: creditDays,
       remarks: remark,
       order_history: order.reattempt_delivery ? [...(order.order_history || []), { id: generateUuid(), order_id: orderId, action: 'REATTEMPT_INVOICE_REVIEWED', performed_by: currentUser?.full_name || 'Billing', performed_at: new Date().toISOString(), remarks: remark || 'Invoice reviewed for delivery reattempt', details: { invoice_number: invoiceNumber, invoice_amount: invoiceAmount } }] : order.order_history
+    }).then(res => {
+      if (!res.success) {
+        console.error('Failed to update accounts approval in Supabase:', res.error);
+      }
+      broadcastOrderSync(order.order_number);
     });
+
     updatedItems.forEach(item => { void saveOrderItemToSupabase(item); });
   };
 
