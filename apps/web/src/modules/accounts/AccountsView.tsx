@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Receipt, DollarSign, CheckCircle2, X, Truck } from 'lucide-react';
+import { Receipt, DollarSign, CheckCircle2, X, Truck, FileSpreadsheet } from 'lucide-react';
 import { Order, Agency } from '../../types';
 import { useNotifications } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import { checkIsSuperAdmin, isCompanyAllowedForUser } from '../../lib/supabase';
 import { UpdatePartyBalanceModal } from '../../components/UpdatePartyBalanceModal';
+import { exportOrderProductSheet } from '../../utils/orderExcelExport';
 
 interface AccountsViewProps {
   orders: Order[];
@@ -371,13 +372,36 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       {!isBilled ? (
-                        <button 
-                          className="btn btn-primary" 
-                          onClick={() => handleOpenInvoiceModal(order)}
-                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-                        >
-                          <Receipt size={14} /> {order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <button 
+                            className="btn btn-primary" 
+                            onClick={() => handleOpenInvoiceModal(order)}
+                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                          >
+                            <Receipt size={14} /> {order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => exportOrderProductSheet(order)}
+                            style={{
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              border: '1px solid #10b981',
+                              color: '#34d399',
+                              padding: '0.35rem 0.65rem',
+                              borderRadius: 6,
+                              fontSize: '0.75rem',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={`Download ${order.order_number}.xlsx (Product list for spreadsheet/ERP upload)`}
+                          >
+                            <FileSpreadsheet size={14} /> Excel
+                          </button>
+                        </div>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <button
@@ -395,6 +419,27 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                             title="Edit Invoice details on this order"
                           >
                             <Receipt size={14} /> Edit Invoice
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => exportOrderProductSheet(order)}
+                            style={{
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              border: '1px solid #10b981',
+                              color: '#34d399',
+                              padding: '0.35rem 0.65rem',
+                              borderRadius: 6,
+                              fontSize: '0.75rem',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={`Download ${order.order_number}.xlsx (Product list)`}
+                          >
+                            <FileSpreadsheet size={14} /> Excel
                           </button>
                         </div>
                       )}
@@ -607,11 +652,34 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
               <textarea rows={2} value={invoiceRemark} onChange={event => setInvoiceRemark(event.target.value)} placeholder="Example: 4 of 5 units issued; 1 pending stock." style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', resize: 'vertical' }} />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button className="btn btn-outline" onClick={() => setSelectedOrderForInvoice(null)}>Cancel</button>
-              <button className="btn btn-success" onClick={handleConfirmInvoice} style={{ fontWeight: 800 }}>
-                <CheckCircle2 size={16} /> {selectedOrderForInvoice.invoice_number ? 'Update & Save Invoice' : 'Confirm Bill & Lock Credit'}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => selectedOrderForInvoice && exportOrderProductSheet(selectedOrderForInvoice)}
+                style={{
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid #10b981',
+                  color: '#34d399',
+                  padding: '0.45rem 0.9rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  cursor: 'pointer'
+                }}
+                title={`Download ${selectedOrderForInvoice.order_number}.xlsx (Ordered Products Sheet)`}
+              >
+                <FileSpreadsheet size={16} /> Download Excel Product Sheet
               </button>
+
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button className="btn btn-outline" onClick={() => setSelectedOrderForInvoice(null)}>Cancel</button>
+                <button className="btn btn-success" onClick={handleConfirmInvoice} style={{ fontWeight: 800 }}>
+                  <CheckCircle2 size={16} /> {selectedOrderForInvoice.invoice_number ? 'Update & Save Invoice' : 'Confirm Bill & Lock Credit'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

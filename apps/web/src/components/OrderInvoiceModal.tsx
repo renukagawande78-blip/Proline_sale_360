@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Printer, CheckCircle, SlidersHorizontal, FileText, Truck, Share2, Mail, MessageCircle, Download, Check, Link2 } from 'lucide-react';
+import { X, Printer, CheckCircle, SlidersHorizontal, FileText, Truck, Share2, Mail, MessageCircle, Download, Check, Link2, FileSpreadsheet } from 'lucide-react';
 import { Order, Agency } from '../types';
 import { fetchAgenciesFromSupabaseTable, MOCK_AGENCIES, supabase } from '../lib/supabase';
+import { exportOrderProductSheet } from '../utils/orderExcelExport';
 
 interface OrderInvoiceModalProps {
   order: Order | null;
@@ -469,6 +470,28 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                 }}
               >
                 <Download size={15} /> Download PDF
+              </button>
+
+              {/* Download Excel Product Sheet */}
+              <button 
+                type="button"
+                onClick={() => exportOrderProductSheet(order)}
+                title={`Download ${order.order_number}.xlsx (Product Sheet)`}
+                style={{ 
+                  padding: '0.42rem 0.85rem', 
+                  fontSize: '0.78rem', 
+                  gap: '0.4rem', 
+                  fontWeight: 800, 
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  color: '#34d399',
+                  border: '1px solid #10b981',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <FileSpreadsheet size={15} /> Download Excel
               </button>
 
               {/* Print Button */}
