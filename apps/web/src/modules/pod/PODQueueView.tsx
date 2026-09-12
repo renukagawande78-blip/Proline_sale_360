@@ -11,11 +11,12 @@ interface PODQueueViewProps {
 }
 
 export const PODQueueView: React.FC<PODQueueViewProps> = ({ orders, onVerifyPOD, onResolveQuery }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const canViewAll = checkIsSuperAdmin(currentUser);
   const isSuperAdminUser = checkIsSuperAdmin(currentUser);
   const isBillingUser = currentUser?.role_name === 'BILLING' || currentUser?.role_name === 'ACCOUNTS';
   const isSalesAdminUser = currentUser?.role_name === 'SALES_ADMIN';
+  const canVerifyPOD = hasPermission('pod_verification');
 
   const scopedOrders = orders.filter(order => canViewAll || isCompanyAllowedForUser(order.company_name, currentUser?.company_handle));
   const pending = scopedOrders.filter(order => ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) && !order.pod_status);
@@ -67,13 +68,13 @@ export const PODQueueView: React.FC<PODQueueViewProps> = ({ orders, onVerifyPOD,
                 </td>
                 <td>
                   {type === 'PENDING' ? (
-                    isBillingUser || isSuperAdminUser ? (
+                    canVerifyPOD ? (
                       <button className="btn btn-success" onClick={() => onVerifyPOD(order)}>
                         <FileCheck2 size={14} /> Verify POD
                       </button>
                     ) : (
-                      <span style={{ color: '#fbbf24', fontSize: '0.72rem', fontWeight: 700 }}>
-                        Awaiting Billing
+                      <span style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 600 }}>
+                        —
                       </span>
                     )
                   ) : type === 'ISSUE' ? (

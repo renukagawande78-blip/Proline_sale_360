@@ -76,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'accounts', label: 'Accounts & Billing', icon: Receipt, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'ACCOUNTS', 'BILLING'] },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, fallbackRoles: ['ALL'] },
     { id: 'returns', label: 'Returns & Damage', icon: PackageX, fallbackRoles: ['ALL'] },
-    { id: 'pod', label: 'POD Queue', icon: FileCheck2, fallbackRoles: ['SUPER_ADMIN', 'BILLING', 'ACCOUNTS', 'SALES_ADMIN'] },
+    { id: 'pod', label: 'POD Queue', icon: FileCheck2, fallbackRoles: ['SUPER_ADMIN', 'BILLING', 'ACCOUNTS', 'SALES_ADMIN', 'DISPATCH_MANAGER'] },
     { id: 'tracker', label: 'Order Tracker', icon: ScanSearch, fallbackRoles: ['ALL'] },
     { id: 'masters', label: 'Master Data', icon: Building2, permissionKey: 'party_view', fallbackRoles: ['ALL'] }
   ];

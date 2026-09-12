@@ -66,6 +66,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const showLegacyTableActions = false;
 
   const canAddOrder = (hasPermission('add_order') || hasPermission('order_entry')) && !isBillingOrAccounts && !isDispatchUser;
+  const canVerifyPOD = hasPermission('pod_verification');
 
   // Active tab for filtering
   type Stage2Tab = 'ALL' | 'NEW' | 'REVIEW_REQUIRED' | 'APPROVAL_NEEDED' | 'SUPER_ADMIN_APPROVED' | 'HARSHAD_APPROVED' | 'ON_HOLD' | 'REJECTED' | 'COMPLETED';
@@ -948,7 +949,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         >
                           <FileText size={13} /> Details
                         </button>
-                        {(isBillingOrAccounts || isSuperAdmin) && onOpenPODModal && ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) && !order.pod_status && (
+                        {canVerifyPOD && onOpenPODModal && ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) && !order.pod_status && (
                           <button
                             onClick={event => {
                               event.stopPropagation();
@@ -1362,7 +1363,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               </button>
             )}
 
-            {(isBillingOrAccounts || isSuperAdmin) && (selectedOrder.status === 'OUT_FOR_DELIVERY' || selectedOrder.status === 'DISPATCHED') && onOpenPODModal && (
+            {canVerifyPOD && (selectedOrder.status === 'OUT_FOR_DELIVERY' || selectedOrder.status === 'DISPATCHED') && onOpenPODModal && (
               <button
                 type="button"
                 onClick={() => onOpenPODModal(selectedOrder)}
