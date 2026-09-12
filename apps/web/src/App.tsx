@@ -240,7 +240,8 @@ const MainLayout: React.FC = () => {
             title: `New Order Received: ${newOrd.order_number || 'New Order'}`,
             message: `Order submitted for approval (${newOrd.total_box_qty || 0} Boxes, ${newOrd.total_qty_pcs || 0} PCS).`,
             event_type: 'ORDER_SUBMITTED',
-            order_id: newOrd.id
+            order_id: newOrd.id,
+            brand_name: newOrd.company_name
           });
         }
       })
@@ -630,12 +631,13 @@ const MainLayout: React.FC = () => {
     setSelectedOrderForInvoice(orderData);
 
     addNotification({
-      title: isEditing ? `Order Modified: ${orderData.order_number}` : `New Order Created: ${orderData.order_number}`,
+      title: isEditing ? `Order Modified: ${orderData.order_number}` : `New Order Received: ${orderData.order_number}`,
       message: isEditing 
         ? `Order updated before approval by ${orderData.salesperson_name}.`
         : `B2B Order for ${orderData.agency_name} (${orderData.total_qty_pcs} PCS). Created by ${orderData.salesperson_name}.`,
       event_type: isEditing ? 'ORDER_HELD' : 'ORDER_SUBMITTED',
-      order_id: orderData.id
+      order_id: orderData.id,
+      brand_name: orderData.company_name
     });
   };
 
@@ -924,17 +926,18 @@ const MainLayout: React.FC = () => {
       order_history: podHistoryEntry ? [...(o.order_history || []), podHistoryEntry] : o.order_history
     } : o));
     if (podStatus === 'CLEAN') {
-      updateOrderStatusInSupabase(orderId, 'COMPLETED', 'POD verified with no issue');
+      updateOrderStatusInSupabase(orderId, 'COMPLETED', 'POD verified with no issue <!--POD_STATUS:CLEAN-->');
       if (target) {
         addNotification({
           title: `✅ POD Verified & Order Completed: ${target.order_number}`,
-          message: `Shipment delivered & verified with store stamp by Billing for ${target.agency_name}. Salesperson (${target.salesperson_name}) target credited.`,
+          message: `Shipment delivered & verified with store stamp for ${target.agency_name}. Order status marked COMPLETED.`,
           event_type: 'POD_VERIFIED',
           order_id: orderId,
-          target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'ACCOUNTS', 'BILLING', 'SUPER_ADMIN'],
+          target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'DISPATCH_MANAGER', 'ACCOUNTS', 'BILLING', 'SUPER_ADMIN'],
           category: 'POD',
           brand_name: target.company_name
         });
+        broadcastOrderSync(target.order_number);
       }
     } else {
       updateOrderAccountsApprovalInSupabase(orderId, {
@@ -948,14 +951,15 @@ const MainLayout: React.FC = () => {
       });
       if (target) {
         addNotification({
-          title: `🚨 POD Query Raised by Billing: ${target.order_number}`,
+          title: `🚨 POD Query Raised: ${target.order_number}`,
           message: `Delivery exception reported by Billing (${verifier}): [${issueType || 'ISSUE'}] ${details || 'Store stamp missing / exception'}. Sales Admin review required.`,
           event_type: 'POD_QUERY_RAISED',
           order_id: orderId,
-          target_roles: ['SALES_ADMIN', 'SUPER_ADMIN'],
+          target_roles: ['SALES_ADMIN', 'SUPER_ADMIN', 'DISPATCH_MANAGER'],
           category: 'POD',
           brand_name: target.company_name
         });
+        broadcastOrderSync(target.order_number);
       }
     }
   };
@@ -1188,8 +1192,26 @@ const MainLayout: React.FC = () => {
   };
 
   const handleUpdateOrderStatus = (orderId: string, newStatus: any) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-    updateOrderStatusInSupabase(orderId, newStatus);
+    const isCompleted = newStatus === 'COMPLETED' || newStatus === 'DELIVERED';
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          status: newStatus,
+          pod_status: isCompleted ? 'CLEAN' : o.pod_status
+        };
+      }
+      return o;
+    }));
+    updateOrderStatusInSupabase(
+      orderId, 
+      newStatus, 
+      isCompleted ? 'Order delivered & marked completed <!--POD_STATUS:CLEAN-->' : undefined
+    );
+    const target = orders.find(o => o.id === orderId);
+    if (target) {
+      broadcastOrderSync(target.order_number);
+    }
   };
 
   const handleRequestAccountsApproval = (orderId: string, message: string) => {

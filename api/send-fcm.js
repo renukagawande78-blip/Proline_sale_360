@@ -170,6 +170,23 @@ module.exports = async function handler(req, res) {
       console.warn('Notice while querying users for tokens in send-fcm:', dbErr);
     }
 
+    const dedupKey = `${body.order_id || ''}_${dataPayload.event_type}_${alertTitle.slice(0, 35)}`;
+    const nowTimestamp = Date.now();
+    if (!global.recentFcmAlerts) {
+      global.recentFcmAlerts = new Map();
+    }
+    const lastSentAt = global.recentFcmAlerts.get(dedupKey);
+    if (lastSentAt && (nowTimestamp - lastSentAt) < 20000) {
+      console.log(`[FCM] Suppressed duplicate push within 20s: ${dedupKey}`);
+      return res.status(200).json({ success: true, suppressed: true, reason: 'duplicate_suppressed' });
+    }
+    global.recentFcmAlerts.set(dedupKey, nowTimestamp);
+    if (global.recentFcmAlerts.size > 200) {
+      for (const [k, t] of global.recentFcmAlerts) {
+        if (nowTimestamp - t > 60000) global.recentFcmAlerts.delete(k);
+      }
+    }
+
     const sendResults = [];
 
     // 1. Send to all registered user tokens
@@ -182,12 +199,14 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // 2. Also send to topic for any devices subscribed to topic
+    // 2. Only send to topic if explicit topic provided or no specific tokens were found
     let topicResult = null;
-    try {
-      topicResult = await sendSingleMessage(accessToken, sa.project_id, { topic: topic || 'proline_orders' }, alertTitle, alertBody, dataPayload);
-    } catch (tErr) {
-      topicResult = { error: tErr.message };
+    if (topic || recipientTokens.size === 0) {
+      try {
+        topicResult = await sendSingleMessage(accessToken, sa.project_id, { topic: topic || 'proline_orders' }, alertTitle, alertBody, dataPayload);
+      } catch (tErr) {
+        topicResult = { error: tErr.message };
+      }
     }
 
     return res.status(200).json({

@@ -336,6 +336,11 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
   // Stage 2 action label per order/role
   const getStage2Action = (order: Order) => {
+    if (order.status === 'COMPLETED' || order.status === 'DELIVERED') return { label: 'Delivered & Completed', color: '#34d399', bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.3)' };
+    if (order.status === 'OUT_FOR_DELIVERY') return { label: 'Out for Delivery', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.3)' };
+    if (order.status === 'READY_FOR_PICKUP' || order.status === 'READY_FOR_SELF_PICKUP') return { label: 'Ready for Pickup', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.3)' };
+    if (order.status === 'DISPATCHED') return { label: 'Dispatched', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.3)' };
+    if (order.status === 'BILLED' || order.status === 'INVOICED') return { label: 'Billed / Stage 4 Cleared', color: '#c084fc', bg: 'rgba(192,132,252,0.12)', border: 'rgba(192,132,252,0.3)' };
     if (order.status === 'SUBMITTED' && !order.sales_admin_approved) return { label: 'Review Required', color: '#fb923c', bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.35)' };
     if (order.status === 'SUBMITTED' && order.sales_admin_approved) return { label: 'Review Required', color: '#fb923c', bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.35)' };
     if (order.status === 'SALES_ADMIN_APPROVED' && order.superadmin_approved) return { label: 'SUPER ADMIN APPROVED', color: '#34d399', bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.3)' };
@@ -348,11 +353,19 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
   const getStatusBadge = (order: Order) => {
     if (order.reattempt_delivery) return { label: '🔄 REATTEMPT DELIVERY', color: '#f59e0b', bg: 'rgba(245,158,11,0.18)', border: 'rgba(245,158,11,0.45)' };
+    if (order.status === 'COMPLETED' || order.status === 'DELIVERED') return { label: '✅ DELIVERED', color: '#34d399', bg: 'rgba(52,211,153,0.15)', border: 'rgba(52,211,153,0.35)' };
+    if (order.status === 'OUT_FOR_DELIVERY') return { label: '🚚 OUT FOR DELIVERY', color: '#38bdf8', bg: 'rgba(56,189,248,0.15)', border: 'rgba(56,189,248,0.35)' };
+    if (order.status === 'READY_FOR_PICKUP' || order.status === 'READY_FOR_SELF_PICKUP') return { label: '📦 READY FOR PICKUP', color: '#38bdf8', bg: 'rgba(56,189,248,0.15)', border: 'rgba(56,189,248,0.35)' };
+    if (order.status === 'DISPATCHED') return { label: '🚚 DISPATCHED', color: '#38bdf8', bg: 'rgba(56,189,248,0.15)', border: 'rgba(56,189,248,0.35)' };
+    if (order.status === 'BILLED' || order.status === 'INVOICED') return { label: '🧾 BILLED', color: '#c084fc', bg: 'rgba(192,132,252,0.15)', border: 'rgba(192,132,252,0.35)' };
+    if (order.status === 'WAIT_FOR_STOCK') return { label: '⏳ WAIT FOR STOCK', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.35)' };
+    if (order.status === 'POD_ISSUE_RAISED') return { label: '🚨 POD EXCEPTION', color: '#f43f5e', bg: 'rgba(244,63,94,0.15)', border: 'rgba(244,63,94,0.35)' };
     if (order.status === 'SUBMITTED') return { label: 'NEW', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.3)' };
     if (order.status === 'SALES_ADMIN_APPROVED') return { label: 'ACCOUNTS PENDING', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' };
     if (order.status === 'APPROVED') return { label: 'SUPER ADMIN APPROVED', color: '#34d399', bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.3)' };
     if (order.status === 'HELD') return { label: 'ON HOLD', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)' };
     if (order.status === 'REJECTED') return { label: 'REJECTED', color: '#f43f5e', bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.3)' };
+    if (order.status === 'CANCELLED') return { label: 'CANCELLED', color: '#64748b', bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)' };
     return { label: order.status, color: '#94a3b8', bg: '#1e293b', border: '#334155' };
   };
 

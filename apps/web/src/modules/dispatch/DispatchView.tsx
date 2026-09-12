@@ -16,7 +16,8 @@ import {
   ChevronDown,
   ChevronRight,
   Filter,
-  Boxes
+  Boxes,
+  FileCheck2
 } from 'lucide-react';
 import { Order, OrderStatus, Agency } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -213,7 +214,10 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
       title: `✅ Order Delivered & Completed: ${order.order_number}`,
       message: `Shipment successfully delivered to ${order.agency_name}. Order status marked COMPLETED.`,
       event_type: 'ORDER_DELIVERED',
-      order_id: order.id
+      order_id: order.id,
+      brand_name: order.company_name,
+      target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'DISPATCH_MANAGER', 'ACCOUNTS', 'BILLING', 'SUPER_ADMIN'],
+      category: 'POD'
     });
   };
 
@@ -667,21 +671,37 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                     </button>
                   )}
 
-                  {order.status === 'OUT_FOR_DELIVERY' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                      <button
-                        className="btn btn-outline"
-                        onClick={() => onOpenDispatchModal(order)}
-                        style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: 800 }}
-                      >
-                        <Truck size={13} /> {order.driver_name ? 'Edit Driver Details' : 'Add Driver Details'}
-                      </button>
-                      <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700 }}>Sent to Sales Admin for POD verification</span>
+                  {(order.status === 'OUT_FOR_DELIVERY' || order.status === 'DISPATCHED') && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'center' }}>
+                        <button
+                          className="btn btn-success"
+                          onClick={() => handleMarkDelivered(order)}
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                          title="Mark order delivered and completed"
+                        >
+                          <CheckCircle size={13} /> Mark Delivered
+                        </button>
+                        {onOpenPODModal && (
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => onOpenPODModal(order)}
+                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                            title="Verify POD document"
+                          >
+                            <FileCheck2 size={13} /> Verify POD
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-outline"
+                          onClick={() => onOpenDispatchModal(order)}
+                          style={{ borderColor: '#38bdf8', color: '#38bdf8', padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: 800 }}
+                          title="View or edit vehicle / driver details"
+                        >
+                          <Truck size={13} /> {order.driver_name ? 'Driver Info' : 'Add Driver'}
+                        </button>
+                      </div>
                     </div>
-                  )}
-
-                  {order.status === 'DISPATCHED' && (
-                    <span style={{ fontSize: '0.725rem', color: '#38bdf8', fontWeight: 800 }}>Sent to Sales Admin for POD verification</span>
                   )}
 
                   {/* Step 6: Completed */}

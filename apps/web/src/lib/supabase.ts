@@ -2052,7 +2052,14 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         grn_date: o.grn_date || latestGrnEntry?.details?.grn_date || undefined,
         grn_value: o.grn_value == null ? latestGrnEntry?.details?.grn_value : Number(o.grn_value),
         grn_remark: o.grn_remark || latestGrnEntry?.details?.grn_remark || undefined,
-        pod_status: o.pod_status || (o.status === 'POD_ISSUE_RAISED' ? 'ISSUE_RAISED' : undefined),
+        pod_status: (() => {
+          if (o.pod_status) return o.pod_status;
+          if (o.status === 'POD_ISSUE_RAISED') return 'ISSUE_RAISED';
+          if (o.status === 'COMPLETED' || o.status === 'DELIVERED') return 'CLEAN';
+          const podMatch = (o.remarks || '').match(/<!--POD_STATUS:(.*?)-->/);
+          if (podMatch && podMatch[1]) return podMatch[1].trim();
+          return undefined;
+        })(),
         pod_issue_type: o.pod_issue_type || latestPodQuery?.details?.issue_type,
         pod_issue_details: o.pod_issue_details || latestPodQuery?.details?.message,
         pod_query_raised_by: o.pod_query_raised_by || latestPodQuery?.details?.raised_by,
@@ -2062,8 +2069,18 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
           .replace(/<!--ITEMS_DATA:.*?-->/g, '')
           .replace(/<!--AGENCY_INFO:.*?-->/g, '')
           .replace(/<!--REATTEMPT:.*?-->/g, '')
+          .replace(/<!--POD_STATUS:.*?-->/g, '')
           .trim(),
-        delivery_type: 'F.O.R',
+        delivery_type: o.delivery_type || latestDispatchDetails.dispatch_type || (() => {
+          const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
+          if (match && match[1]) {
+            try {
+              const parsed = JSON.parse(match[1]);
+              if (parsed.dispatch_type) return parsed.dispatch_type;
+            } catch {}
+          }
+          return 'F.O.R';
+        })(),
         items: (() => {
           const loadedItems = itemsMap[o.id] || itemsMap[o.order_number] || [];
           if ((!loadedItems || loadedItems.length === 0) && embeddedItemsInfo && embeddedItemsInfo.length > 0) {
@@ -2294,9 +2311,12 @@ export const updateOrderStatusInSupabase = async (
         })}-->`;
       }
 
+      const podCleanTag = (status === 'COMPLETED' || status === 'DELIVERED') ? ['<!--POD_STATUS:CLEAN-->'] : [];
+
       const allTags = Array.from(new Set([
         ...existingTags, 
         ...newTags, 
+        ...podCleanTag,
         ...(constructedAgencyTag ? [constructedAgencyTag] : [])
       ])).join(' ');
 

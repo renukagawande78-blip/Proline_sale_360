@@ -26,12 +26,6 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
   const handleConfirm = () => {
     if (verificationType === 'CLEAN') {
       onConfirmPOD(order.id, 'CLEAN');
-      addNotification({
-        title: `✅ POD Verified Clean: ${order.order_number}`,
-        message: `Delivery confirmed with no issues for ${order.agency_name}. Order marked COMPLETED.`,
-        event_type: 'POD_CLEAN',
-        order_id: order.id
-      });
     } else {
       const issueDescriptions: Record<string, string> = {
         SHORTAGE: 'Shortage reported — Discrepancy in Delivered Quantity',
@@ -41,15 +35,6 @@ export const PODVerificationModal: React.FC<PODVerificationModalProps> = ({
       };
       const note = details.trim() || issueDescriptions[issueType] || 'Delivery exception reported during drop';
       onConfirmPOD(order.id, 'ISSUE_RAISED', issueType, note);
-      addNotification({
-        title: `⚠️ Delivery Exception Raised by Billing: ${order.order_number}`,
-        message: `Billing reported Delivery Issue (${issueType}) for ${order.agency_name}. Forwarded to Sales Admin for resolution. Remarks: "${note}"`,
-        event_type: 'POD_ISSUE_RAISED',
-        order_id: order.id,
-        target_roles: ['SALES_ADMIN', 'SUPER_ADMIN'],
-        category: 'POD',
-        brand_name: order.company_name
-      });
     }
     onClose();
   };

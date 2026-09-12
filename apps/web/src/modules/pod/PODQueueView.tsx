@@ -19,9 +19,16 @@ export const PODQueueView: React.FC<PODQueueViewProps> = ({ orders, onVerifyPOD,
   const canVerifyPOD = hasPermission('pod_verification');
 
   const scopedOrders = orders.filter(order => canViewAll || isCompanyAllowedForUser(order.company_name, currentUser?.company_handle));
-  const pending = scopedOrders.filter(order => ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) && !order.pod_status);
-  const verified = scopedOrders.filter(order => order.pod_status === 'CLEAN');
+  const verified = scopedOrders.filter(order => order.pod_status === 'CLEAN' || order.status === 'COMPLETED' || order.status === 'DELIVERED');
   const exceptions = scopedOrders.filter(order => order.pod_status === 'ISSUE_RAISED' || order.status === 'POD_ISSUE_RAISED');
+  const pending = scopedOrders.filter(order => 
+    ['DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'].includes(order.status) && 
+    order.status !== 'COMPLETED' && 
+    order.status !== 'DELIVERED' && 
+    order.pod_status !== 'CLEAN' && 
+    order.pod_status !== 'ISSUE_RAISED' && 
+    order.status !== 'POD_ISSUE_RAISED'
+  );
 
   const renderTable = (rows: Order[], type: 'PENDING' | 'VERIFIED' | 'ISSUE') => (
     <div className="data-table-container" style={{ marginBottom: '1.25rem' }}>

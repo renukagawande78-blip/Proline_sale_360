@@ -19,9 +19,9 @@ export const resolveNotificationMeta = (
     return { target_roles: ['SUPER_ADMIN', 'SALES_ADMIN', 'DISPATCH_MANAGER'], category: 'POD' };
   }
 
-  // 2. POD Verified / Delivered -> Salesperson, Sales Admin, Accounts, Super Admin, ASM
+  // 2. POD Verified / Delivered -> Salesperson, Sales Admin, Accounts, Billing, Dispatch Manager, Super Admin, ASM
   if (upper.includes('POD_VERIFIED') || upper.includes('DELIVERED') || upper.includes('POD VERIF') || upper.includes('ORDER_COMPLETED')) {
-    return { target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'ACCOUNTS', 'SUPER_ADMIN', 'AREA_SALES_MANAGER'], category: 'POD' };
+    return { target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'DISPATCH_MANAGER', 'ACCOUNTS', 'BILLING', 'SUPER_ADMIN', 'AREA_SALES_MANAGER'], category: 'POD' };
   }
 
   // 3. Wait for Stock -> Sales Person, Area Sales Manager, Sales Admin, Super Admin
@@ -335,6 +335,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } catch {}
   }, [notifications]);
 
+  const clientSessionIdRef = useRef<string>('c_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6));
   const recentAlertsRef = useRef<Map<string, number>>(new Map());
 
   // Realtime Broadcast Listener for instant cross-device notifications across all users
@@ -346,14 +347,23 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const item = eventPayload?.payload;
         if (!item || !item.id) return;
 
-        // Deduplicate identical alerts within 60s
-        const alertKey = `${item.title}_${item.message}_${item.order_id || ''}`;
+        // Ignore echo of own broadcast from current browser session
+        if (item.sender_client_id && item.sender_client_id === clientSessionIdRef.current) {
+          return;
+        }
+
+        // Enhanced Deduplication: clean title + order_id and order_id + event_type within 30s
+        const cleanTitle = (item.title || '').replace(/[^\w\s-]/g, '').trim().toLowerCase();
+        const alertKey = `${cleanTitle}_${item.order_id || ''}`;
+        const orderEventKey = item.order_id ? `${item.order_id}_${item.event_type || ''}` : null;
         const now = Date.now();
         const lastAlertTime = recentAlertsRef.current.get(alertKey);
-        if (lastAlertTime && (now - lastAlertTime) < 60000) {
+        const lastOrderTime = orderEventKey ? recentAlertsRef.current.get(orderEventKey) : null;
+        if ((lastAlertTime && (now - lastAlertTime) < 30000) || (lastOrderTime && (now - lastOrderTime) < 30000)) {
           return;
         }
         recentAlertsRef.current.set(alertKey, now);
+        if (orderEventKey) recentAlertsRef.current.set(orderEventKey, now);
 
         setNotifications(prev => {
           if (prev.some(n => n.id === item.id)) return prev;
@@ -439,13 +449,32 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const pushListener = PushNotifications.addListener('pushNotificationReceived', notification => {
         const title = notification.title || 'Proline OMS Alert';
         const body = notification.body || '';
-        const meta = resolveNotificationMeta('PUSH_EVENT', title, body);
+        const data = notification.data || {};
+        const orderId = data.order_id || '';
+        const eventType = data.event_type || 'PUSH_EVENT';
+
+        // Enhanced Deduplication on push received
+        const cleanTitle = (title || '').replace(/[^\w\s-]/g, '').trim().toLowerCase();
+        const alertKey = `${cleanTitle}_${orderId}`;
+        const orderEventKey = orderId ? `${orderId}_${eventType}` : null;
+        const now = Date.now();
+        const lastAlertTime = recentAlertsRef.current.get(alertKey);
+        const lastOrderTime = orderEventKey ? recentAlertsRef.current.get(orderEventKey) : null;
+        if ((lastAlertTime && (now - lastAlertTime) < 30000) || (lastOrderTime && (now - lastOrderTime) < 30000)) {
+          console.log('[Notification] Suppressed duplicate pushNotificationReceived:', alertKey);
+          return;
+        }
+        recentAlertsRef.current.set(alertKey, now);
+        if (orderEventKey) recentAlertsRef.current.set(orderEventKey, now);
+
+        const meta = resolveNotificationMeta(eventType, title, body);
 
         const newItem: NotificationItem = {
           id: 'push_' + Date.now(),
           title,
           message: body,
-          event_type: 'PUSH_EVENT',
+          event_type: eventType,
+          order_id: orderId,
           is_read: false,
           created_at: 'Just now',
           target_roles: meta.target_roles,
@@ -465,13 +494,17 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const notifData = notification.notification;
         const title = notifData.title || 'Proline OMS Alert';
         const body = notifData.body || '';
-        const meta = resolveNotificationMeta('PUSH_EVENT', title, body);
+        const data = notifData.data || {};
+        const orderId = data.order_id || '';
+        const eventType = data.event_type || 'PUSH_EVENT';
+        const meta = resolveNotificationMeta(eventType, title, body);
 
         const newItem: NotificationItem = {
           id: 'push_action_' + Date.now(),
           title,
           message: body,
-          event_type: 'PUSH_EVENT',
+          event_type: eventType,
+          order_id: orderId,
           is_read: false,
           created_at: 'Just now',
           target_roles: meta.target_roles,
@@ -529,15 +562,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const addNotification = (item: Omit<NotificationItem, 'id' | 'created_at' | 'is_read'>) => {
     getAudioContext();
 
-    // Deduplicate: Don't allow identical notifications within 60 seconds
-    const alertKey = `${item.title}_${item.message}_${item.order_id || ''}`;
+    // Enhanced Deduplication: Don't allow duplicate notifications within 30 seconds
+    const cleanTitle = (item.title || '').replace(/[^\w\s-]/g, '').trim().toLowerCase();
+    const alertKey = `${cleanTitle}_${item.order_id || ''}`;
+    const orderEventKey = item.order_id ? `${item.order_id}_${item.event_type || ''}` : null;
     const now = Date.now();
     const lastAlertTime = recentAlertsRef.current.get(alertKey);
-    if (lastAlertTime && (now - lastAlertTime) < 60000) {
-      console.log('[Notification] Suppressed duplicate alert within 60s:', alertKey);
+    const lastOrderTime = orderEventKey ? recentAlertsRef.current.get(orderEventKey) : null;
+    if ((lastAlertTime && (now - lastAlertTime) < 30000) || (lastOrderTime && (now - lastOrderTime) < 30000)) {
+      console.log('[Notification] Suppressed duplicate alert within 30s:', alertKey);
       return;
     }
     recentAlertsRef.current.set(alertKey, now);
+    if (orderEventKey) recentAlertsRef.current.set(orderEventKey, now);
 
     // Resolve target roles & category based on rules
     const meta = resolveNotificationMeta(item.event_type, item.title, item.message, item.brand_name);
@@ -583,7 +620,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       broadcastChannel.send({
         type: 'broadcast',
         event: 'new_notification',
-        payload: newItem
+        payload: {
+          ...newItem,
+          sender_client_id: clientSessionIdRef.current
+        }
       });
     } catch (e) {
       console.warn('Notification broadcast notice:', e);
