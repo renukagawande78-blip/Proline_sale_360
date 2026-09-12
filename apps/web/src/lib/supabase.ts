@@ -1275,17 +1275,16 @@ export const saveAgencyToSupabase = async (agency: Agency): Promise<{ success: b
     // If ID is not a valid existing UUID, check if agency exists by code or name to update instead of creating conflict
     if (!targetId && (agency.agency_code || agency.agency_name)) {
       try {
-        const { data: existing } = await supabase
-          .from('agencies')
-          .select('id')
-          .or(`agency_code.eq."${agency.agency_code}",agency_name.eq."${agency.agency_name}"`)
-          .limit(1);
-
-        if (existing && existing.length > 0) {
-          targetId = existing[0].id;
-        } else {
-          targetId = generateUuid();
+        let existingId: string | null = null;
+        if (agency.agency_code) {
+          const { data } = await supabase.from('agencies').select('id').eq('agency_code', agency.agency_code).limit(1);
+          if (data && data.length > 0) existingId = data[0].id;
         }
+        if (!existingId && agency.agency_name) {
+          const { data } = await supabase.from('agencies').select('id').eq('agency_name', agency.agency_name).limit(1);
+          if (data && data.length > 0) existingId = data[0].id;
+        }
+        targetId = existingId || generateUuid();
       } catch {
         targetId = generateUuid();
       }

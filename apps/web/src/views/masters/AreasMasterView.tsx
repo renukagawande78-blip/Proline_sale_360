@@ -43,6 +43,22 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { BulkImportModal } from '../../components/BulkImportModal';
 
+const getZoneNameFromCode = (codeOrName?: string): string => {
+  if (!codeOrName) return 'City-A';
+  const c = codeOrName.trim().toUpperCase();
+  if (c === 'ZN-CTA' || c === 'CTA') return 'City-A';
+  if (c === 'ZN-CTB' || c === 'CTB') return 'City-B';
+  if (c === 'ZN-CTC' || c === 'CTC') return 'City-C';
+  if (c === 'ZN-CTD' || c === 'CTD') return 'City-D';
+  if (c === 'ZN-CTE' || c === 'CTE') return 'City-E';
+  if (c === 'ZN-UPS' || c === 'UPS') return 'Upper South';
+  if (c === 'ZN-SOU' || c === 'SOU') return 'South';
+  if (c === 'ZN-EAS' || c === 'EAS') return 'East';
+  if (c === 'ZN-NOR' || c === 'NOR') return 'North';
+  if (c === 'ZN-OTH' || c === 'OTH' || c === 'Z' || c === 'OTHER' || c === 'OTHER Z') return 'Other Z';
+  return codeOrName;
+};
+
 interface AreasMasterViewProps {
   agencies?: Agency[];
   searchQuery?: string;
@@ -377,6 +393,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
   const mappingAuditList = useMemo(() => {
     const normRegion = (r?: string) => {
       const s = (r || '').trim().toLowerCase();
+      if (s.includes('out of surat') || s.includes('other') || s.includes('outstation') || s.includes('outside') || s.includes('non-surat') || s === 'z') return 'other';
       if (s.includes('rural') || s.includes('south gujarat')) return 'rural';
       if (s.includes('city') || s.includes('surat')) return 'city';
       return s;
@@ -393,7 +410,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
       if (clean.includes('south') || clean.includes('sou') || clean.includes('znsou')) return 'south';
       if (clean.includes('east') || clean.includes('eas') || clean.includes('zneas')) return 'east';
       if (clean.includes('north') || clean.includes('nor') || clean.includes('znnor')) return 'north';
-      if (clean.includes('other') || clean.includes('oth') || clean.includes('znoth')) return 'other';
+      if (clean.includes('other') || clean.includes('oth') || clean.includes('znoth') || clean === 'z' || clean.includes('outofsurat') || clean.includes('outstation')) return 'other';
       return clean;
     };
 
@@ -421,18 +438,19 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
       if (!agAreaNorm || agAreaNorm === 'n/a' || !matchedArea) {
         // Fallback resolution via canonical zone dictionary
         const resolved = resolveOfficialZone(ag.area_name || ag.city || ag.address, ag.city);
-        if (resolved && resolved.zoneName && resolved.zoneName !== 'Other Z') {
+        if (resolved && resolved.zoneName) {
+          const matchedZoneName = resolved.zoneName === 'Other Z' ? 'Other Z' : resolved.zoneName;
           return {
             agency: ag,
             status: 'MAPPED_OK',
             severity: 'OK' as const,
-            reason: `Cleanly mapped via Area Master to ${resolved.matchedArea} (${resolved.zoneCode || resolved.zoneName})`,
+            reason: `Cleanly mapped via Area Master to ${resolved.matchedArea} (${matchedZoneName})`,
             matchedArea: {
               id: `resolved_${ag.id}`,
               area_code: resolved.zoneCode,
               area_name: resolved.matchedArea,
               city: ag.city || 'Surat',
-              zone_code: resolved.zoneCode,
+              zone_code: matchedZoneName,
               region: resolved.region,
               description: 'Auto-resolved from official zone master'
             } as AreaMaster
@@ -459,7 +477,9 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         (agCityNorm.includes('vapi') && matchedCityNorm.includes('vapi')) ||
         (agCityNorm.includes('valsad') && matchedCityNorm.includes('valsad')) ||
         (agCityNorm.includes('bharuch') && matchedCityNorm.includes('bharuch')) ||
-        (agCityNorm.includes('ankleshwar') && matchedCityNorm.includes('ankleshwar'));
+        (agCityNorm.includes('ankleshwar') && matchedCityNorm.includes('ankleshwar')) ||
+        ((agCityNorm.includes('baroda') || agCityNorm.includes('vadodara')) && (matchedCityNorm.includes('baroda') || matchedCityNorm.includes('vadodara'))) ||
+        ((agCityNorm.includes('ahmedabad') || agCityNorm.includes('amdavad')) && (matchedCityNorm.includes('ahmedabad') || matchedCityNorm.includes('amdavad')));
 
       if (!isCityMatch) {
         return {
@@ -481,11 +501,12 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         matchedZoneNorm.includes(agZoneNorm);
 
       if (!isZoneMatch) {
+        const friendlyAreaZone = getZoneNameFromCode(matchedArea.zone_code);
         return {
           agency: ag,
           status: 'ZONE_MISMATCH',
           severity: 'MEDIUM' as const,
-          reason: `Zone mismatch: Agency has '${ag.zone_name}', Area Master has '${matchedArea.zone_code}'`,
+          reason: `Zone mismatch: Agency has '${ag.zone_name}', Area Master has '${friendlyAreaZone}'`,
           matchedArea
         };
       }
@@ -600,7 +621,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         const isRural = (resolved.region || '').toLowerCase().includes('rural') || ['Upper South', 'South', 'East', 'North'].includes(resolved.zoneName);
         const finalRegion = (ag.zone_region as any) || (resolved.region === 'Other' ? 'Other' : (isRural ? 'Surat Rural' : 'Surat City'));
         const finalCity = ag.city || (finalRegion === 'Surat City' ? 'Surat' : finalAreaName);
-        const finalZone = ag.zone_name || resolved.zoneName || 'City-A';
+        const finalZone = resolved.zoneName || ag.zone_name || 'City-A';
 
         targetArea = {
           id: `ar_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -618,18 +639,20 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
       }
     }
 
+    const finalZone = getZoneNameFromCode(targetArea.zone_code || (targetArea as any).zone_name);
+
     const updatedAgency: Agency = {
       ...ag,
       area_name: targetArea.area_name,
       city: targetArea.city,
-      zone_name: targetArea.zone_code,
+      zone_name: finalZone,
       zone_region: targetArea.region
     };
 
-    await saveAgencyToSupabase(updatedAgency);
     setLocalAgencies(prev => prev.map(a => a.id === ag.id ? updatedAgency : a));
+    await saveAgencyToSupabase(updatedAgency);
 
-    setSuccessNotice(`⚡ Updated agency "${ag.agency_name}" as per Area Master (${targetArea.area_name} → Zone: ${targetArea.zone_code}, City: ${targetArea.city})!`);
+    setSuccessNotice(`⚡ Updated agency "${ag.agency_name}" as per Area Master (${targetArea.area_name} → Zone: ${finalZone}, City: ${targetArea.city})!`);
     setTimeout(() => setSuccessNotice(null), 3500);
   };
 
@@ -664,7 +687,7 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
           const isRural = (resolved.region || '').toLowerCase().includes('rural') || ['Upper South', 'South', 'East', 'North'].includes(resolved.zoneName);
           const finalRegion = (ag.zone_region as any) || (resolved.region === 'Other' ? 'Other' : (isRural ? 'Surat Rural' : 'Surat City'));
           const finalCity = ag.city || (finalRegion === 'Surat City' ? 'Surat' : finalAreaName);
-          const finalZone = ag.zone_name || resolved.zoneName || 'City-A';
+          const finalZone = resolved.zoneName || ag.zone_name || 'City-A';
 
           targetArea = {
             id: `ar_bulk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -682,27 +705,38 @@ export const AreasMasterView: React.FC<AreasMasterViewProps> = ({
         }
       }
 
+      const finalZone = getZoneNameFromCode(targetArea.zone_code || (targetArea as any).zone_name);
+
       const updatedAgency: Agency = {
         ...ag,
         area_name: targetArea.area_name,
         city: targetArea.city,
-        zone_name: targetArea.zone_code,
+        zone_name: finalZone,
         zone_region: targetArea.region
       };
 
       agencyMap.set(ag.id, updatedAgency);
-      await saveAgencyToSupabase(updatedAgency);
       updatedCount++;
     }
 
     if (newAreasToSave.length > 0) {
       setAreasList(prev => deduplicateAreas([...newAreasToSave, ...prev]));
     }
-    setLocalAgencies(Array.from(agencyMap.values()));
+
+    // Reflect state immediately in the UI so the error count drops to 0 instantly
+    const updatedAgencies = Array.from(agencyMap.values());
+    setLocalAgencies(updatedAgencies);
     setIsBulkUpdatingAsPerArea(false);
 
-    setSuccessNotice(`🎉 Successfully updated ${updatedCount} agencies as per Area Master! All agencies are now cleanly mapped.`);
+    setSuccessNotice(`🎉 Successfully synced ${updatedCount} agencies as per official Area Master!`);
     setTimeout(() => setSuccessNotice(null), 5000);
+
+    // Persist to Supabase in parallel batches of 15
+    const chunkSize = 15;
+    for (let i = 0; i < updatedAgencies.length; i += chunkSize) {
+      const chunk = updatedAgencies.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(agency => saveAgencyToSupabase(agency)));
+    }
   };
 
   // Open Mapping Resolution Modal
