@@ -897,7 +897,7 @@ const MainLayout: React.FC = () => {
       const isWait = approvalDetails?.inventory_status === 'WAIT_FOR_STOCK';
 
       if (isSuperAdminUser) {
-        updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'APPROVED', remarks);
+        updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'APPROVED', remarks, target);
         addNotification({
           title: isWait ? `⚠️ Wait for Stock: ${target.order_number}` : `✅ Final Approval: ${target.order_number}`,
           message: isWait
@@ -907,7 +907,7 @@ const MainLayout: React.FC = () => {
           order_id: target.id
         });
       } else if (approvalDetails?.directApprove) {
-        updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'APPROVED', remarks);
+        updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'APPROVED', remarks, target);
         addNotification({
           title: isWait ? `⚠️ Wait for Stock: ${target.order_number}` : `✅ Direct Approval: ${target.order_number}`,
           message: `Sales Admin ${approverName} directly approved order without Higher Authority sign-off. Order routed to Stage 3.`,
@@ -915,7 +915,7 @@ const MainLayout: React.FC = () => {
           order_id: target.id
         });
       } else {
-        updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'SALES_ADMIN_APPROVED', remarks);
+        updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'SALES_ADMIN_APPROVED', remarks, target);
         addNotification({
           title: isWait ? `⚠️ Wait for Stock: ${target.order_number}` : `🟡 Sent for Super Admin Approval: ${target.order_number}`,
           message: `Sales Admin ${approverName} sent order for Super Admin approval. Note: "${remarks || 'Approval requested'}".`,

@@ -2125,13 +2125,69 @@ export const saveOrderToSupabase = async (order: Order): Promise<{ success: bool
   }
 };
 
-export const updateOrderStatusInSupabase = async (orderId: string, status: string, remarks?: string): Promise<{ success: boolean; error: string | null }> => {
+export const updateOrderStatusInSupabase = async (
+  orderId: string, 
+  status: string, 
+  remarks?: string,
+  extraOrderData?: Partial<Order>
+): Promise<{ success: boolean; error: string | null }> => {
   try {
+    // 1. Fetch current order to preserve metadata (AGENCY_INFO, DISPATCH, REATTEMPT, etc.) and agency_id
+    let existingRemarks = '';
+    let existingAgencyId: string | null = null;
+    let existingAreaId: string | null = null;
+    try {
+      const { data: currentOrd } = await supabase.from('orders').select('remarks, agency_id, area_id').eq('id', orderId).single();
+      if (currentOrd) {
+        existingRemarks = currentOrd.remarks || '';
+        existingAgencyId = currentOrd.agency_id || null;
+        existingAreaId = currentOrd.area_id || null;
+      }
+    } catch {}
+
     const payload: Record<string, any> = {
       status,
       updated_at: new Date().toISOString()
     };
-    if (remarks !== undefined) payload.remarks = remarks;
+
+    // Keep / update agency_id if available
+    const resolvedAgencyId = (extraOrderData?.agency_id && isValidUuid(extraOrderData.agency_id))
+      ? extraOrderData.agency_id
+      : (existingAgencyId && isValidUuid(existingAgencyId) ? existingAgencyId : null);
+    if (resolvedAgencyId) payload.agency_id = resolvedAgencyId;
+
+    if (extraOrderData?.area_id && isValidUuid(extraOrderData.area_id)) {
+      payload.area_id = extraOrderData.area_id;
+    } else if (existingAreaId && isValidUuid(existingAreaId)) {
+      payload.area_id = existingAreaId;
+    }
+
+    if (remarks !== undefined || existingRemarks) {
+      // Gather any metadata tags (AGENCY_INFO, DISPATCH, REATTEMPT)
+      const existingTags = existingRemarks.match(/<!--.*?-->/g) || [];
+      const newTags = (remarks || '').match(/<!--.*?-->/g) || [];
+      
+      // If agency info metadata isn't present in tags yet, but we have agency info on extraOrderData
+      let constructedAgencyTag: string | null = null;
+      const hasAgencyTag = [...existingTags, ...newTags].some(t => t.startsWith('<!--AGENCY_INFO:'));
+      if (!hasAgencyTag && extraOrderData?.agency_name) {
+        constructedAgencyTag = `<!--AGENCY_INFO:${JSON.stringify({
+          agency_id: extraOrderData.agency_id || resolvedAgencyId || '',
+          agency_name: extraOrderData.agency_name,
+          agency_code: extraOrderData.agency_code || '',
+          area_name: extraOrderData.area_name || ''
+        })}-->`;
+      }
+
+      const allTags = Array.from(new Set([
+        ...existingTags, 
+        ...newTags, 
+        ...(constructedAgencyTag ? [constructedAgencyTag] : [])
+      ])).join(' ');
+
+      const cleanNewRemark = (remarks !== undefined ? remarks : existingRemarks).replace(/<!--.*?-->/g, '').trim();
+      payload.remarks = allTags ? `${cleanNewRemark} ${allTags}`.trim() : cleanNewRemark;
+    }
 
     const { error } = await supabase.from('orders').update(payload).eq('id', orderId);
     if (error) {
@@ -2150,9 +2206,25 @@ export const updateOrderAccountsApprovalInSupabase = async (
   accountsData: Partial<Order>
 ): Promise<{ success: boolean; error: string | null }> => {
   try {
+    // Preserve existing remarks metadata (like <!--AGENCY_INFO:...-->)
+    let existingOrderRemarks = '';
+    let existingOrderAgencyId: string | null = null;
+    try {
+      const { data: curOrd } = await supabase.from('orders').select('remarks, agency_id').eq('id', orderId).single();
+      if (curOrd) {
+        existingOrderRemarks = curOrd.remarks || '';
+        existingOrderAgencyId = curOrd.agency_id || null;
+      }
+    } catch {}
+
     const payload: Record<string, any> = {
       updated_at: new Date().toISOString()
     };
+    if (isValidUuid(accountsData.agency_id)) {
+      payload.agency_id = accountsData.agency_id;
+    } else if (existingOrderAgencyId && isValidUuid(existingOrderAgencyId)) {
+      payload.agency_id = existingOrderAgencyId;
+    }
     if (accountsData.status !== undefined) payload.status = accountsData.status;
     if (accountsData.sales_admin_approved !== undefined) payload.sales_admin_approved = accountsData.sales_admin_approved;
     if (accountsData.sales_admin_approved_by !== undefined) payload.sales_admin_approved_by = accountsData.sales_admin_approved_by;
@@ -2191,11 +2263,18 @@ export const updateOrderAccountsApprovalInSupabase = async (
     if (accountsData.dispatch_remark) dispatchMeta.dispatch_remark = accountsData.dispatch_remark;
     if (accountsData.billing_total_qty !== undefined) dispatchMeta.billing_total_qty = accountsData.billing_total_qty;
 
-    if (Object.keys(dispatchMeta).length > 0 || accountsData.remarks !== undefined) {
-      const cleanRemarks = ((accountsData.remarks !== undefined ? accountsData.remarks : '') || '').replace(/<!--DISPATCH:.*?-->/, '').trim();
-      payload.remarks = Object.keys(dispatchMeta).length > 0
-        ? `<!--DISPATCH:${JSON.stringify(dispatchMeta)}-->${cleanRemarks}`
-        : cleanRemarks;
+    const existingAgencyTagMatch = (existingOrderRemarks || '').match(/<!--AGENCY_INFO:.*?-->/);
+    const agencyTag = existingAgencyTagMatch ? existingAgencyTagMatch[0] : '';
+
+    if (Object.keys(dispatchMeta).length > 0 || accountsData.remarks !== undefined || existingOrderRemarks) {
+      const baseRemarkText = accountsData.remarks !== undefined ? accountsData.remarks : existingOrderRemarks;
+      const cleanRemarks = (baseRemarkText || '').replace(/<!--DISPATCH:.*?-->/g, '').replace(/<!--AGENCY_INFO:.*?-->/g, '').trim();
+      const metaTags = [
+        Object.keys(dispatchMeta).length > 0 ? `<!--DISPATCH:${JSON.stringify(dispatchMeta)}-->` : '',
+        agencyTag
+      ].filter(Boolean).join(' ');
+
+      payload.remarks = metaTags ? `${cleanRemarks} ${metaTags}`.trim() : cleanRemarks;
     }
 
     let { error } = await supabase.from('orders').update(payload).eq('id', orderId);

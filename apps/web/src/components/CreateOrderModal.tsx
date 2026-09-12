@@ -798,7 +798,13 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     if (!agencyId && activeAgenciesPool.length > 0) {
       setAgencyId(activeAgenciesPool[0].id);
     }
-  }, [isOpen]);
+  }, [isOpen, activeAgenciesPool, agencyId]);
+
+  useEffect(() => {
+    if (!agencyId && activeAgenciesPool.length > 0) {
+      setAgencyId(activeAgenciesPool[0].id);
+    }
+  }, [agencyId, activeAgenciesPool]);
 
   const [deliveryType, setDeliveryType] = useState<'F.O.R' | 'Self Pickup'>('F.O.R');
   const [remarks, setRemarks] = useState('');
@@ -1163,7 +1169,18 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           ? allowedBrandsForActiveSalesperson[0] 
           : { id: allowedBrandsForActiveSalesperson[0]?.id || 'ee1d810b-aa74-4dd8-bf1a-de5f31212ebd', company_name: `${selectedSegments.join(' & ')} Multi-Brand`, company_code: allowedBrandsForActiveSalesperson[0]?.company_code || 'PRG' });
     
-    const selectedAgency = activeAgenciesPool.find(a => a.id === agencyId) || MOCK_AGENCIES.find(a => a.id === agencyId);
+    const selectedAgency = activeAgenciesPool.find(a => a.id === agencyId) || 
+                           (agencyId ? activeAgenciesPool.find(a => (a.agency_name || '').toLowerCase() === agencyId.toLowerCase() || (a.agency_code || '').toLowerCase() === agencyId.toLowerCase()) : null) ||
+                           (orderToEdit?.agency_id ? activeAgenciesPool.find(a => a.id === orderToEdit.agency_id) : null) ||
+                           MOCK_AGENCIES.find(a => a.id === agencyId) ||
+                           activeAgenciesPool[0] ||
+                           null;
+
+    const finalAgencyId = selectedAgency?.id || agencyId || (orderToEdit?.agency_id || '');
+    const finalAgencyName = selectedAgency?.agency_name || orderToEdit?.agency_name || 'Agency Partner';
+    const finalAgencyCode = selectedAgency?.agency_code || orderToEdit?.agency_code || 'AG-001';
+    const finalAreaId = selectedAgency?.area_id || orderToEdit?.area_id || '';
+    const finalAreaName = selectedAgency?.area_name || selectedAgency?.city || orderToEdit?.area_name || 'Surat Area';
 
     // Format Order Number: BrandCode-DDMMYYYY-Seq (e.g., WI-30082026-001)
     const brandCode = resolvedCompany?.company_code || 'PRG';
@@ -1225,10 +1242,10 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     };
 
     const agencyMeta = `<!--AGENCY_INFO:${JSON.stringify({
-      agency_id: selectedAgency?.id || agencyId,
-      agency_name: selectedAgency?.agency_name || orderToEdit?.agency_name || '',
-      agency_code: selectedAgency?.agency_code || orderToEdit?.agency_code || '',
-      area_name: selectedAgency?.area_name || selectedAgency?.city || orderToEdit?.area_name || '',
+      agency_id: finalAgencyId,
+      agency_name: finalAgencyName,
+      agency_code: finalAgencyCode,
+      area_name: finalAreaName,
       city: selectedAgency?.city || ''
     })}-->`;
     const cleanRemarks = (remarks || '').replace(/<!--AGENCY_INFO:.*?-->/g, '').trim();
@@ -1241,11 +1258,11 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
       order_date: orderToEdit ? orderToEdit.order_date : new Date().toISOString().replace('T', ' ').substring(0, 16),
       company_id: resolvedCompany?.id || selectedCompanyIds[0] || orderToEdit?.company_id || 'ee1d810b-aa74-4dd8-bf1a-de5f31212ebd',
       company_name: resolvedCompany?.company_name || orderToEdit?.company_name,
-      agency_id: selectedAgency?.id || agencyId,
-      agency_name: selectedAgency?.agency_name || orderToEdit?.agency_name,
-      agency_code: selectedAgency?.agency_code || orderToEdit?.agency_code,
-      area_id: selectedAgency?.area_id || orderToEdit?.area_id || '',
-      area_name: selectedAgency?.area_name || orderToEdit?.area_name || 'Delhi NCR Territory',
+      agency_id: finalAgencyId,
+      agency_name: finalAgencyName,
+      agency_code: finalAgencyCode,
+      area_id: finalAreaId,
+      area_name: finalAreaName,
       salesperson_id: finalSalespersonId,
       salesperson_name: finalSalespersonName,
       asm_id: orderToEdit?.asm_id || 'e6666666-6666-6666-6666-666666666666',
