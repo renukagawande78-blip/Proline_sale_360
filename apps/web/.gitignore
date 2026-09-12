@@ -5,6 +5,7 @@ dist
 android/app/build
 android/.gradle
 *.apk
+!public/*.apk
 .env*
 test-results/
 playwright-report/

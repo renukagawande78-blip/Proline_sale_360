@@ -4,6 +4,21 @@
   "buildCommand": "npm --prefix apps/web run build",
   "outputDirectory": "apps/web/dist",
   "installCommand": "npm --prefix apps/web install",
+  "headers": [
+    {
+      "source": "/(.*)\\.apk",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.android.package-archive"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",
