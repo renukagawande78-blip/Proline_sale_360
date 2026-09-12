@@ -25,6 +25,7 @@ import { ZoneMasterModal } from './components/ZoneMasterModal';
 import { RegisterAgencyModal } from './components/RegisterAgencyModal';
 import { ActiveFiltersBar } from './components/ActiveFiltersBar';
 import { NotificationToast } from './components/NotificationToast';
+import { PullToRefresh } from './components/PullToRefresh';
 import { LoginPage } from './components/LoginPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
@@ -128,6 +129,39 @@ const MainLayout: React.FC = () => {
   const [liveCompanies, setLiveCompanies] = useState<Company[]>([]);
   const [liveAgencies, setLiveAgencies] = useState<Agency[]>([]);
   const [liveProducts, setLiveProducts] = useState<Product[]>([]);
+
+  // Global Refresh handler for Pull-To-Refresh and Header button
+  const handleGlobalRefresh = async () => {
+    try {
+      const [orderRes, compRes, agencyRes, prodRes] = await Promise.allSettled([
+        fetchOrdersFromSupabase(),
+        fetchCompaniesFromSupabase(),
+        fetchAgenciesFromSupabaseTable(),
+        fetchProductsFromSupabase()
+      ]);
+
+      if (orderRes.status === 'fulfilled' && orderRes.value.orders && orderRes.value.orders.length > 0) {
+        setOrders(orderRes.value.orders);
+        try {
+          localStorage.setItem('proline_oms_orders_v3', JSON.stringify(orderRes.value.orders));
+        } catch {}
+      }
+
+      if (compRes.status === 'fulfilled' && compRes.value && compRes.value.length > 0) {
+        setLiveCompanies(compRes.value);
+      }
+
+      if (agencyRes.status === 'fulfilled' && agencyRes.value.agencies && agencyRes.value.agencies.length > 0) {
+        setLiveAgencies(agencyRes.value.agencies);
+      }
+
+      if (prodRes.status === 'fulfilled' && prodRes.value && prodRes.value.length > 0) {
+        setLiveProducts(prodRes.value);
+      }
+    } catch (err) {
+      console.warn('Global refresh error:', err);
+    }
+  };
 
   // Initial fetch + Realtime Database Synchronization with Supabase
   React.useEffect(() => {
@@ -1468,7 +1502,7 @@ const MainLayout: React.FC = () => {
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
 
-      <div className="main-content">
+      <div className="main-content" style={{ overflow: 'hidden' }}>
         <Header 
           onToggleSidebarCollapse={() => {
             if (window.innerWidth <= 992) {
@@ -1480,10 +1514,13 @@ const MainLayout: React.FC = () => {
           onOpenUserManagement={() => setIsUserMgmtOpen(true)}
           onOpenGlobalFilter={() => setIsGlobalFilterOpen(true)}
           onNavigateToSettings={() => setCurrentTab('settings')}
+          onRefreshData={handleGlobalRefresh}
           globalFilterState={globalFilterState}
           searchQuery={globalSearchQuery}
           onSearchChange={setGlobalSearchQuery}
         />
+
+        <PullToRefresh onRefresh={handleGlobalRefresh}>
 
         {/* ACTIVE FILTER LIST & MISMATCH NOTIFIER */}
         <ActiveFiltersBar
@@ -1637,6 +1674,7 @@ const MainLayout: React.FC = () => {
         {currentTab === 'settings' && (
           <SettingsView />
         )}
+        </PullToRefresh>
       </div>
 
       <MobileBottomNav 

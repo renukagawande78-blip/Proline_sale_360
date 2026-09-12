@@ -7,6 +7,7 @@ interface HeaderProps {
   onOpenUserManagement?: () => void;
   onOpenGlobalFilter?: () => void;
   onNavigateToSettings?: () => void;
+  onRefreshData?: () => Promise<any> | void;
   globalFilterState?: GlobalFilterState;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;

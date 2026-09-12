@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap, X, Clock, Tag, Smartphone, Download, Settings as SettingsIcon } from 'lucide-react';
+import { Search, Bell, ShieldCheck, Menu, LogOut, KeyRound, MoreVertical, Check, Filter, User, ShoppingBag, Zap, X, Clock, Tag, Smartphone, Download, Settings as SettingsIcon, RotateCw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications, getRoleBadge, getCategoryBadge } from '../../context/NotificationContext';
 import { RoleName, GlobalFilterState, NotificationCategory } from '../../types';
@@ -12,6 +12,7 @@ interface HeaderViewProps {
   onOpenUserManagement?: () => void;
   onOpenGlobalFilter?: () => void;
   onNavigateToSettings?: () => void;
+  onRefreshData?: () => Promise<any> | void;
   globalFilterState?: GlobalFilterState;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
@@ -22,6 +23,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
   onOpenUserManagement, 
   onOpenGlobalFilter,
   onNavigateToSettings,
+  onRefreshData,
   globalFilterState,
   searchQuery = '',
   onSearchChange
@@ -45,6 +47,7 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -198,6 +201,37 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
             <span className="filter-btn-text">
               {globalFilterState?.isActive ? 'Filter (Active)' : 'Filter'}
             </span>
+          </button>
+        )}
+
+        {/* Refresh Data Button */}
+        {onRefreshData && (
+          <button
+            onClick={async () => {
+              if (isManualRefreshing) return;
+              setIsManualRefreshing(true);
+              try {
+                await onRefreshData();
+              } finally {
+                setTimeout(() => setIsManualRefreshing(false), 500);
+              }
+            }}
+            disabled={isManualRefreshing}
+            style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: 8,
+              padding: '0.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: isManualRefreshing ? 'wait' : 'pointer',
+              color: '#38bdf8',
+              transition: 'all 0.2s ease'
+            }}
+            title="Refresh Data (Sync latest orders & updates)"
+          >
+            <RotateCw size={17} style={{ animation: isManualRefreshing ? 'spin 1s linear infinite' : 'none' }} />
           </button>
         )}
 
