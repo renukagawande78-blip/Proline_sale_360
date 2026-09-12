@@ -213,6 +213,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
     : null;
 
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
 
   const getOrderPdfShareLink = () => {
     const baseUrl = window.location.origin + window.location.pathname;
@@ -279,8 +280,66 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
     handleCopyPdfLink();
   };
 
-  const handleDownloadPDF = () => {
-    window.print();
+  const handleDownloadPDF = async () => {
+    const invoiceEl = document.getElementById('invoice-sheet');
+    if (!invoiceEl) { window.print(); return; }
+    setIsDownloadingPDF(true);
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf')
+      ]);
+      const canvas = await html2canvas(invoiceEl, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        imageTimeout: 5000
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgW = canvas.width;
+      const imgH = canvas.height;
+      const ratio = Math.min(pageW / imgW, pageH / imgH);
+      const drawW = imgW * ratio;
+      const drawH = imgH * ratio;
+      const marginX = (pageW - drawW) / 2;
+      // Multi-page support: split if content is taller than one A4 page
+      const mmHeight = imgH * ratio;
+      if (mmHeight <= pageH) {
+        pdf.addImage(imgData, 'PNG', marginX, 0, drawW, drawH);
+      } else {
+        let posY = 0;
+        while (posY < imgH) {
+          const sliceH = Math.min(imgH - posY, pageH / ratio);
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width = imgW;
+          sliceCanvas.height = sliceH;
+          const ctx = sliceCanvas.getContext('2d')!;
+          ctx.drawImage(canvas, 0, posY, imgW, sliceH, 0, 0, imgW, sliceH);
+          const sliceData = sliceCanvas.toDataURL('image/png');
+          if (posY > 0) pdf.addPage();
+          pdf.addImage(sliceData, 'PNG', marginX, 0, drawW, sliceH * ratio);
+          posY += sliceH;
+        }
+      }
+      const docTitle = isChallan ? 'Delivery-Challan' : 'Sales-Order';
+      const fileName = `${docTitle}_${order.order_number}_${order.agency_name?.replace(/\s+/g, '-')}.pdf`;
+      pdf.save(fileName);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      // Fallback to print dialog
+      window.print();
+    } finally {
+      setIsDownloadingPDF(false);
+    }
   };
 
   return (
@@ -461,22 +520,25 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
               <button 
                 type="button"
                 onClick={handleDownloadPDF}
+                disabled={isDownloadingPDF}
                 title="Download / Save PDF"
                 style={{ 
                   padding: '0.42rem 0.85rem', 
                   fontSize: '0.78rem', 
                   gap: '0.4rem', 
                   fontWeight: 800, 
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  color: '#f8fafc',
+                  background: isDownloadingPDF ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.08)',
+                  color: isDownloadingPDF ? '#64748b' : '#f8fafc',
                   border: '1px solid #475569',
                   borderRadius: 6,
-                  cursor: 'pointer',
+                  cursor: isDownloadingPDF ? 'not-allowed' : 'pointer',
                   display: 'flex',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  opacity: isDownloadingPDF ? 0.7 : 1,
+                  transition: 'all 0.2s ease'
                 }}
               >
-                <Download size={15} /> Download PDF
+                <Download size={15} /> {isDownloadingPDF ? 'Generating...' : 'Download PDF'}
               </button>
 
               {/* Download Excel Product Sheet */}
