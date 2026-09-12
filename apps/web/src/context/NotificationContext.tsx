@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { NotificationItem, RoleName, NotificationCategory } from '../types';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
 
 // Helper to resolve target roles and category based on user rules
 export const resolveNotificationMeta = (
@@ -13,17 +14,17 @@ export const resolveNotificationMeta = (
 ): { target_roles: RoleName[]; category: NotificationCategory } => {
   const upper = ((eventType || '') + ' ' + (title || '') + ' ' + (message || '')).toUpperCase();
 
-  // 1. POD Query Raised -> Super Admin & Sales Admin
+  // 1. POD Query Raised -> Super Admin, Sales Admin, Dispatch
   if (upper.includes('POD_QUERY') || upper.includes('POD ISSUE') || upper.includes('DELIVERY EXCEPTION')) {
-    return { target_roles: ['SUPER_ADMIN', 'SALES_ADMIN'], category: 'POD' };
+    return { target_roles: ['SUPER_ADMIN', 'SALES_ADMIN', 'DISPATCH_MANAGER'], category: 'POD' };
   }
 
-  // 2. POD Verified / Delivered -> Salesperson, Sales Admin, Accounts, Super Admin
+  // 2. POD Verified / Delivered -> Salesperson, Sales Admin, Accounts, Super Admin, ASM
   if (upper.includes('POD_VERIFIED') || upper.includes('DELIVERED') || upper.includes('POD VERIF') || upper.includes('ORDER_COMPLETED')) {
-    return { target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'ACCOUNTS', 'SUPER_ADMIN'], category: 'POD' };
+    return { target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'ACCOUNTS', 'SUPER_ADMIN', 'AREA_SALES_MANAGER'], category: 'POD' };
   }
 
-  // 3. Wait for Stock -> Sales Person, Area Sales Manager, Sales Admin
+  // 3. Wait for Stock -> Sales Person, Area Sales Manager, Sales Admin, Super Admin
   if (upper.includes('WAIT_FOR_STOCK') || upper.includes('WAIT FOR STOCK') || upper.includes('STOCK UNAVAILABLE') || upper.includes('STOCK SHORTAGE')) {
     return { target_roles: ['SALES_PERSON', 'AREA_SALES_MANAGER', 'SALES_ADMIN', 'SUPER_ADMIN'], category: 'INVENTORY' };
   }
@@ -33,28 +34,28 @@ export const resolveNotificationMeta = (
     return { target_roles: ['DISPATCH_MANAGER', 'SALES_ADMIN', 'SUPER_ADMIN'], category: 'DISPATCH' };
   }
 
-  // 5. GRN Checked / Forwarded / Created -> Accounts, Billing, Sales Admin
+  // 5. GRN Checked / Forwarded / Created -> Accounts, Billing, Sales Admin, Super Admin
   if (upper.includes('GRN_') || upper.includes('GRN REQUEST') || upper.includes('GRN FORWARD') || upper.includes('GRN CREATED')) {
     return { target_roles: ['ACCOUNTS', 'BILLING', 'SALES_ADMIN', 'SUPER_ADMIN'], category: 'BILLING' };
   }
 
-  // 6. Dispatched / Out for Delivery -> Sales Person, Sales Admin, Dispatch Manager
+  // 6. Dispatched / Out for Delivery -> Sales Person, Sales Admin, Dispatch Manager, Super Admin, ASM
   if (upper.includes('DISPATCH') || upper.includes('OUT_FOR_DELIVERY') || upper.includes('OUT FOR DELIVERY') || upper.includes('READY_FOR_PICKUP')) {
-    return { target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'DISPATCH_MANAGER', 'SUPER_ADMIN'], category: 'DISPATCH' };
+    return { target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'DISPATCH_MANAGER', 'SUPER_ADMIN', 'AREA_SALES_MANAGER'], category: 'DISPATCH' };
   }
 
-  // 7. Review Notification / Super Admin Approval -> Super Admin
+  // 7. Review Notification / Super Admin Approval -> Super Admin, Sales Admin
   if (upper.includes('ACCOUNTS_APPROVAL') || upper.includes('SUPER ADMIN APPROVAL') || upper.includes('REVIEW REQUIRED') || upper.includes('HARSHAD SIR')) {
-    return { target_roles: ['SUPER_ADMIN'], category: 'APPROVAL' };
+    return { target_roles: ['SUPER_ADMIN', 'SALES_ADMIN'], category: 'APPROVAL' };
   }
 
-  // 8. Order Created / Submitted -> Sales Admin, Super Admin
+  // 8. Order Created / Submitted -> Sales Admin, Super Admin, Sales Person, Area Sales Manager
   if (upper.includes('ORDER_SUBMITTED') || upper.includes('ORDER_CREATED') || upper.includes('NEW ORDER')) {
-    return { target_roles: ['SALES_ADMIN', 'SUPER_ADMIN'], category: 'ORDER' };
+    return { target_roles: ['SALES_ADMIN', 'SUPER_ADMIN', 'SALES_PERSON', 'AREA_SALES_MANAGER'], category: 'ORDER' };
   }
 
-  // Default fallback
-  return { target_roles: ['SUPER_ADMIN', 'SALES_ADMIN'], category: 'SYSTEM' };
+  // Default fallback -> open to all roles so notifications are never suppressed
+  return { target_roles: ['SUPER_ADMIN', 'SALES_ADMIN', 'SALES_PERSON', 'AREA_SALES_MANAGER', 'DISPATCH_MANAGER', 'ACCOUNTS', 'BILLING'], category: 'SYSTEM' };
 };
 
 export const getRoleBadge = (role?: RoleName | string): { label: string; color: string; bg: string } => {
@@ -114,10 +115,13 @@ export interface NotificationContextType {
   activeToast: NotificationItem | null;
   dismissToast: () => void;
   addNotification: (item: Omit<NotificationItem, 'id' | 'created_at' | 'is_read'>) => void;
+  broadcastOrderSync: (orderNumber?: string) => void;
   markAsRead: (id: string) => void;
   clearAll: () => void;
   sendTestNotification: () => void;
   fcmToken?: string;
+  webNotificationPermission: NotificationPermission | 'unsupported';
+  requestWebNotificationPermission: () => Promise<boolean>;
   roleFilter: 'MY_ROLE' | 'ALL' | RoleName;
   setRoleFilter: (role: 'MY_ROLE' | 'ALL' | RoleName) => void;
   categoryFilter: 'ALL' | NotificationCategory;
@@ -223,12 +227,32 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   }
 ];
 
-// Audio chime using Web Audio API
+// Audio chime management using Web Audio API with unlock support
+let sharedAudioCtx: AudioContext | null = null;
+const getAudioContext = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    if (!sharedAudioCtx) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        sharedAudioCtx = new AudioContextClass();
+      }
+    }
+    if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+  } catch {}
+  return sharedAudioCtx;
+};
+
 const playChimeSound = () => {
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(() => playChimeSound()).catch(() => {});
+      return;
+    }
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
@@ -236,7 +260,7 @@ const playChimeSound = () => {
     osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
     osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
 
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
 
     osc.connect(gain);
@@ -264,10 +288,29 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return INITIAL_NOTIFICATIONS;
   });
 
-  const [roleFilter, setRoleFilter] = useState<'MY_ROLE' | 'ALL' | RoleName>('MY_ROLE');
+  const [roleFilter, setRoleFilter] = useState<'MY_ROLE' | 'ALL' | RoleName>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | NotificationCategory>('ALL');
   const [activeToast, setActiveToast] = useState<NotificationItem | null>(null);
   const [fcmToken, setFcmToken] = useState<string | undefined>(undefined);
+  const [webNotificationPermission, setWebNotificationPermission] = useState<NotificationPermission | 'unsupported'>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'unsupported';
+  });
+
+  // Automatically unlock browser audio on first user gesture anywhere
+  useEffect(() => {
+    const unlockAudio = () => {
+      getAudioContext();
+    };
+    window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
 
   // Sync to localStorage
   useEffect(() => {
@@ -276,7 +319,48 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } catch {}
   }, [notifications]);
 
-  // Native Push Notification channel and permissions
+  // Realtime Broadcast Listener for instant cross-device notifications across all users
+  useEffect(() => {
+    const broadcastChannel = supabase.channel('proline_oms_global_notifications');
+
+    broadcastChannel
+      .on('broadcast', { event: 'new_notification' }, (eventPayload: any) => {
+        const item = eventPayload?.payload;
+        if (!item || !item.id) return;
+
+        setNotifications(prev => {
+          if (prev.some(n => n.id === item.id)) return prev;
+          return [item, ...prev];
+        });
+
+        // Determine if relevant to logged in user
+        const isRelevant = !currentUser || isNotificationForUser(item, currentUser.role_name);
+        if (isRelevant) {
+          setActiveToast(item);
+          playChimeSound();
+
+          setTimeout(() => {
+            setActiveToast(current => (current?.id === item.id ? null : current));
+          }, 6500);
+
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification(item.title, {
+                body: item.message,
+                icon: '/prokap-badge.png'
+              });
+            } catch {}
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(broadcastChannel);
+    };
+  }, [currentUser?.role_name]);
+
+  // Native Push Notification channel and permissions on Android Capacitor
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       PushNotifications.createChannel({
@@ -339,31 +423,64 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         errListener.then(handle => handle.remove()).catch(() => {});
         pushListener.then(handle => handle.remove()).catch(() => {});
       };
-    } else {
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission === 'default') {
-          Notification.requestPermission().catch(() => {});
-        }
-      }
     }
   }, [currentUser?.role_name]);
 
+  const requestWebNotificationPermission = async (): Promise<boolean> => {
+    getAudioContext();
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        setWebNotificationPermission(perm);
+        if (perm === 'granted') {
+          playChimeSound();
+          try {
+            new Notification('🔔 Notifications Enabled', {
+              body: 'Real-time order, approval, and dispatch alerts are now active!',
+              icon: '/prokap-badge.png'
+            });
+          } catch {}
+          return true;
+        }
+      } catch (err) {
+        console.warn('Web notification permission request error:', err);
+      }
+    }
+    return false;
+  };
+
+  const broadcastOrderSync = (orderNumber?: string) => {
+    try {
+      const broadcastChannel = supabase.channel('proline_oms_order_sync');
+      broadcastChannel.send({
+        type: 'broadcast',
+        event: 'order_sync',
+        payload: { orderNumber, sender: currentUser?.full_name, timestamp: Date.now() }
+      });
+    } catch (e) {
+      console.warn('broadcastOrderSync notice:', e);
+    }
+  };
+
   const addNotification = (item: Omit<NotificationItem, 'id' | 'created_at' | 'is_read'>) => {
-    // If target_roles or category are missing, automatically resolve them
+    getAudioContext();
+    // Resolve target roles & category based on rules
     const meta = resolveNotificationMeta(item.event_type, item.title, item.message, item.brand_name);
 
     const newItem: NotificationItem = {
       ...item,
-      id: 'n_' + Date.now(),
+      id: 'n_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       is_read: false,
       created_at: 'Just now',
       target_roles: item.target_roles && item.target_roles.length > 0 ? item.target_roles : meta.target_roles,
       category: item.category || meta.category
     };
 
-    setNotifications(prev => [newItem, ...prev]);
+    setNotifications(prev => {
+      if (prev.some(n => n.id === newItem.id)) return prev;
+      return [newItem, ...prev];
+    });
 
-    // Check if notification is meant for current user's role (Super Admin always gets it)
     const isRelevant = !currentUser || isNotificationForUser(newItem, currentUser.role_name);
 
     if (isRelevant) {
@@ -384,54 +501,32 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         } catch {}
       }
     }
+
+    // Broadcast across all connected users/devices instantly via Supabase
+    try {
+      const broadcastChannel = supabase.channel('proline_oms_global_notifications');
+      broadcastChannel.send({
+        type: 'broadcast',
+        event: 'new_notification',
+        payload: newItem
+      });
+    } catch (e) {
+      console.warn('Notification broadcast notice:', e);
+    }
   };
 
   const sendTestNotification = () => {
-    const roles: RoleName[] = ['SALES_ADMIN', 'SUPER_ADMIN', 'SALES_PERSON', 'DISPATCH_MANAGER', 'ACCOUNTS'];
+    getAudioContext();
     const currentRole = currentUser?.role_name || 'SALES_ADMIN';
     const testOrderNum = `PRL-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    if (currentRole === 'SALES_ADMIN') {
-      addNotification({
-        title: `📦 Order Created: ${testOrderNum}`,
-        message: `New FMCG booking received for Priyagold Agency. Assigned to Sales Admin review.`,
-        event_type: 'ORDER_SUBMITTED',
-        target_roles: ['SALES_ADMIN', 'SUPER_ADMIN'],
-        category: 'ORDER'
-      });
-    } else if (currentRole === 'SUPER_ADMIN') {
-      addNotification({
-        title: `🚨 POD Query Raised: ${testOrderNum}`,
-        message: `Delivery exception reported by driver. Super Admin action required.`,
-        event_type: 'POD_QUERY_RAISED',
-        target_roles: ['SUPER_ADMIN'],
-        category: 'POD'
-      });
-    } else if (currentRole === 'SALES_PERSON') {
-      addNotification({
-        title: `⏳ Wait for Stock: ${testOrderNum}`,
-        message: `Warehouse stock unavailable. Your booking is on hold pending inventory replenishment.`,
-        event_type: 'WAIT_FOR_STOCK',
-        target_roles: ['SALES_PERSON', 'SALES_ADMIN'],
-        category: 'INVENTORY'
-      });
-    } else if (currentRole === 'DISPATCH_MANAGER') {
-      addNotification({
-        title: `🔄 Reattempt Delivery: ${testOrderNum}`,
-        message: `Sales Admin authorized delivery reattempt with HIGH PRIORITY dispatch.`,
-        event_type: 'REATTEMPT_DELIVERY',
-        target_roles: ['DISPATCH_MANAGER', 'SALES_ADMIN'],
-        category: 'DISPATCH'
-      });
-    } else {
-      addNotification({
-        title: `📋 GRN Checked & Approved: ${testOrderNum}`,
-        message: `Accounts team verified credit note adjustment for return items.`,
-        event_type: 'GRN_CREATED',
-        target_roles: ['ACCOUNTS', 'BILLING', 'SALES_ADMIN'],
-        category: 'BILLING'
-      });
-    }
+    addNotification({
+      title: `🔔 Test Alert: ${testOrderNum}`,
+      message: `Live notification received for ${currentUser?.full_name || 'User'} (${getRoleBadge(currentRole).label}). Real-time cross-device broadcast and chime active!`,
+      event_type: 'ORDER_SUBMITTED',
+      target_roles: ['SALES_ADMIN', 'SUPER_ADMIN', 'SALES_PERSON', 'AREA_SALES_MANAGER', 'DISPATCH_MANAGER', 'ACCOUNTS', 'BILLING'],
+      category: 'ORDER'
+    });
   };
 
   const dismissToast = () => {
@@ -474,10 +569,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       activeToast, 
       dismissToast, 
       addNotification, 
+      broadcastOrderSync,
       markAsRead, 
       clearAll, 
       sendTestNotification, 
       fcmToken,
+      webNotificationPermission,
+      requestWebNotificationPermission,
       roleFilter,
       setRoleFilter,
       categoryFilter,

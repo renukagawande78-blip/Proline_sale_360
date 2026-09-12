@@ -88,7 +88,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 const MainLayout: React.FC = () => {
   const { currentUser, users } = useAuth();
-  const { addNotification } = useNotifications();
+  const { addNotification, broadcastOrderSync } = useNotifications();
 
   if (!currentUser) {
     return (
@@ -152,9 +152,120 @@ const MainLayout: React.FC = () => {
       if (prods && prods.length > 0) setLiveProducts(prods);
     });
 
-    // Use a unique Realtime topic. Supabase reuses channels with the same topic;
-    // during React Strict Mode / hot reload an old channel can still be joining,
-    // which makes `.on()` throw "cannot add callbacks after subscribe".
+    // 1. Dedicated Supabase Broadcast Channel for cross-device order synchronization
+    const syncChannel = supabase.channel('proline_oms_order_sync');
+    syncChannel
+      .on('broadcast', { event: 'order_sync' }, (payload: any) => {
+        console.log('Order sync broadcast received:', payload);
+        fetchOrdersFromSupabase().then(({ orders: liveOrders, error }) => {
+          if (liveOrders && liveOrders.length > 0 && !error) {
+            setOrders(liveOrders);
+            try {
+              localStorage.setItem('proline_oms_orders_v3', JSON.stringify(liveOrders));
+            } catch {}
+          }
+        });
+      })
+      .subscribe();
+
+    // 2. Smart background polling (every 15s) with automated status transition detection
+    const syncPollInterval = setInterval(async () => {
+      try {
+        const { orders: liveOrders, error } = await fetchOrdersFromSupabase();
+        if (error || !liveOrders || liveOrders.length === 0) return;
+
+        setOrders(currentOrders => {
+          if (!currentOrders || currentOrders.length === 0) return liveOrders;
+
+          const currentMap = new Map(currentOrders.map(o => [o.id, o]));
+          const currentNumberMap = new Map(currentOrders.map(o => [o.order_number, o]));
+
+          liveOrders.forEach(newOrd => {
+            const existing = currentMap.get(newOrd.id) || (newOrd.order_number ? currentNumberMap.get(newOrd.order_number) : null);
+            if (!existing) {
+              // Brand new order created on another device
+              addNotification({
+                title: `📦 New Order Created: ${newOrd.order_number}`,
+                message: `Booking for ${newOrd.agency_name} (${newOrd.total_box_qty || 0} Boxes, ${newOrd.total_qty_pcs || 0} PCS).`,
+                event_type: 'ORDER_SUBMITTED',
+                order_id: newOrd.id,
+                target_roles: ['SALES_ADMIN', 'SUPER_ADMIN', 'SALES_PERSON', 'AREA_SALES_MANAGER'],
+                category: 'ORDER'
+              });
+            } else if (
+              (newOrd.accounts_approval_status === 'PENDING' && existing.accounts_approval_status !== 'PENDING') ||
+              (newOrd.need_accounts_approval && !existing.need_accounts_approval)
+            ) {
+              addNotification({
+                title: `🔒 Super Admin Approval Required: ${newOrd.order_number}`,
+                message: `Order submitted for Super Admin credit/accounts authorization.`,
+                event_type: 'ACCOUNTS_APPROVAL_REQUESTED',
+                order_id: newOrd.id,
+                target_roles: ['SUPER_ADMIN', 'SALES_ADMIN'],
+                category: 'APPROVAL'
+              });
+            } else if (existing.status !== newOrd.status) {
+              // Status changed on another device
+              if (newOrd.status === 'HELD') {
+                addNotification({
+                  title: `⚠️ Order Held: ${newOrd.order_number}`,
+                  message: `Order was placed on hold.`,
+                  event_type: 'ORDER_HELD',
+                  order_id: newOrd.id,
+                  target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'SUPER_ADMIN'],
+                  category: 'ORDER'
+                });
+              } else if (newOrd.status === 'WAIT_FOR_STOCK') {
+                addNotification({
+                  title: `⏳ Wait for Stock: ${newOrd.order_number}`,
+                  message: `Inventory insufficient in warehouse. Placed on hold.`,
+                  event_type: 'WAIT_FOR_STOCK',
+                  order_id: newOrd.id,
+                  target_roles: ['SALES_PERSON', 'AREA_SALES_MANAGER', 'SALES_ADMIN', 'SUPER_ADMIN'],
+                  category: 'INVENTORY'
+                });
+              } else if (newOrd.status === 'APPROVED') {
+                addNotification({
+                  title: `✅ Order Approved: ${newOrd.order_number}`,
+                  message: `Order approved and moved to billing queue.`,
+                  event_type: 'ORDER_APPROVED',
+                  order_id: newOrd.id,
+                  target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'BILLING', 'SUPER_ADMIN'],
+                  category: 'ORDER'
+                });
+              } else if (newOrd.status === 'DISPATCHED' || newOrd.status === 'OUT_FOR_DELIVERY') {
+                addNotification({
+                  title: `🚚 Order Dispatched: ${newOrd.order_number}`,
+                  message: `Order departed warehouse and is out for delivery.`,
+                  event_type: 'ORDER_OUT_FOR_DELIVERY',
+                  order_id: newOrd.id,
+                  target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'DISPATCH_MANAGER', 'SUPER_ADMIN'],
+                  category: 'DISPATCH'
+                });
+              } else if (newOrd.status === 'DELIVERED' || newOrd.status === 'COMPLETED') {
+                addNotification({
+                  title: `✅ Order Delivered: ${newOrd.order_number}`,
+                  message: `Order fulfilled and POD confirmed.`,
+                  event_type: 'POD_VERIFIED',
+                  order_id: newOrd.id,
+                  target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'ACCOUNTS', 'SUPER_ADMIN'],
+                  category: 'POD'
+                });
+              }
+            }
+          });
+
+          try {
+            localStorage.setItem('proline_oms_orders_v3', JSON.stringify(liveOrders));
+          } catch {}
+          return liveOrders;
+        });
+      } catch (err) {
+        console.warn('Orders sync notice:', err);
+      }
+    }, 15000);
+
+    // Use a unique Realtime topic.
     const realtimeTopic = `orders_realtime_${generateUuid()}`;
 
     // Real-time listener for database updates across any Super Admin / Sales session
@@ -202,6 +313,8 @@ const MainLayout: React.FC = () => {
       .subscribe();
 
     return () => {
+      clearInterval(syncPollInterval);
+      supabase.removeChannel(syncChannel);
       supabase.removeChannel(channel);
       supabase.removeChannel(channelAgencies);
       supabase.removeChannel(channelProducts);
@@ -557,6 +670,9 @@ const MainLayout: React.FC = () => {
     } catch (err: any) {
       console.error('Error saving order to Supabase:', err);
     }
+
+    // Broadcast order sync across all active sessions in real-time
+    broadcastOrderSync(orderData.order_number);
 
     // Automatically open Sales Order Invoice / Dispatch Slip for the newly created order
     setSelectedOrderForInvoice(orderData);

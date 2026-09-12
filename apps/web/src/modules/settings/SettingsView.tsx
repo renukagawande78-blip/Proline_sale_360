@@ -87,7 +87,7 @@ const RELEASES_DATA: ReleaseInfo[] = [
 
 export const SettingsView: React.FC = () => {
   const { currentUser } = useAuth();
-  const { fcmToken, sendTestNotification } = useNotifications();
+  const { fcmToken, sendTestNotification, webNotificationPermission, requestWebNotificationPermission } = useNotifications();
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
 
@@ -419,7 +419,42 @@ export const SettingsView: React.FC = () => {
         </div>
 
         <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '1rem', lineHeight: 1.4 }}>
-          When running on the Android app, your device automatically registers with Firebase Cloud Messaging (FCM) to receive real-time order approvals, stock alerts, and dispatch drop notifications.
+          Real-time order, approval, and dispatch notifications are synced across all devices using Supabase Realtime Broadcast. On mobile Android, Firebase Cloud Messaging (FCM) push notifications are supported.
+        </div>
+
+        {/* Web / Browser Desktop Notifications Card */}
+        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: '0.85rem', marginBottom: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Bell size={14} color="#38bdf8" /> Web & Desktop Notifications
+              </div>
+              <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: 2 }}>
+                Status: <strong style={{ color: webNotificationPermission === 'granted' ? '#34d399' : webNotificationPermission === 'denied' ? '#f43f5e' : '#fbbf24' }}>
+                  {webNotificationPermission === 'granted' ? '✅ Enabled (Sound & Popups Active)' : webNotificationPermission === 'denied' ? '❌ Blocked by Browser' : '⚠️ Permission Pending'}
+                </strong>
+              </div>
+            </div>
+
+            {webNotificationPermission !== 'granted' && (
+              <button
+                onClick={() => requestWebNotificationPermission()}
+                style={{
+                  padding: '0.35rem 0.85rem',
+                  background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
+                  color: '#ffffff',
+                  borderRadius: 6,
+                  border: 'none',
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(56, 189, 248, 0.35)'
+                }}
+              >
+                Enable Notifications Now
+              </button>
+            )}
+          </div>
         </div>
 
         {/* FCM Registration Token Display */}

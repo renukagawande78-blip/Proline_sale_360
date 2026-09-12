@@ -35,6 +35,8 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
     sendTestNotification, 
     clearAll,
     fcmToken,
+    webNotificationPermission,
+    requestWebNotificationPermission,
     roleFilter,
     setRoleFilter,
     categoryFilter,
@@ -203,6 +205,9 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
         <div style={{ position: 'relative' }} ref={notifRef}>
           <button 
             onClick={() => {
+              if (!showNotifications && webNotificationPermission === 'default') {
+                requestWebNotificationPermission().catch(() => {});
+              }
               setShowNotifications(!showNotifications);
               setShowMenu(false);
             }}
@@ -306,6 +311,45 @@ export const HeaderView: React.FC<HeaderViewProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Desktop / Web Notification Permission Banner */}
+              {webNotificationPermission !== 'granted' && webNotificationPermission !== 'unsupported' && (
+                <div style={{
+                  marginBottom: '0.65rem',
+                  padding: '0.55rem 0.75rem',
+                  background: 'rgba(56, 189, 248, 0.1)',
+                  border: '1px solid #38bdf8',
+                  borderRadius: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.5rem'
+                }}>
+                  <div style={{ fontSize: '0.725rem', color: '#e0f2fe', lineHeight: 1.3 }}>
+                    <strong style={{ color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Bell size={12} color="#38bdf8" /> Enable Desktop Alerts
+                    </strong>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Receive instant order sound & popups</div>
+                  </div>
+                  <button
+                    onClick={() => requestWebNotificationPermission()}
+                    style={{
+                      background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
+                      border: 'none',
+                      color: '#ffffff',
+                      fontSize: '0.675rem',
+                      fontWeight: 800,
+                      padding: '0.25rem 0.65rem',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      boxShadow: '0 2px 6px rgba(56, 189, 248, 0.4)'
+                    }}
+                  >
+                    Allow
+                  </button>
+                </div>
+              )}
 
               {/* FCM Push Notification Device Token Card (When available on Mobile) */}
               {fcmToken && (
