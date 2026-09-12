@@ -915,12 +915,28 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
             {/* Bottom Remarks & Signatories */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', borderTop: '2px solid #000000', padding: '10px 12px', fontSize: '0.725rem' }}>
               <div>
-                <strong>Terms & Instructions: </strong>
-                <span>
-                  {docMode === 'DISPATCH_CHALLAN' 
-                    ? 'Received the above goods in good order and condition. Any shortages or damage must be endorsed on this delivery challan immediately upon unloading.' 
-                    : (order.remarks || 'Standard order booking terms apply. Delivery subject to stock confirmation.')}
-                </span>
+                {/* Clean user remarks / order notes if present */}
+                {(() => {
+                  const cleanRemarks = (order.remarks || '')
+                    .replace(/<!--[\s\S]*?-->/g, '')
+                    .replace(/<[^>]*>/g, '')
+                    .trim();
+                  return cleanRemarks ? (
+                    <div style={{ marginBottom: 6, color: '#0f172a', fontWeight: 600 }}>
+                      <strong style={{ color: '#0284c7' }}>Order Note: </strong>
+                      <span>{cleanRemarks}</span>
+                    </div>
+                  ) : null;
+                })()}
+
+                <div>
+                  <strong>Terms & Conditions: </strong>
+                  <span style={{ color: '#334155', lineHeight: 1.4 }}>
+                    {docMode === 'DISPATCH_CHALLAN' 
+                      ? 'Received the above goods in good order and sound condition with intact packaging. Any shortages or damages must be endorsed on this challan immediately upon unloading. Subject to Surat jurisdiction.' 
+                      : '1. Goods once sold will not be taken back without prior authorization. 2. Delivery subject to stock availability and standard credit clearance. 3. Any discrepancy must be reported within 24 hours of delivery. 4. Subject to Surat jurisdiction.'}
+                  </span>
+                </div>
 
                 <div style={{ marginTop: 8, fontSize: '0.675rem', color: '#64748b' }}>
                   Booked by Salesperson: <strong>{order.salesperson_name || 'Amit Kumar'}</strong> &nbsp;|&nbsp; Order Timestamp: <strong>{formattedDate} {formattedTime}</strong>

@@ -151,7 +151,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
     const sumQty = Object.values(initialQty).reduce((sum, qty) => sum + qty, 0) || order.total_qty_pcs || 0;
     setBillingTotalQtyInput(order.billing_total_qty && order.billing_total_qty > 0 ? order.billing_total_qty : sumQty);
     setBillingAmountInput(order.invoice_amount && order.invoice_amount > 0 ? order.invoice_amount : '');
-    setInvoiceRemark(order.remarks || '');
+    setInvoiceRemark((order.remarks || '').replace(/<!--[\s\S]*?-->/g, '').trim());
   };
 
   const handleItemBoxChange = (itemId: string, val: number, pcsPerBox: number) => {

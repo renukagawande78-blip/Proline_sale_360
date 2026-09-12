@@ -66,6 +66,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   };
 
+  // Clean remarks helper that strips embedded <!--...--> metadata tags
+  const getCleanRemark = (rem?: string, fallback = '') => {
+    const cleaned = (rem || '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]*>/g, '').trim();
+    return cleaned || fallback;
+  };
+
   // Global KPI Calculations
   const totalOrdered = scopedOrders.reduce((sum, o) => sum + (o.total_qty_pcs || 0), 0);
   const totalBoxesOrdered = scopedOrders.reduce((sum, o) => sum + (o.total_box_qty || 0), 0);
@@ -242,7 +248,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
         filename = `Proline_OMS_Completed_Orders_Report_${todayStr}`;
         headers = ['Order Number', 'Order Date', 'Company Brand', 'Agency Name', 'Salesperson', 'Invoice Number', 'Settled Amount (INR)', 'Delivery Type', 'Total Box Qty', 'Total Quantity (PCS)', 'POD Remarks', 'Status'];
         rows = dataset.map(o => [
-          o.order_number, o.order_date, o.company_name || 'N/A', o.agency_name || 'N/A', o.salesperson_name || 'N/A', o.invoice_number || 'N/A', o.invoice_amount ? Number(o.invoice_amount) : '—', o.delivery_type || 'F.O.R', o.total_box_qty, o.total_qty_pcs, o.remarks || 'POD Verified', o.status
+          o.order_number, o.order_date, o.company_name || 'N/A', o.agency_name || 'N/A', o.salesperson_name || 'N/A', o.invoice_number || 'N/A', o.invoice_amount ? Number(o.invoice_amount) : '—', o.delivery_type || 'F.O.R', o.total_box_qty, o.total_qty_pcs, getCleanRemark(o.remarks, 'POD Verified'), o.status
         ]);
       } else if (reportName === 'Fill Rate Report') {
         filename = `Proline_OMS_Fill_Rate_Report_${todayStr}`;
@@ -270,7 +276,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
         filename = `Proline_OMS_POD_Remarks_Report_${todayStr}`;
         headers = ['Order Number', 'Invoice Number', 'Delivery Date', 'Company Brand', 'Agency Name', 'Transporter / Driver', 'Received Boxes', 'POD Remarks', 'Status'];
         rows = dataset.map(o => [
-          o.order_number, o.invoice_number || 'N/A', o.order_date, o.company_name || 'N/A', o.agency_name || 'N/A', o.driver_name || o.rental_agency_name || 'N/A', o.total_box_qty, o.remarks || 'Standard Delivery', o.status
+          o.order_number, o.invoice_number || 'N/A', o.order_date, o.company_name || 'N/A', o.agency_name || 'N/A', o.driver_name || o.rental_agency_name || 'N/A', o.total_box_qty, getCleanRemark(o.remarks, 'Standard Delivery'), o.status
         ]);
       } else if (reportName === 'Monthly Dispatch Report') {
         filename = `Proline_OMS_Monthly_Dispatch_Report_${todayStr}`;
@@ -500,7 +506,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
             <div style={{ color: '#94a3b8', fontSize: '0.725rem' }}>{o.total_qty_pcs} Total PCS</div>
           </td>
           <td>
-            <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>{o.remarks || 'POD Verified & Delivered'}</span>
+            <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>{getCleanRemark(o.remarks, 'POD Verified & Delivered')}</span>
           </td>
           <td>
             <span className="status-badge status-COMPLETED">✅ COMPLETED</span>
@@ -666,7 +672,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                 {hasIssue ? '⚠️ Issue Reported' : '✅ Verified Clean'}
               </span>
             </td>
-            <td><span style={{ color: '#f8fafc', fontSize: '0.8rem' }}>{o.remarks || 'Order delivered & POD verified.'}</span></td>
+            <td><span style={{ color: '#f8fafc', fontSize: '0.8rem' }}>{getCleanRemark(o.remarks, 'Order delivered & POD verified.')}</span></td>
             <td><span className={`status-badge status-${o.status}`}>{o.status}</span></td>
           </tr>
         );
