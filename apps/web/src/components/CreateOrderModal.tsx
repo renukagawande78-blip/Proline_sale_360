@@ -598,7 +598,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                         )}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: isAlreadyChosen ? '#64748b' : '#34d399', marginTop: 2, fontWeight: 600 }}>
-                        Company: {parentCompany?.company_name || 'General'} | Code: {p.product_code} | Pack: {p.pcs_per_box} pcs/box | MRP: ₹{p.mrp_price ?? p.unit_price ?? 0}
+                        MRP: ₹{p.mrp_price ?? p.unit_price ?? 0} | Pack: {p.pcs_per_box} pcs/box | Code: {p.product_code}
                       </div>
                     </div>
                     {isSelected && <Check size={16} color="#38bdf8" />}
