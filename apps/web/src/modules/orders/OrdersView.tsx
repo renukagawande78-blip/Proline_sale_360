@@ -66,7 +66,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const canAddOrder = (hasPermission('add_order') || hasPermission('order_entry')) && !isBillingOrAccounts && !isDispatchUser;
 
   // Active tab for filtering
-  type Stage2Tab = 'ALL' | 'NEW' | 'REVIEW_REQUIRED' | 'APPROVAL_NEEDED' | 'HARSHAD_APPROVED' | 'ON_HOLD' | 'REJECTED' | 'COMPLETED';
+  type Stage2Tab = 'ALL' | 'NEW' | 'REVIEW_REQUIRED' | 'APPROVAL_NEEDED' | 'SUPER_ADMIN_APPROVED' | 'HARSHAD_APPROVED' | 'ON_HOLD' | 'REJECTED' | 'COMPLETED';
   const [activeTab, setActiveTab] = useState<Stage2Tab>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('ALL');
@@ -96,7 +96,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const [approvalRemarks, setApprovalRemarks] = useState('');
   const [holdReason, setHoldReason] = useState('');
   const [showHoldInput, setShowHoldInput] = useState(false);
-  const [sentToHarshad, setSentToHarshad] = useState(false);
+  const [sentToSuperAdmin, setSentToSuperAdmin] = useState(false);
   const [approvedBySuperAdmin, setApprovedBySuperAdmin] = useState(false);
 
   // Sales Admin quick actions
@@ -132,7 +132,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const countNew = scopedOrders.filter(o => o.status === 'SUBMITTED').length;
   const countReviewRequired = scopedOrders.filter(o => (o.status === 'SUBMITTED' && !o.sales_admin_approved) || o.reattempt_delivery).length;
   const countApprovalNeeded = scopedOrders.filter(o => o.need_accounts_approval && o.accounts_approval_status === 'PENDING').length;
-  const countHarshadApproved = scopedOrders.filter(o => o.status === 'APPROVED').length;
+  const countSuperAdminApproved = scopedOrders.filter(o => o.status === 'APPROVED').length;
   const countOnHold = scopedOrders.filter(o => o.status === 'HELD' || o.accounts_approval_status === 'HOLD').length;
   const countRejected = scopedOrders.filter(o => o.status === 'REJECTED' || o.accounts_approval_status === 'REJECTED').length;
   const countCompleted = scopedOrders.filter(o => o.status === 'COMPLETED').length;
@@ -140,7 +140,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const qtyNew = scopedOrders.filter(o => o.status === 'SUBMITTED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyReview = scopedOrders.filter(o => (o.status === 'SUBMITTED' && !o.sales_admin_approved) || o.reattempt_delivery).reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyApprovalNeeded = scopedOrders.filter(o => o.need_accounts_approval && o.accounts_approval_status === 'PENDING').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
-  const qtyHarshadApproved = scopedOrders.filter(o => o.status === 'APPROVED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
+  const qtySuperAdminApproved = scopedOrders.filter(o => o.status === 'APPROVED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyOnHold = scopedOrders.filter(o => o.status === 'HELD' || o.accounts_approval_status === 'HOLD').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyRejected = scopedOrders.filter(o => o.status === 'REJECTED' || o.accounts_approval_status === 'REJECTED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
   const qtyCompleted = scopedOrders.filter(o => o.status === 'COMPLETED').reduce((s, o) => s + (o.total_qty_pcs || 0), 0);
@@ -150,7 +150,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     if (activeTab === 'NEW' && o.status !== 'SUBMITTED') return false;
     if (activeTab === 'REVIEW_REQUIRED' && !((o.status === 'SUBMITTED' && !o.sales_admin_approved) || o.reattempt_delivery)) return false;
     if (activeTab === 'APPROVAL_NEEDED' && !(o.need_accounts_approval && o.accounts_approval_status === 'PENDING')) return false;
-    if (activeTab === 'HARSHAD_APPROVED' && o.status !== 'APPROVED') return false;
+    if ((activeTab === 'SUPER_ADMIN_APPROVED' || (activeTab as any) === 'HARSHAD_APPROVED') && o.status !== 'APPROVED') return false;
     if (activeTab === 'ON_HOLD' && o.status !== 'HELD' && o.accounts_approval_status !== 'HOLD') return false;
     if (activeTab === 'REJECTED' && o.status !== 'REJECTED' && o.accounts_approval_status !== 'REJECTED') return false;
     if (activeTab === 'COMPLETED' && o.status !== 'COMPLETED') return false;
@@ -340,23 +340,23 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     if (order.reattempt_delivery) return { label: '🔄 REATTEMPT DELIVERY', color: '#f59e0b', bg: 'rgba(245,158,11,0.18)', border: 'rgba(245,158,11,0.45)' };
     if (order.status === 'SUBMITTED') return { label: 'NEW', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.3)' };
     if (order.status === 'SALES_ADMIN_APPROVED') return { label: 'ACCOUNTS PENDING', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' };
-    if (order.status === 'APPROVED') return { label: 'HARSHAD SIR APPROVED', color: '#34d399', bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.3)' };
+    if (order.status === 'APPROVED') return { label: 'SUPER ADMIN APPROVED', color: '#34d399', bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.3)' };
     if (order.status === 'HELD') return { label: 'ON HOLD', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)' };
     if (order.status === 'REJECTED') return { label: 'REJECTED', color: '#f43f5e', bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.3)' };
     return { label: order.status, color: '#94a3b8', bg: '#1e293b', border: '#334155' };
   };
 
   // Account Department confirmation state
-  const [needsHarshadApproval, setNeedsHarshadApproval] = useState<'YES' | 'NO'>('YES');
-  const [harshadMessage, setHarshadMessage] = useState('Please approve this order. Customer requires urgent dispatch.');
+  const [needsSuperAdminApproval, setNeedsSuperAdminApproval] = useState<'YES' | 'NO'>('YES');
+  const [superAdminMessage, setSuperAdminMessage] = useState('Please approve this order. Customer requires urgent dispatch.');
   const [directActionType, setDirectActionType] = useState<'APPROVE' | 'HOLD' | 'REJECT'>('APPROVE');
   const [directReasonInput, setDirectReasonInput] = useState('');
 
   const openReviewModal = (order: Order) => {
     setApprovalModal(order);
-    setSentToHarshad(false);
-    setNeedsHarshadApproval(order.status === 'SALES_ADMIN_APPROVED' ? 'YES' : 'NO');
-    setHarshadMessage(order.sales_admin_remarks || 'Please approve this order. Customer requires urgent dispatch.');
+    setSentToSuperAdmin(false);
+    setNeedsSuperAdminApproval(order.status === 'SALES_ADMIN_APPROVED' ? 'YES' : 'NO');
+    setSuperAdminMessage(order.sales_admin_remarks || 'Please approve this order. Customer requires urgent dispatch.');
     setDirectActionType('APPROVE');
     setDirectReasonInput('');
     setApprovalRemarks('');
@@ -364,9 +364,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     setShowHoldInput(false);
   };
 
-  const handleForwardToHarshadSir = (order: Order) => {
+  const handleForwardToSuperAdmin = (order: Order) => {
     if (onApprove) {
-      onApprove(order.id, harshadMessage || 'Forwarded for Harshad Sir approval', {
+      onApprove(order.id, superAdminMessage || 'Forwarded for Super Admin approval', {
         directApprove: false,
         payment_type: order.payment_type || 'CREDIT',
         priority: order.priority || 'MEDIUM',
@@ -376,14 +376,14 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     // Keep the confirmation visible so the sender knows the order is now
     // waiting for Higher Authority's response. The order status is persisted
     // as SALES_ADMIN_APPROVED by the approval handler above.
-    setSentToHarshad(true);
+    setSentToSuperAdmin(true);
   };
 
-  const closeSentToHarshadConfirmation = () => {
-    setSentToHarshad(false);
+  const closeSentToSuperAdminConfirmation = () => {
+    setSentToSuperAdmin(false);
     setApprovalModal(null);
     setSelectedOrder(null);
-    setHarshadMessage('Please approve this order. Customer requires urgent dispatch.');
+    setSuperAdminMessage('Please approve this order. Customer requires urgent dispatch.');
   };
 
   const handleDirectApprove = (order: Order) => {
@@ -420,7 +420,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
   const handleSuperAdminApprove = (order: Order) => {
     if (onApprove) {
-      onApprove(order.id, approvalRemarks || 'Approved by Harshad Sir', {
+      onApprove(order.id, approvalRemarks || 'Approved by Super Admin', {
         payment_type: order.payment_type || 'CREDIT',
         priority: order.priority || 'MEDIUM',
         inventory_status: 'IN_STOCK'
@@ -436,14 +436,14 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   };
 
   const handleSuperAdminHold = (order: Order) => {
-    if (onHold) onHold(order.id, 'ADMIN_HOLD', holdReason || 'Held by Harshad Sir');
+    if (onHold) onHold(order.id, 'ADMIN_HOLD', holdReason || 'Held by Super Admin');
     setApprovalModal(null);
     setHoldReason('');
     setShowHoldInput(false);
   };
 
   const handleSuperAdminReject = (order: Order) => {
-    if (onReject) onReject(order.id, approvalRemarks || 'Rejected by Accounts Department');
+    if (onReject) onReject(order.id, approvalRemarks || 'Rejected by Super Admin');
     setApprovalModal(null);
     setApprovalRemarks('');
   };
@@ -488,10 +488,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
       sub: 'Awaiting Super Admin decision'
     },
     {
-      id: 'HARSHAD_APPROVED' as Stage2Tab,
-      label: 'HARSHAD SIR APPROVED',
-      count: countHarshadApproved,
-      quantity: qtyHarshadApproved,
+      id: 'SUPER_ADMIN_APPROVED' as Stage2Tab,
+      label: 'SUPER ADMIN APPROVED',
+      count: countSuperAdminApproved,
+      quantity: qtySuperAdminApproved,
       color: '#34d399',
       bg: 'rgba(52,211,153,0.12)',
       activeBg: 'rgba(52,211,153,0.2)',
@@ -509,7 +509,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
       activeBg: 'rgba(245,158,11,0.2)',
       border: 'rgba(245,158,11,0.3)',
       icon: '⏸️',
-      sub: 'By Harshad Sir'
+      sub: 'By Super Admin'
     },
     {
       id: 'REJECTED' as Stage2Tab,
@@ -544,7 +544,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     { id: 'NEW', label: 'New', count: countNew },
     { id: 'REVIEW_REQUIRED', label: 'Review Required', count: countReviewRequired },
     { id: 'APPROVAL_NEEDED', label: 'Super Admin Pending', count: countApprovalNeeded },
-    { id: 'HARSHAD_APPROVED', label: 'Approved', count: countHarshadApproved },
+    { id: 'SUPER_ADMIN_APPROVED', label: 'Super Admin Approval', count: countSuperAdminApproved },
     { id: 'ON_HOLD', label: 'On Hold', count: countOnHold },
     { id: 'REJECTED', label: 'Rejected', count: countRejected },
   ];

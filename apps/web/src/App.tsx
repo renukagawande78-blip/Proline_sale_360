@@ -714,14 +714,14 @@ const MainLayout: React.FC = () => {
           };
         }
 
-        // Forward to Harshad Sir / Higher Authority for Approval
+        // Forward to Super Admin / Higher Authority for Approval
         return {
           ...o,
           status: 'SALES_ADMIN_APPROVED',
           sales_admin_approved: true,
           sales_admin_approved_by: approverName,
           sales_admin_approved_at: timestamp,
-          sales_admin_remarks: remarks || 'Forwarded for Harshad Sir approval',
+          sales_admin_remarks: remarks || 'Forwarded for Super Admin approval',
           payment_type: approvalDetails?.payment_type || o.payment_type || 'CREDIT',
           payment_receipt_no: approvalDetails?.payment_receipt_no || o.payment_receipt_no,
           priority: approvalDetails?.priority || o.priority || 'MEDIUM',
@@ -757,8 +757,8 @@ const MainLayout: React.FC = () => {
       } else {
         updateOrderStatusInSupabase(orderId, isWait ? 'WAIT_FOR_STOCK' : 'SALES_ADMIN_APPROVED', remarks);
         addNotification({
-          title: isWait ? `⚠️ Wait for Stock: ${target.order_number}` : `🟡 Sent to Harshad Sir: ${target.order_number}`,
-          message: `Sales Admin ${approverName} sent order to Harshad Sir for approval. Note: "${remarks || 'Approval requested'}".`,
+          title: isWait ? `⚠️ Wait for Stock: ${target.order_number}` : `🟡 Sent for Super Admin Approval: ${target.order_number}`,
+          message: `Sales Admin ${approverName} sent order for Super Admin approval. Note: "${remarks || 'Approval requested'}".`,
           event_type: 'ORDER_APPROVED',
           order_id: target.id
         });

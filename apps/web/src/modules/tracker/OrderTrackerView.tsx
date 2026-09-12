@@ -57,7 +57,7 @@ const STAGES: TrackStage[] = [
   {
     id: 'stage2',
     label: '2. Financial Gate',
-    sublabel: 'Harshad Sir review (Advance/Overdue/Credit)',
+    sublabel: 'Super Admin review (Advance/Overdue/Credit)',
     icon: ShieldCheck,
     color: '#fbbf24',
     glow: 'rgba(251,191,36,0.3)',

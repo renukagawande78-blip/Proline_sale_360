@@ -96,7 +96,7 @@ export const DEFAULT_HOLD_REASONS: HoldReason[] = [
     reason_code: 'MANAGEMENT-DIR',
     reason_description: 'Super Admin Commercial Review Directive / Strategic Administrative Hold',
     category: 'OPERATIONAL',
-    action_rule: 'Exclusive Super Admin (Harshad Sir / Chirag Sir) release override',
+    action_rule: 'Exclusive Super Admin release override',
     sla_hours: 12,
     active: true,
     created_at: new Date('2026-09-01T00:00:00Z').toISOString()
