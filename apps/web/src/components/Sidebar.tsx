@@ -19,8 +19,7 @@ import {
   Clock,
   Tag,
   Smartphone,
-  Download,
-  Settings as SettingsIcon
+  Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PermissionControl } from '../types';
@@ -79,17 +78,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'returns', label: 'Returns & Damage', icon: PackageX, fallbackRoles: ['ALL'] },
     { id: 'pod', label: 'POD Queue', icon: FileCheck2, fallbackRoles: ['SUPER_ADMIN', 'BILLING', 'ACCOUNTS', 'SALES_ADMIN'] },
     { id: 'tracker', label: 'Order Tracker', icon: ScanSearch, fallbackRoles: ['ALL'] },
-    { id: 'masters', label: 'Master Data', icon: Building2, permissionKey: 'party_view', fallbackRoles: ['ALL'] },
-    { id: 'settings', label: 'Settings & Releases', icon: SettingsIcon, fallbackRoles: ['ALL'] }
+    { id: 'masters', label: 'Master Data', icon: Building2, permissionKey: 'party_view', fallbackRoles: ['ALL'] }
   ];
 
   const filteredNav = navItems.filter(item => {
-    if (item.id === 'settings') return true;
     if (isSuperAdminUser) return true;
 
-    // 1. Field Sales Exec / Area Sales Manager: ONLY sees Sales Orders, Track My Order, Reports & Analytics, and Settings
+    // 1. Field Sales Exec / Area Sales Manager: ONLY sees Sales Orders, Track My Order, Reports & Analytics
     if (role === 'SALES_PERSON' || role === 'AREA_SALES_MANAGER') {
-      return item.id === 'orders' || item.id === 'tracker' || item.id === 'reports' || item.id === 'settings';
+      return item.id === 'orders' || item.id === 'tracker' || item.id === 'reports';
     }
 
     // 2. Sales Admin operational dashboard and review tools (includes POD Queue to review unverified exceptions)
