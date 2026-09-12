@@ -23,34 +23,60 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({
 
   const PULL_THRESHOLD = 65;
   const MAX_PULL = 90;
+  const startXRef = useRef(0);
+  const isHorizontalScrollRef = useRef(false);
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (disabled || isRefreshing) return;
+
+    // Do not hijack touches on buttons, links, inputs, selects, or horizontal scroll tab containers
+    const target = e.target as HTMLElement;
+    if (target && target.closest('button, a, input, select, textarea, .orders-tab-scroll, .filter-pills-row, .orders-kpi-grid, [role="tab"]')) {
+      isDraggingRef.current = false;
+      return;
+    }
+
     const container = containerRef.current;
     // Only allow pull to refresh when scrolled at the very top
     if (container && container.scrollTop <= 2) {
+      startXRef.current = e.touches[0].clientX;
       startYRef.current = e.touches[0].clientY;
       isDraggingRef.current = true;
+      isHorizontalScrollRef.current = false;
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current || disabled || isRefreshing) return;
+    const currentX = e.touches[0].clientX;
     const currentY = e.touches[0].clientY;
-    const diff = currentY - startYRef.current;
+    const diffX = Math.abs(currentX - startXRef.current);
+    const diffY = currentY - startYRef.current;
+
+    // If movement is predominantly horizontal, cancel pull-to-refresh
+    if (diffX > Math.abs(diffY) && diffX > 8) {
+      isHorizontalScrollRef.current = true;
+      isDraggingRef.current = false;
+      setPullDistance(0);
+      setIsPulling(false);
+      return;
+    }
+
+    if (isHorizontalScrollRef.current) return;
 
     const container = containerRef.current;
-    if (container && container.scrollTop <= 2 && diff > 0) {
+    // Require a minimum deliberate downward pull (12px) before engaging pull state
+    if (container && container.scrollTop <= 2 && diffY > 12) {
       // Damped rubber-band effect
-      const dampedDistance = Math.min(diff * 0.42, MAX_PULL);
+      const dampedDistance = Math.min((diffY - 12) * 0.42, MAX_PULL);
       setPullDistance(dampedDistance);
       setIsPulling(true);
 
       // Prevent native overscroll bouncing when pulling down
-      if (e.cancelable && diff > 10) {
+      if (e.cancelable && diffY > 20) {
         e.preventDefault();
       }
-    } else {
+    } else if (diffY <= 0) {
       setPullDistance(0);
       setIsPulling(false);
       isDraggingRef.current = false;

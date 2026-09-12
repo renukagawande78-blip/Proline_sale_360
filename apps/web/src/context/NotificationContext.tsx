@@ -335,6 +335,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } catch {}
   }, [notifications]);
 
+  const recentAlertsRef = useRef<Map<string, number>>(new Map());
+
   // Realtime Broadcast Listener for instant cross-device notifications across all users
   useEffect(() => {
     const broadcastChannel = supabase.channel('proline_oms_global_notifications');
@@ -343,6 +345,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       .on('broadcast', { event: 'new_notification' }, (eventPayload: any) => {
         const item = eventPayload?.payload;
         if (!item || !item.id) return;
+
+        // Deduplicate identical alerts within 60s
+        const alertKey = `${item.title}_${item.message}_${item.order_id || ''}`;
+        const now = Date.now();
+        const lastAlertTime = recentAlertsRef.current.get(alertKey);
+        if (lastAlertTime && (now - lastAlertTime) < 60000) {
+          return;
+        }
+        recentAlertsRef.current.set(alertKey, now);
 
         setNotifications(prev => {
           if (prev.some(n => n.id === item.id)) return prev;
@@ -509,6 +520,17 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const addNotification = (item: Omit<NotificationItem, 'id' | 'created_at' | 'is_read'>) => {
     getAudioContext();
+
+    // Deduplicate: Don't allow identical notifications within 60 seconds
+    const alertKey = `${item.title}_${item.message}_${item.order_id || ''}`;
+    const now = Date.now();
+    const lastAlertTime = recentAlertsRef.current.get(alertKey);
+    if (lastAlertTime && (now - lastAlertTime) < 60000) {
+      console.log('[Notification] Suppressed duplicate alert within 60s:', alertKey);
+      return;
+    }
+    recentAlertsRef.current.set(alertKey, now);
+
     // Resolve target roles & category based on rules
     const meta = resolveNotificationMeta(item.event_type, item.title, item.message, item.brand_name);
 

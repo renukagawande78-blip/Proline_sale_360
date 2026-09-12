@@ -28,6 +28,7 @@ interface OrdersViewProps {
   onAccountsApprovalResponse?: (orderId: string, status: 'APPROVED' | 'HOLD' | 'REJECTED', remark: string) => void;
   onOpenPODModal?: (order: Order) => void;
   onBulkImportOrders?: (newOrders: Order[]) => void;
+  initialTab?: string;
 }
 
 export const OrdersView: React.FC<OrdersViewProps> = ({
@@ -45,7 +46,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   onRequestAccountsApproval,
   onAccountsApprovalResponse,
   onOpenPODModal,
-  onBulkImportOrders
+  onBulkImportOrders,
+  initialTab
 }) => {
   const { currentUser, hasPermission } = useAuth();
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
@@ -67,7 +69,14 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
   // Active tab for filtering
   type Stage2Tab = 'ALL' | 'NEW' | 'REVIEW_REQUIRED' | 'APPROVAL_NEEDED' | 'SUPER_ADMIN_APPROVED' | 'HARSHAD_APPROVED' | 'ON_HOLD' | 'REJECTED' | 'COMPLETED';
-  const [activeTab, setActiveTab] = useState<Stage2Tab>('ALL');
+  const [activeTab, setActiveTab] = useState<Stage2Tab>((initialTab as Stage2Tab) || 'ALL');
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab as Stage2Tab);
+    }
+  }, [initialTab]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('ALL');
   const [liveCompanies, setLiveCompanies] = useState<Company[]>([]);

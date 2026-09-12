@@ -202,98 +202,16 @@ const MainLayout: React.FC = () => {
       })
       .subscribe();
 
-    // 2. Smart background polling (every 15s) with automated status transition detection
+    // 2. Smart background polling (every 15s) to keep order data up to date
     const syncPollInterval = setInterval(async () => {
       try {
         const { orders: liveOrders, error } = await fetchOrdersFromSupabase();
         if (error || !liveOrders || liveOrders.length === 0) return;
 
-        setOrders(currentOrders => {
-          if (!currentOrders || currentOrders.length === 0) return liveOrders;
-
-          const currentMap = new Map(currentOrders.map(o => [o.id, o]));
-          const currentNumberMap = new Map(currentOrders.map(o => [o.order_number, o]));
-
-          liveOrders.forEach(newOrd => {
-            const existing = currentMap.get(newOrd.id) || (newOrd.order_number ? currentNumberMap.get(newOrd.order_number) : null);
-            if (!existing) {
-              // Brand new order created on another device
-              addNotification({
-                title: `📦 New Order Created: ${newOrd.order_number}`,
-                message: `Booking for ${newOrd.agency_name} (${newOrd.total_box_qty || 0} Boxes, ${newOrd.total_qty_pcs || 0} PCS).`,
-                event_type: 'ORDER_SUBMITTED',
-                order_id: newOrd.id,
-                target_roles: ['SALES_ADMIN', 'SUPER_ADMIN', 'SALES_PERSON', 'AREA_SALES_MANAGER'],
-                category: 'ORDER'
-              });
-            } else if (
-              (newOrd.accounts_approval_status === 'PENDING' && existing.accounts_approval_status !== 'PENDING') ||
-              (newOrd.need_accounts_approval && !existing.need_accounts_approval)
-            ) {
-              addNotification({
-                title: `🔒 Super Admin Approval Required: ${newOrd.order_number}`,
-                message: `Order submitted for Super Admin credit/accounts authorization.`,
-                event_type: 'ACCOUNTS_APPROVAL_REQUESTED',
-                order_id: newOrd.id,
-                target_roles: ['SUPER_ADMIN', 'SALES_ADMIN'],
-                category: 'APPROVAL'
-              });
-            } else if (existing.status !== newOrd.status) {
-              // Status changed on another device
-              if (newOrd.status === 'HELD') {
-                addNotification({
-                  title: `⚠️ Order Held: ${newOrd.order_number}`,
-                  message: `Order was placed on hold.`,
-                  event_type: 'ORDER_HELD',
-                  order_id: newOrd.id,
-                  target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'SUPER_ADMIN'],
-                  category: 'ORDER'
-                });
-              } else if (newOrd.status === 'WAIT_FOR_STOCK') {
-                addNotification({
-                  title: `⏳ Wait for Stock: ${newOrd.order_number}`,
-                  message: `Inventory insufficient in warehouse. Placed on hold.`,
-                  event_type: 'WAIT_FOR_STOCK',
-                  order_id: newOrd.id,
-                  target_roles: ['SALES_PERSON', 'AREA_SALES_MANAGER', 'SALES_ADMIN', 'SUPER_ADMIN'],
-                  category: 'INVENTORY'
-                });
-              } else if (newOrd.status === 'APPROVED') {
-                addNotification({
-                  title: `✅ Order Approved: ${newOrd.order_number}`,
-                  message: `Order approved and moved to billing queue.`,
-                  event_type: 'ORDER_APPROVED',
-                  order_id: newOrd.id,
-                  target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'BILLING', 'SUPER_ADMIN'],
-                  category: 'ORDER'
-                });
-              } else if (newOrd.status === 'DISPATCHED' || newOrd.status === 'OUT_FOR_DELIVERY') {
-                addNotification({
-                  title: `🚚 Order Dispatched: ${newOrd.order_number}`,
-                  message: `Order departed warehouse and is out for delivery.`,
-                  event_type: 'ORDER_OUT_FOR_DELIVERY',
-                  order_id: newOrd.id,
-                  target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'DISPATCH_MANAGER', 'SUPER_ADMIN'],
-                  category: 'DISPATCH'
-                });
-              } else if (newOrd.status === 'DELIVERED' || newOrd.status === 'COMPLETED') {
-                addNotification({
-                  title: `✅ Order Delivered: ${newOrd.order_number}`,
-                  message: `Order fulfilled and POD confirmed.`,
-                  event_type: 'POD_VERIFIED',
-                  order_id: newOrd.id,
-                  target_roles: ['SALES_PERSON', 'SALES_ADMIN', 'ACCOUNTS', 'SUPER_ADMIN'],
-                  category: 'POD'
-                });
-              }
-            }
-          });
-
-          try {
-            localStorage.setItem('proline_oms_orders_v3', JSON.stringify(liveOrders));
-          } catch {}
-          return liveOrders;
-        });
+        setOrders(liveOrders);
+        try {
+          localStorage.setItem('proline_oms_orders_v3', JSON.stringify(liveOrders));
+        } catch {}
       } catch (err) {
         console.warn('Orders sync notice:', err);
       }
@@ -1556,6 +1474,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'dashboard' && (
           <DashboardPage 
+            key="page_dashboard"
             orders={globallyFilteredOrders} 
             onOpenCreateOrder={() => setIsCreateOpen(true)}
             onSelectOrder={(o) => setSelectedOrderForApproval(o)}
@@ -1569,6 +1488,8 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'orders' && (
           <OrdersPage 
+            key="page_orders"
+            initialTab="ALL"
             orders={globallyFilteredOrders} 
             onOpenCreateOrder={() => { setOrderToEdit(null); setIsCreateOpen(true); }}
             onOpenEditOrder={handleOpenEditOrder}
@@ -1589,6 +1510,8 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'approvals' && (
           <OrdersPage 
+            key="page_approvals"
+            initialTab="APPROVAL_NEEDED"
             orders={globallyFilteredOrders.filter(o => 
               o.status === 'SUBMITTED' || 
               o.status === 'SALES_ADMIN_APPROVED' || 
@@ -1616,6 +1539,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'masters' && (
           <MastersPage 
+            key="page_masters"
             initialTab="agencies" 
             onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} 
             onOpenCreateOrderForAgency={handleOpenCreateOrderForAgency}
@@ -1625,6 +1549,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'zones' && (
           <MastersPage 
+            key="page_zones"
             initialTab="areas" 
             onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} 
             onOpenCreateOrderForAgency={handleOpenCreateOrderForAgency}
@@ -1635,6 +1560,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'dispatch' && (
           <DispatchPage 
+            key="page_dispatch"
             orders={stageScopedOrders} 
             onOpenDispatchModal={(o) => setSelectedOrderForDispatch(o)}
             onUpdateOrderStatus={handleUpdateOrderStatus}
@@ -1646,6 +1572,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'accounts' && (
           <AccountsPage 
+            key="page_accounts"
             orders={stageScopedOrders} 
             agencies={agenciesPool}
             onGenerateInvoice={handleGenerateInvoice}
@@ -1656,6 +1583,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'reports' && (
           <ReportsPage 
+            key="page_reports"
             orders={globallyFilteredOrders} 
             initialReport={selectedReportName}
           />
@@ -1663,6 +1591,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'returns' && (
           <ReturnsRegisterView
+            key="page_returns"
             orders={globallyFilteredOrders}
             onOpenProcessReturnModal={(o) => setSelectedOrderForProcessReturn(o)}
             onSelectOrder={(o) => setSelectedOrderForApproval(o)}
@@ -1674,6 +1603,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'pod' && (
           <PODQueueView
+            key="page_pod"
             orders={globallyFilteredOrders}
             onVerifyPOD={(order) => setSelectedOrderForPOD(order)}
             onResolveQuery={handleResolveException}
@@ -1682,13 +1612,14 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'tracker' && (
           <OrderTrackerView
+            key="page_tracker"
             orders={globallyFilteredOrders}
             onReleaseHold={handleReleaseHold}
           />
         )}
 
         {currentTab === 'settings' && (
-          <SettingsView />
+          <SettingsView key="page_settings" />
         )}
         </PullToRefresh>
       </div>

@@ -4,6 +4,7 @@ import { Order } from '../types';
 
 interface OrdersPageProps {
   orders: Order[];
+  initialTab?: string;
   onOpenCreateOrder: () => void;
   onOpenEditOrder?: (order: Order) => void;
   onSelectOrderForApproval: (order: Order) => void;
