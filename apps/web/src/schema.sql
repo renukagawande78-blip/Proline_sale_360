@@ -200,6 +200,37 @@ CREATE TABLE IF NOT EXISTS public.agency_financials (
     last_updated TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 11. TASK MANAGEMENT TABLE
+CREATE TABLE IF NOT EXISTS public.tasks (
+    id TEXT PRIMARY KEY,
+    task_number TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT,
+    priority TEXT DEFAULT 'NORMAL',
+    category TEXT DEFAULT 'GENERAL',
+    status TEXT DEFAULT 'PENDING',
+    assigned_to_id TEXT,
+    assigned_to_name TEXT,
+    assigned_to_role TEXT,
+    assigned_to_email TEXT,
+    created_by_id TEXT,
+    created_by_name TEXT,
+    created_by_role TEXT,
+    due_date TIMESTAMPTZ NOT NULL,
+    reminder_date TIMESTAMPTZ,
+    reminder_note TEXT,
+    reminder_sent BOOLEAN DEFAULT false,
+    support_docs JSONB DEFAULT '[]'::jsonb,
+    completion_remarks TEXT,
+    completion_proof_docs JSONB DEFAULT '[]'::jsonb,
+    completed_at TIMESTAMPTZ,
+    completed_by_id TEXT,
+    completed_by_name TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    activity_log JSONB DEFAULT '[]'::jsonb
+);
+
 -- ============================================================================
 -- Role Grants and Sequences Permissions
 -- ============================================================================
@@ -224,6 +255,7 @@ ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.zones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.areas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agency_financials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE IF EXISTS public.order_items ADD COLUMN IF NOT EXISTS product_name TEXT;
 ALTER TABLE IF EXISTS public.order_items ADD COLUMN IF NOT EXISTS product_code TEXT;
@@ -257,6 +289,7 @@ DROP POLICY IF EXISTS "order_items_crud_policy" ON public.order_items;
 DROP POLICY IF EXISTS "zones_crud_policy" ON public.zones;
 DROP POLICY IF EXISTS "areas_crud_policy" ON public.areas;
 DROP POLICY IF EXISTS "agency_financials_crud_policy" ON public.agency_financials;
+DROP POLICY IF EXISTS "tasks_crud_policy" ON public.tasks;
 
 -- Create ALL operations policies
 CREATE POLICY "companies_crud_policy" ON public.companies FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -269,6 +302,7 @@ CREATE POLICY "order_items_crud_policy" ON public.order_items FOR ALL TO anon, a
 CREATE POLICY "zones_crud_policy" ON public.zones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "areas_crud_policy" ON public.areas FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "agency_financials_crud_policy" ON public.agency_financials FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "tasks_crud_policy" ON public.tasks FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 -- Ensure Super Admin Users (Chirag & Harshad) are Mapped to All Companies
 INSERT INTO public.users (id, full_name, email, role_name, company_handle, password, active)

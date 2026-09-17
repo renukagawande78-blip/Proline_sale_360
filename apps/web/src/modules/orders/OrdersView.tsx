@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { fetchCompaniesFromSupabase, isCompanyAllowedForUser, getOrderAccessPermission, MOCK_COMPANIES } from '../../lib/supabase';
-import { Order, Company, PermissionControl } from '../../types';
+import { Order, Company, PermissionControl, isOrderDispatchedOrBeyond } from '../../types';
 import { PermissionDeniedModal } from '../../components/PermissionDeniedModal';
 import { BulkImportModal } from '../../components/BulkImportModal';
 
@@ -1012,8 +1012,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                           </button>
                         )}
 
-                        {/* 2. Edit Order */}
-                        {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && (
+                        {/* 2. Edit Order - Disabled once dispatched */}
+                        {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && !isOrderDispatchedOrBeyond(order.status) && (
                           <button
                             onClick={e => { e.stopPropagation(); onOpenEditOrder(order); }}
                             style={{ background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.35)', color: '#38bdf8', padding: '0.3rem 0.55rem', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', fontWeight: 800 }}
@@ -1420,8 +1420,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               </button>
             )}
 
-            {/* 2. Edit Order */}
-            {onOpenEditOrder && canEditOriginalOrder && selectedOrder.status !== 'CANCELLED' && (
+            {/* 2. Edit Order - Disabled once dispatched */}
+            {onOpenEditOrder && canEditOriginalOrder && selectedOrder.status !== 'CANCELLED' && !isOrderDispatchedOrBeyond(selectedOrder.status) && (
               <button
                 type="button"
                 onClick={() => onOpenEditOrder(selectedOrder)}
@@ -1429,6 +1429,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               >
                 <Edit size={15} /> 2. Edit Order
               </button>
+            )}
+
+            {isOrderDispatchedOrBeyond(selectedOrder.status) && selectedOrder.status !== 'CANCELLED' && (
+              <div style={{ width: '100%', padding: '0.5rem', borderRadius: 8, background: 'rgba(148, 163, 184, 0.08)', border: '1px solid rgba(148, 163, 184, 0.25)', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Lock size={13} color="#94a3b8" />
+                <span>Order Dispatched — Edits Locked</span>
+              </div>
             )}
 
             {/* 3. Cancel Order */}

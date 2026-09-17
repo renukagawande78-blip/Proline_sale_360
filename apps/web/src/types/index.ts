@@ -36,6 +36,7 @@ export enum OrderStatusEnum {
   OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
   DELIVERED = 'DELIVERED',
   POD_ISSUE_RAISED = 'POD_ISSUE_RAISED',
+  DELIVERY_REATTEMPTED = 'DELIVERY_REATTEMPTED',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED'
 }
@@ -170,6 +171,7 @@ export type OrderStatus =
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
   | 'POD_ISSUE_RAISED'
+  | 'DELIVERY_REATTEMPTED'
   | 'COMPLETED'
   | 'CANCELLED';
 
@@ -432,6 +434,8 @@ export interface Order {
   freight_amount?: number;
   dispatch_remark?: string;
   reattempt_delivery?: boolean;
+  reattempt_order_number?: string;
+  original_reattempt_order_number?: string;
   pod_status?: 'CLEAN' | 'ISSUE_RAISED';
   pod_issue_type?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN' | 'OTHER';
   pod_issue_details?: string;
@@ -467,6 +471,23 @@ export interface Order {
   // Audit & Transaction History
   order_history?: OrderHistoryEntry[];
 }
+
+// Helper to determine if an order is dispatched or past the dispatch stage
+export const isOrderDispatchedOrBeyond = (status?: string): boolean => {
+  if (!status) return false;
+  const s = status.toUpperCase();
+  return [
+    'DISPATCHED',
+    'OUT_FOR_DELIVERY',
+    'DELIVERED',
+    'COMPLETED',
+    'READY_FOR_PICKUP',
+    'READY_FOR_SELF_PICKUP',
+    'PARTIALLY_DISPATCHED',
+    'POD_ISSUE_RAISED',
+    'DELIVERY_REATTEMPTED'
+  ].includes(s);
+};
 
 export type ReturnType = 'REPLACEMENT' | 'DAMAGED_RETURN';
 
@@ -528,6 +549,7 @@ export type NotificationCategory =
   | 'DISPATCH'   // Out for delivery / dispatched / reattempt delivery
   | 'BILLING'    // Tax invoice / GRN checked / GRN forwarded
   | 'POD'        // POD query raised / POD verified
+  | 'TASK'       // Task assignment, reminder, and completion updates
   | 'SYSTEM';    // System notices
 
 export interface NotificationItem {
@@ -537,6 +559,7 @@ export interface NotificationItem {
   event_type: string;
   order_id?: string;
   dispatch_id?: string;
+  task_id?: string;
   is_read: boolean;
   created_at: string;
   target_roles?: RoleName[];
@@ -575,3 +598,82 @@ export interface AreaMaster {
   description?: string;
   created_at?: string;
 }
+
+// ============================================================================
+// TASK MANAGEMENT TYPES
+// ============================================================================
+
+export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED';
+
+export type TaskPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+export type TaskCategory = 
+  | 'SALES' 
+  | 'BILLING' 
+  | 'DISPATCH' 
+  | 'ACCOUNTS' 
+  | 'AUDIT' 
+  | 'OPERATIONS' 
+  | 'GENERAL' 
+  | 'FOLLOW_UP';
+
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url: string; // Base64 or Supabase Storage URL
+  uploaded_at: string;
+}
+
+export interface TaskActivityLog {
+  id: string;
+  action: string;
+  user_id: string;
+  user_name: string;
+  timestamp: string;
+  remarks?: string;
+}
+
+export interface TaskItem {
+  id: string;
+  task_number: string;
+  title: string;
+  summary: string;
+  priority: TaskPriority;
+  category: TaskCategory;
+  status: TaskStatus;
+  
+  // Assignment
+  assigned_to_id: string;
+  assigned_to_name: string;
+  assigned_to_role?: string;
+  assigned_to_email?: string;
+  
+  // Creator
+  created_by_id: string;
+  created_by_name: string;
+  created_by_role?: string;
+  
+  // Deadlines & Reminders
+  due_date: string; // ISO string
+  reminder_date?: string; // ISO string
+  reminder_note?: string;
+  reminder_sent?: boolean;
+  
+  // Support Documentation
+  support_docs?: TaskAttachment[];
+  
+  // Completion details
+  completion_remarks?: string;
+  completion_proof_docs?: TaskAttachment[];
+  completed_at?: string;
+  completed_by_id?: string;
+  completed_by_name?: string;
+  
+  // System timestamps & Audit trail
+  created_at: string;
+  updated_at: string;
+  activity_log?: TaskActivityLog[];
+}
+

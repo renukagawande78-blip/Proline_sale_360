@@ -39,9 +39,9 @@ interface ReleaseInfo {
 
 const RELEASES_DATA: ReleaseInfo[] = [
   {
-    version: 'v2.14.0 (v1.0 Package)',
-    releaseTitle: 'PROKAP OMS 360 • v2.14.0 Production Build',
-    releaseDate: '11-Sep-2026, 05:27 AM IST',
+    version: 'v2.16.0 (v1.0 Package)',
+    releaseTitle: 'PROKAP OMS 360 • v2.16.0 Production Build',
+    releaseDate: '17-Sep-2026, 10:35 AM IST',
     isLatest: true,
     statusBadge: 'LATEST PRODUCTION RELEASE',
     badgeColor: '#34d399',
@@ -50,10 +50,27 @@ const RELEASES_DATA: ReleaseInfo[] = [
     releaseApkPath: '/proline-oms-app-v1.0_release.apk',
     releaseApkSize: '9.0 MB',
     changes: [
-      'POD Verification Reassigned to Billing: Billing Executives verify delivered orders with store stamp directly in POD Queue.',
-      'Unverified Exception Routing: Delivery issues (Shortage, Damaged, Good Return) with remarks are routed directly to Sales Admin desk for GRN creation or delivery reattempt.',
-      'Super Admin View-Only Mode: Super Admin has complete audit visibility into POD queries without redundant proceed action buttons.',
-      'Direct APK Download Hub: Official Release APK package served directly from application repository.'
+      'POD Verification 2 Options: Choose between Issue GRN (Warehouse return / Credit note) or Re-attempt Delivery directly in Billing.',
+      'Automatic RN- Order Generation: Re-attempt delivery creates brand-new RN-[old_order_number] with all line items, rates, and agency cloned ready for fresh billing.',
+      'Dispatch Immutability: Dispatched and completed orders locked against edits in Sales Orders, Order Approval, and Billing Invoices.',
+      'Redesigned Order Tracker: Complete 6-stage lifecycle tracking with live orders directory table, typeahead search, true agency resolution, and 1-click reattempt cross-links.'
+    ]
+  },
+  {
+    version: 'v2.15.0 (v1.0 Package)',
+    releaseTitle: 'PROKAP OMS 360 • v2.15.0 Production Build',
+    releaseDate: '12-Sep-2026, 03:30 PM IST',
+    isLatest: false,
+    statusBadge: 'PREVIOUS STABLE RELEASE',
+    badgeColor: '#38bdf8',
+    badgeBg: 'rgba(56, 189, 248, 0.15)',
+    releaseApkName: 'proline-oms-app-v1.0_release.apk',
+    releaseApkPath: '/proline-oms-app-v1.0_release.apk',
+    releaseApkSize: '9.0 MB',
+    changes: [
+      'Task Manager & Delegations: Task management, delegation tracking, and completion workflows.',
+      'Driver validation removed: Driver name and mobile validation optional for flexible dispatch.',
+      'PROKAP Branding: Universal branding and search display.'
     ]
   },
   {

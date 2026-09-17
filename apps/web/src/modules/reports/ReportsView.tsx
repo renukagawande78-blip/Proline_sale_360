@@ -1607,7 +1607,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, initialReport 
                                             </td>
                                             <td style={{ padding: '0.45rem 0.6rem' }}>
                                               <span style={{ fontSize: '0.675rem', padding: '0.1rem 0.35rem', borderRadius: 4, background: 'rgba(56,189,248,0.1)', color: '#38bdf8' }}>
-                                                {ord.company_name || 'PROLINE'}
+                                                {ord.company_name || 'PROKAP'}
                                               </span>
                                             </td>
                                             <td style={{ padding: '0.45rem 0.6rem', color: '#38bdf8', fontWeight: 700 }}>

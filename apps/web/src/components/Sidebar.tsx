@@ -19,7 +19,8 @@ import {
   Clock,
   Tag,
   Smartphone,
-  Download
+  Download,
+  CheckSquare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PermissionControl } from '../types';
@@ -34,6 +35,7 @@ interface SidebarProps {
   onCloseMobile?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  pendingTaskCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
@@ -42,7 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen, 
   onCloseMobile,
   isCollapsed: externalIsCollapsed,
-  onToggleCollapse: externalOnToggleCollapse
+  onToggleCollapse: externalOnToggleCollapse,
+  pendingTaskCount = 0
 }) => {
   const { currentUser, hasPermission, logout } = useAuth();
   const role = currentUser?.role_name || 'SALES_PERSON';
@@ -64,13 +67,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isSuperAdminUser = role === 'SUPER_ADMIN' || isChiragOrHarshad;
   const isManagement = isSuperAdminUser || role === 'SALES_ADMIN';
 
-  const navItems: { id: string; label: string; icon: any; permissionKey?: keyof PermissionControl; fallbackRoles: string[] }[] = [
+  const navItems: { id: string; label: string; icon: any; permissionKey?: keyof PermissionControl; fallbackRoles: string[]; badgeCount?: number }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, fallbackRoles: ['ALL'] },
     { 
       id: 'orders', 
       label: isManagement ? 'Orders & Approvals' : 'Sales Orders', 
       icon: isManagement ? CheckCircle2 : ShoppingCart, 
       fallbackRoles: ['ALL'] 
+    },
+    { 
+      id: 'tasks', 
+      label: isManagement ? 'Tasks & Delegations' : 'My Tasks', 
+      icon: CheckSquare, 
+      fallbackRoles: ['ALL'],
+      badgeCount: pendingTaskCount
     },
     { id: 'dispatch', label: 'Dispatch Management', icon: Truck, permissionKey: 'order_transfer_to_dispatch', fallbackRoles: ['SUPER_ADMIN', 'DISPATCH_MANAGER', 'BILLING', 'SALES_ADMIN'] },
     { id: 'accounts', label: 'Accounts & Billing', icon: Receipt, permissionKey: 'order_transfer_to_billing', fallbackRoles: ['SUPER_ADMIN', 'ACCOUNTS', 'BILLING'] },
@@ -84,12 +94,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const filteredNav = navItems.filter(item => {
     if (isSuperAdminUser) return true;
 
-    // 1. Field Sales Exec / Area Sales Manager: ONLY sees Sales Orders, Track My Order, Reports & Analytics
+    // 1. Field Sales Exec / Area Sales Manager: Sees Sales Orders, Track My Order, Reports & Analytics, and Tasks
     if (role === 'SALES_PERSON' || role === 'AREA_SALES_MANAGER') {
-      return item.id === 'orders' || item.id === 'tracker' || item.id === 'reports';
+      return item.id === 'orders' || item.id === 'tracker' || item.id === 'reports' || item.id === 'tasks';
     }
 
-    // 2. Sales Admin operational dashboard and review tools (includes POD Queue to review unverified exceptions)
+    // 2. Sales Admin operational dashboard and review tools
     if (role === 'SALES_ADMIN') {
       if (item.id === 'accounts' || item.id === 'dispatch') {
         return false;
@@ -105,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return true;
     }
 
-    // 4. Billing & Accounts dashboard and invoicing tools (includes POD Queue for POD verification)
+    // 4. Billing & Accounts dashboard and invoicing tools
     if (role === 'BILLING' || role === 'ACCOUNTS') {
       if (item.id === 'orders' || item.id === 'dispatch' || item.id === 'zones' || item.id === 'masters') {
         return false;
@@ -227,8 +237,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   <Icon size={19} color={isActive ? '#38bdf8' : '#94a3b8'} style={{ minWidth: 19 }} />
                   {!isCollapsed && (
-                    <span style={{ fontSize: '0.85rem', fontWeight: isActive ? 800 : 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: isActive ? 800 : 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                       {item.label}
+                    </span>
+                  )}
+                  {item.badgeCount !== undefined && item.badgeCount > 0 && !isCollapsed && (
+                    <span 
+                      style={{
+                        padding: '0.1rem 0.45rem',
+                        borderRadius: 10,
+                        background: '#a855f7',
+                        color: 'white',
+                        fontSize: '0.7rem',
+                        fontWeight: 800,
+                        boxShadow: '0 2px 6px rgba(168, 85, 247, 0.4)'
+                      }}
+                    >
+                      {item.badgeCount}
                     </span>
                   )}
                 </button>

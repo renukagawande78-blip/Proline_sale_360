@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Receipt, DollarSign, CheckCircle2, X, Truck, FileSpreadsheet } from 'lucide-react';
-import { Order, Agency } from '../../types';
+import { Receipt, DollarSign, CheckCircle2, X, Truck, FileSpreadsheet, PackageX, FileCheck2, AlertTriangle, ArrowRight, ShieldCheck, FileText } from 'lucide-react';
+import { Order, Agency, isOrderDispatchedOrBeyond } from '../../types';
 import { useNotifications } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import { checkIsSuperAdmin, isCompanyAllowedForUser } from '../../lib/supabase';
@@ -12,13 +12,15 @@ interface AccountsViewProps {
   agencies?: Agency[];
   onGenerateInvoice?: (order: Order, invoiceNumber: string, billingTotalQty: number, invoiceAmount: number, creditDays: number, remark: string, billedQtyByItem: Record<string, number>) => void;
   onCompleteGrn?: (orderId: string, grnNumber: string, grnDate: string, grnValue: number, grnRemark: string) => void;
+  onReattemptDelivery?: (order: Order) => void;
   onViewInvoice?: (order: Order) => void;
 }
 
-export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, onGenerateInvoice, onCompleteGrn, onViewInvoice }) => {
+export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, onGenerateInvoice, onCompleteGrn, onReattemptDelivery, onViewInvoice }) => {
   const { addNotification } = useNotifications();
   const { currentUser } = useAuth();
   const canViewAllCompanies = checkIsSuperAdmin(currentUser) || !currentUser?.company_handle || currentUser?.company_handle === 'All';
+  const [activeTab, setActiveTab] = useState<'BILLS' | 'GRN'>('BILLS');
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState('');
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
@@ -38,13 +40,16 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
   const [billedBoxesByItem, setBilledBoxesByItem] = useState<Record<string, number>>({});
   const [billedLooseByItem, setBilledLooseByItem] = useState<Record<string, number>>({});
   const [selectedGrnOrder, setSelectedGrnOrder] = useState<Order | null>(null);
+  const [selectedReattemptOrder, setSelectedReattemptOrder] = useState<Order | null>(null);
   const [grnNumberInput, setGrnNumberInput] = useState('');
   const [grnValueInput, setGrnValueInput] = useState(0);
   const [grnDateInput, setGrnDateInput] = useState(new Date().toISOString().substring(0, 10));
   const [grnRemarkInput, setGrnRemarkInput] = useState('');
+  
   const grnQueueOrders = orders
-    .filter(order => order.grn_workflow_status === 'PENDING_BILLING')
-    .filter(order => canViewAllCompanies || isCompanyAllowedForUser(order.company_name, currentUser?.company_handle));
+    .filter(order => (order.grn_workflow_status === 'PENDING_BILLING' || (order.status === 'POD_ISSUE_RAISED' && !order.grn_number)) && order.status !== 'DELIVERY_REATTEMPTED' && !order.reattempt_order_number)
+    .filter(order => canViewAllCompanies || isCompanyAllowedForUser(order.company_name, currentUser?.company_handle))
+    .sort((a, b) => (b.order_date || '').localeCompare(a.order_date || ''));
 
   // Billing users see only companies mapped to their login; Super Admin / All
   // handles continue to see the complete queue through the same helper.
@@ -105,6 +110,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
   };
 
   const handleOpenInvoiceModal = (order: Order) => {
+    if (isOrderDispatchedOrBeyond(order.status)) {
+      alert(`Order ${order.order_number} has already been dispatched (${order.status}). Billing invoice cannot be edited after dispatch.`);
+      return;
+    }
     setSelectedOrderForInvoice(order);
     setInvoiceNumberInput(order.invoice_number || '');
     setCreditDaysInput(order.payment_type === 'ADVANCE' ? 0 : (order.credit_days != null && order.credit_days > 0 ? order.credit_days : ''));
@@ -152,6 +161,19 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
     setBillingTotalQtyInput(order.billing_total_qty && order.billing_total_qty > 0 ? order.billing_total_qty : sumQty);
     setBillingAmountInput(order.invoice_amount && order.invoice_amount > 0 ? order.invoice_amount : '');
     setInvoiceRemark((order.remarks || '').replace(/<!--[\s\S]*?-->/g, '').trim());
+  };
+
+  const handleOpenGrnModal = (order: Order) => {
+    setSelectedGrnOrder(order);
+    const yr = new Date().getFullYear();
+    const orderNumDigits = order.order_number.replace(/[^0-9]/g, '').slice(-4) || '0001';
+    setGrnNumberInput(order.grn_number || `GRN-${yr}-${orderNumDigits}`);
+    setGrnDateInput(new Date().toISOString().substring(0, 10));
+    setGrnValueInput(order.grn_value && order.grn_value > 0 ? order.grn_value : (order.invoice_amount || order.total_amount || 0));
+    const defaultRemark = order.pod_issue_details 
+      ? `POD Exception (${order.pod_issue_type || 'Discrepancy'}): ${order.pod_issue_details}` 
+      : (order.pod_issue_type ? `GRN issued for ${order.pod_issue_type}` : 'GRN issued for delivery discrepancy');
+    setGrnRemarkInput(order.grn_remark || defaultRemark);
   };
 
   const handleItemBoxChange = (itemId: string, val: number, pcsPerBox: number) => {
@@ -233,11 +255,11 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
 
   return (
     <div className="page-body">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Accounts & Billing Console</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Accounts &amp; Billing Console</h1>
           <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-            Tax Invoicing, GST settlement, and Party Financial Balance Ledger Management
+            Tax Invoicing, GRN Generation, GST settlement, and Party Financial Balance Ledger Management
           </p>
         </div>
 
@@ -274,111 +296,367 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
         }}
       />
 
-      {grnQueueOrders.length > 0 && (
-        <div style={{ marginBottom: '1.25rem', padding: '1rem', background: 'rgba(244,63,94,0.1)', border: '1px solid #f43f5e', borderRadius: 10 }}>
-          <strong style={{ color: '#fb7185' }}>GRN Requests Pending from Sales Admin ({grnQueueOrders.length})</strong>
-          {grnQueueOrders.map(order => (
-            <button key={order.id} onClick={() => { setSelectedGrnOrder(order); setGrnNumberInput(''); setGrnDateInput(new Date().toISOString().substring(0, 10)); setGrnValueInput(order.invoice_amount || 0); setGrnRemarkInput(''); }} className="btn btn-outline" style={{ marginLeft: 10 }}>
-              Create GRN — {order.order_number}
-            </button>
-          ))}
+      {/* DUAL ACTION TABS: ISSUE BILLS vs ISSUE GRN */}
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setActiveTab('BILLS')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.65rem 1.15rem',
+            borderRadius: 10,
+            border: activeTab === 'BILLS' ? '2px solid #38bdf8' : '1px solid #334155',
+            background: activeTab === 'BILLS' ? 'rgba(56, 189, 248, 0.15)' : '#0f172a',
+            color: activeTab === 'BILLS' ? '#38bdf8' : '#94a3b8',
+            fontWeight: 800,
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'BILLS' ? '0 0 15px rgba(56, 189, 248, 0.2)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Receipt size={18} />
+          <span>Issue Bills / Invoices ({billingQueueOrders.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('GRN')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.65rem 1.15rem',
+            borderRadius: 10,
+            border: activeTab === 'GRN' ? '2px solid #fb7185' : grnQueueOrders.length > 0 ? '1px solid #f43f5e' : '1px solid #334155',
+            background: activeTab === 'GRN' ? 'rgba(244, 63, 94, 0.18)' : grnQueueOrders.length > 0 ? 'rgba(244, 63, 94, 0.08)' : '#0f172a',
+            color: activeTab === 'GRN' ? '#fb7185' : grnQueueOrders.length > 0 ? '#fb7185' : '#94a3b8',
+            fontWeight: 800,
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'GRN' ? '0 0 15px rgba(244, 63, 94, 0.25)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <PackageX size={18} />
+          <span>Issue GRN / Delivery Returns ({grnQueueOrders.length})</span>
+          {grnQueueOrders.length > 0 && (
+            <span style={{ background: '#f43f5e', color: 'white', fontSize: '0.65rem', padding: '1px 6px', borderRadius: 9999, fontWeight: 900 }}>
+              {grnQueueOrders.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ALERT BANNER IF PENDING GRN ORDERS EXIST (WHEN ON BILLS TAB) */}
+      {activeTab === 'BILLS' && grnQueueOrders.length > 0 && (
+        <div 
+          onClick={() => setActiveTab('GRN')}
+          style={{ 
+            marginBottom: '1.25rem', 
+            padding: '0.85rem 1.15rem', 
+            background: 'rgba(244,63,94,0.12)', 
+            border: '1px solid #f43f5e', 
+            borderRadius: 10, 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <AlertTriangle size={18} color="#fb7185" />
+            <div>
+              <strong style={{ color: '#fb7185', fontSize: '0.85rem' }}>{grnQueueOrders.length} GRN Request(s) Pending from POD Verification</strong>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', marginTop: 2 }}>
+                Orders flagged with shortage/damage during delivery drop require GRN issuance.
+              </div>
+            </div>
+          </div>
+          <button className="btn btn-danger" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+            Switch to Issue GRN <ArrowRight size={14} />
+          </button>
         </div>
       )}
 
-      <div className="data-table-container">
-        <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Billing Queue — Stock Verified Orders ({billingQueueOrders.length})</h2>
-          <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 700 }}>Priority Sorted (High Priority at Top)</span>
-        </div>
+      {/* TAB 1: BILLING QUEUE (ISSUE BILLS) */}
+      {activeTab === 'BILLS' && (
+        <div className="data-table-container">
+          <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Billing Queue — Stock Verified Orders ({billingQueueOrders.length})</h2>
+            <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 700 }}>Priority Sorted (High Priority at Top)</span>
+          </div>
 
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Order Number</th>
-              <th>Priority</th>
-              <th>Agency / B2B Party</th>
-              <th>Payment Type</th>
-              <th>Order Value (₹)</th>
-              <th>Bill No</th>
-              <th>Total Billing Qty</th>
-              <th>Total Bill Amount (₹)</th>
-              <th>Credit Lock</th>
-              <th>Billing Status</th>
-              <th style={{ textAlign: 'center' }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {billingQueueOrders.length === 0 ? (
+          <table className="data-table">
+            <thead>
               <tr>
-                <td colSpan={11} style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
-                  No orders pending billing. Orders marked In Stock in Order Approvals appear here sorted by priority.
-                </td>
+                <th>Order Number</th>
+                <th>Priority</th>
+                <th>Agency / B2B Party</th>
+                <th>Payment Type</th>
+                <th>Order Value (₹)</th>
+                <th>Bill No</th>
+                <th>Total Billing Qty</th>
+                <th>Total Bill Amount (₹)</th>
+                <th>Credit Lock</th>
+                <th>Billing Status</th>
+                <th style={{ textAlign: 'center' }}>Action</th>
               </tr>
-            ) : (
-              billingQueueOrders.map(order => {
-                const totalDispatchedVal = order.items?.reduce((sum, item) => {
-                  return sum + ((item.dispatched_qty_pcs || 0) * item.unit_price);
-                }, 0) || order.total_amount;
+            </thead>
+            <tbody>
+              {billingQueueOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={11} style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
+                    No orders pending billing. Orders marked In Stock in Order Approvals appear here sorted by priority.
+                  </td>
+                </tr>
+              ) : (
+                billingQueueOrders.map(order => {
+                  const totalDispatchedVal = order.items?.reduce((sum, item) => {
+                    return sum + ((item.dispatched_qty_pcs || 0) * item.unit_price);
+                  }, 0) || order.total_amount;
 
-                const isBilled = !order.reattempt_delivery && (order.status === 'BILLED' || !!order.invoice_number);
-                const isHigh = order.priority === 'HIGH';
+                  const isBilled = !order.reattempt_delivery && (order.status === 'BILLED' || !!order.invoice_number);
+                  const isHigh = order.priority === 'HIGH';
 
-                return (
-                  <tr key={order.id} style={{ background: isHigh ? 'rgba(244, 63, 94, 0.05)' : undefined }}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <strong style={{ color: '#38bdf8' }}>{order.order_number}</strong>
-                        {order.reattempt_delivery && (
-                          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#fbbf24', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: '0.1rem 0.4rem', borderRadius: 4 }}>
-                            🔄 REATTEMPT
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <span className="status-badge" style={{
-                        background: order.priority === 'HIGH' ? 'rgba(244, 63, 94, 0.2)' : order.priority === 'LOW' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                        color: order.priority === 'HIGH' ? '#fb7185' : order.priority === 'LOW' ? '#34d399' : '#fbbf24',
-                        fontWeight: 800
-                      }}>
-                        {order.priority === 'HIGH' ? '🔴 HIGH' : order.priority === 'LOW' ? '🟢 LOW' : '🟡 MEDIUM'}
-                      </span>
-                    </td>
-                    <td><strong style={{ color: '#f8fafc' }}>{getPartyName(order)}</strong></td>
-                    <td>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: order.payment_type === 'ADVANCE' ? '#34d399' : order.payment_type === 'OVERDUE' ? '#fb7185' : '#38bdf8' }}>
-                        {order.payment_type || 'CREDIT'}
-                      </span>
-                    </td>
-                    <td>₹{totalDispatchedVal.toLocaleString()}</td>
-                    <td>
-                      {order.invoice_number ? (
-                        <code style={{ color: '#fbbf24', fontSize: '0.775rem', fontWeight: 800 }}>{order.invoice_number}</code>
-                      ) : (
-                        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Pending Bill</span>
-                      )}
-                    </td>
-                    <td><strong style={{ color: '#38bdf8' }}>{formatBilledQtyDisplay(order)}</strong></td>
-                    <td>{order.invoice_amount != null ? `₹${order.invoice_amount.toLocaleString()}` : '—'}</td>
-                    <td>{order.invoice_number ? `${order.payment_type === 'ADVANCE' ? 0 : (order.credit_days || 0)} Days` : '—'}</td>
-                    <td>
-                      {isBilled ? (
-                        <span className="status-badge status-BILLED" style={{ background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', color: '#34d399' }}>
-                          BILLED
+                  return (
+                    <tr key={order.id} style={{ background: isHigh ? 'rgba(244, 63, 94, 0.05)' : undefined }}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <strong style={{ color: '#38bdf8' }}>{order.order_number}</strong>
+                          {order.reattempt_delivery && (
+                            <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#fbbf24', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: '0.1rem 0.4rem', borderRadius: 4 }}>
+                              🔄 REATTEMPT
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <span className="status-badge" style={{
+                          background: order.priority === 'HIGH' ? 'rgba(244, 63, 94, 0.2)' : order.priority === 'LOW' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                          color: order.priority === 'HIGH' ? '#fb7185' : order.priority === 'LOW' ? '#34d399' : '#fbbf24',
+                          fontWeight: 800
+                        }}>
+                          {order.priority === 'HIGH' ? '🔴 HIGH' : order.priority === 'LOW' ? '🟢 LOW' : '🟡 MEDIUM'}
                         </span>
-                      ) : (
-                        <span className="status-badge status-SUBMITTED">READY FOR BILL</span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      {!isBilled ? (
+                      </td>
+                      <td><strong style={{ color: '#f8fafc' }}>{getPartyName(order)}</strong></td>
+                      <td>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: order.payment_type === 'ADVANCE' ? '#34d399' : order.payment_type === 'OVERDUE' ? '#fb7185' : '#38bdf8' }}>
+                          {order.payment_type || 'CREDIT'}
+                        </span>
+                      </td>
+                      <td>₹{totalDispatchedVal.toLocaleString()}</td>
+                      <td>
+                        {order.invoice_number ? (
+                          <code style={{ color: '#fbbf24', fontSize: '0.775rem', fontWeight: 800 }}>{order.invoice_number}</code>
+                        ) : (
+                          <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Pending Bill</span>
+                        )}
+                      </td>
+                      <td><strong style={{ color: '#38bdf8' }}>{formatBilledQtyDisplay(order)}</strong></td>
+                      <td>{order.invoice_amount != null ? `₹${order.invoice_amount.toLocaleString()}` : '—'}</td>
+                      <td>{order.invoice_number ? `${order.payment_type === 'ADVANCE' ? 0 : (order.credit_days || 0)} Days` : '—'}</td>
+                      <td>
+                        {isBilled ? (
+                          <span className="status-badge status-BILLED" style={{ background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', color: '#34d399' }}>
+                            BILLED
+                          </span>
+                        ) : (
+                          <span className="status-badge status-SUBMITTED">READY FOR BILL</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {!isBilled ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <button 
+                              className="btn btn-primary" 
+                              onClick={() => handleOpenInvoiceModal(order)}
+                              style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                            >
+                              <Receipt size={14} /> {order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => exportOrderProductSheet(order)}
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                border: '1px solid #10b981',
+                                color: '#34d399',
+                                padding: '0.35rem 0.65rem',
+                                borderRadius: 6,
+                                fontSize: '0.75rem',
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title={`Download ${order.order_number}.xlsx (Product list for spreadsheet/ERP upload)`}
+                            >
+                              <FileSpreadsheet size={14} /> Excel
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <button
+                              className="btn btn-outline"
+                              onClick={() => onViewInvoice && onViewInvoice(order)}
+                              style={{ borderColor: '#f59e0b', color: '#fbbf24', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                              title="View / Print Delivery Challan"
+                            >
+                              <Truck size={14} /> Delivery Challan
+                            </button>
+                            {!isOrderDispatchedOrBeyond(order.status) && (
+                              <button
+                                className="btn"
+                                onClick={() => handleOpenInvoiceModal(order)}
+                                style={{ background: 'rgba(56, 189, 248, 0.12)', border: '1px solid #38bdf8', color: '#38bdf8', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                title="Edit Invoice details on this order"
+                              >
+                                <Receipt size={14} /> Edit Invoice
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => exportOrderProductSheet(order)}
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                border: '1px solid #10b981',
+                                color: '#34d399',
+                                padding: '0.35rem 0.65rem',
+                                borderRadius: 6,
+                                fontSize: '0.75rem',
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title={`Download ${order.order_number}.xlsx (Product list)`}
+                            >
+                              <FileSpreadsheet size={14} /> Excel
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* TAB 2: GRN QUEUE (ISSUE GRN) */}
+      {activeTab === 'GRN' && (
+        <div className="data-table-container">
+          <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fb7185', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <PackageX size={20} /> GRN Issuance Queue — Returns &amp; Delivery Exceptions ({grnQueueOrders.length})
+              </h2>
+              <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '3px 0 0 0' }}>
+                Orders flagged with shortage, damage, or return from POD Verification. Billing can issue official GRN number and value.
+              </p>
+            </div>
+          </div>
+
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Order Number</th>
+                <th>Agency / Party</th>
+                <th>Bill No &amp; Original Amount</th>
+                <th>POD Exception / Reason</th>
+                <th>Reported By / Time</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'center' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grnQueueOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', color: '#94a3b8', padding: '2.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                      <CheckCircle2 size={32} color="#34d399" />
+                      <strong style={{ color: '#f8fafc', fontSize: '0.95rem' }}>No Pending GRN Requests</strong>
+                      <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        When POD verification reports a delivery shortage or damaged return, orders appear here for Billing to Issue GRN.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                grnQueueOrders.map(order => {
+                  return (
+                    <tr key={order.id} style={{ background: 'rgba(244, 63, 94, 0.04)' }}>
+                      <td>
+                        <strong style={{ color: '#38bdf8' }}>{order.order_number}</strong>
+                        {order.company_name && (
+                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>{order.company_name}</div>
+                        )}
+                      </td>
+                      <td>
+                        <strong style={{ color: '#f8fafc' }}>{getPartyName(order)}</strong>
+                      </td>
+                      <td>
+                        <div><code style={{ color: '#fbbf24', fontWeight: 800 }}>{order.invoice_number || 'Pending'}</code></div>
+                        <span style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 700 }}>
+                          ₹{(order.invoice_amount || order.total_amount || 0).toLocaleString()}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="status-badge" style={{ background: 'rgba(244, 63, 94, 0.2)', color: '#fb7185', fontWeight: 800, marginBottom: 4, display: 'inline-block' }}>
+                          {order.pod_issue_type || 'DELIVERY EXCEPTION'}
+                        </span>
+                        <div style={{ fontSize: '0.75rem', color: '#cbd5e1', maxWidth: 280, wordBreak: 'break-word', background: 'rgba(15, 23, 42, 0.6)', padding: '0.25rem 0.5rem', borderRadius: 4, border: '1px solid #334155' }}>
+                          💬 {order.pod_issue_details || order.remarks || 'Discrepancy reported during drop'}
+                        </div>
+                      </td>
+                      <td>
+                        <strong style={{ color: '#38bdf8', fontSize: '0.78rem' }}>{order.pod_query_raised_by || 'Billing / POD Desk'}</strong>
+                        <div style={{ color: '#94a3b8', fontSize: '0.7rem', marginTop: 2 }}>{order.pod_query_raised_at || 'Recently'}</div>
+                      </td>
+                      <td>
+                        <span className="status-badge" style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', color: '#fb7185', fontWeight: 800 }}>
+                          PENDING GRN
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <button 
-                            className="btn btn-primary" 
-                            onClick={() => handleOpenInvoiceModal(order)}
-                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                          <button
+                            className="btn btn-danger"
+                            onClick={() => handleOpenGrnModal(order)}
+                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.78rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                            title="Issue GRN (Credit Note) for damaged or shortage items"
                           >
-                            <Receipt size={14} /> {order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}
+                            <PackageX size={15} /> 1. Issue GRN
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-warning"
+                            onClick={() => setSelectedReattemptOrder(order)}
+                            style={{
+                              padding: '0.4rem 0.75rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              background: 'rgba(245, 158, 11, 0.15)',
+                              border: '1px solid #f59e0b',
+                              color: '#fbbf24',
+                              cursor: 'pointer',
+                              borderRadius: 6
+                            }}
+                            title={`Create new order RN-${order.order_number.replace(/^RN-/, '')} to reattempt delivery`}
+                          >
+                            <Truck size={15} /> 2. Re-attempt Delivery
                           </button>
                           <button
                             type="button"
@@ -387,70 +665,29 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                               background: 'rgba(16, 185, 129, 0.15)',
                               border: '1px solid #10b981',
                               color: '#34d399',
-                              padding: '0.35rem 0.65rem',
+                              padding: '0.4rem 0.65rem',
                               borderRadius: 6,
                               fontSize: '0.75rem',
                               fontWeight: 800,
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '0.3rem',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease'
+                              cursor: 'pointer'
                             }}
-                            title={`Download ${order.order_number}.xlsx (Product list for spreadsheet/ERP upload)`}
+                            title={`Download ${order.order_number}.xlsx`}
                           >
                             <FileSpreadsheet size={14} /> Excel
                           </button>
                         </div>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            className="btn btn-outline"
-                            onClick={() => onViewInvoice && onViewInvoice(order)}
-                            style={{ borderColor: '#f59e0b', color: '#fbbf24', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                            title="View / Print Delivery Challan"
-                          >
-                            <Truck size={14} /> Delivery Challan
-                          </button>
-                          <button
-                            className="btn"
-                            onClick={() => handleOpenInvoiceModal(order)}
-                            style={{ background: 'rgba(56, 189, 248, 0.12)', border: '1px solid #38bdf8', color: '#38bdf8', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                            title="Edit Invoice details on this order"
-                          >
-                            <Receipt size={14} /> Edit Invoice
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => exportOrderProductSheet(order)}
-                            style={{
-                              background: 'rgba(16, 185, 129, 0.15)',
-                              border: '1px solid #10b981',
-                              color: '#34d399',
-                              padding: '0.35rem 0.65rem',
-                              borderRadius: 6,
-                              fontSize: '0.75rem',
-                              fontWeight: 800,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.3rem',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease'
-                            }}
-                            title={`Download ${order.order_number}.xlsx (Product list)`}
-                          >
-                            <FileSpreadsheet size={14} /> Excel
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Tax Invoice Generation Modal */}
       {selectedOrderForInvoice && (
@@ -685,21 +922,177 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
         </div>
       )}
 
+      {/* GRN Generation Modal */}
       {selectedGrnOrder && (
         <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: 460 }}>
-            <h3 style={{ color: '#f8fafc', marginBottom: '1rem' }}>Billing: Create GRN — {selectedGrnOrder.order_number}</h3>
-            <label style={{ color: '#94a3b8', fontSize: '0.75rem' }}>GRN Number*</label>
-            <input value={grnNumberInput} onChange={event => setGrnNumberInput(event.target.value)} placeholder="GRN-2026-0001" style={{ width: '100%', padding: '0.6rem', margin: '0.35rem 0 0.8rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
-            <label style={{ color: '#94a3b8', fontSize: '0.75rem' }}>GRN Value (₹)*</label>
-            <input type="number" min="0" value={grnValueInput} onChange={event => setGrnValueInput(Number(event.target.value) || 0)} style={{ width: '100%', padding: '0.6rem', margin: '0.35rem 0 1rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
-            <label style={{ color: '#94a3b8', fontSize: '0.75rem' }}>GRN Date*</label>
-            <input type="date" value={grnDateInput} onChange={event => setGrnDateInput(event.target.value)} style={{ width: '100%', padding: '0.6rem', margin: '0.35rem 0 0.8rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
-            <label style={{ color: '#94a3b8', fontSize: '0.75rem' }}>GRN Remark*</label>
-            <textarea rows={3} value={grnRemarkInput} onChange={event => setGrnRemarkInput(event.target.value)} placeholder="Enter GRN settlement remark" style={{ width: '100%', padding: '0.6rem', margin: '0.35rem 0 1rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <div className="modal-card" style={{ maxWidth: 540 }}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.65rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <PackageX size={22} color="#fb7185" />
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f8fafc' }}>
+                  Issue GRN (Goods Receipt Note)
+                </h3>
+              </div>
+              <button onClick={() => setSelectedGrnOrder(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Order & Exception Details Banner */}
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.85rem', marginBottom: '1rem', fontSize: '0.8rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                <div>Order Number: <strong style={{ color: '#38bdf8' }}>{selectedGrnOrder.order_number}</strong></div>
+                <div>Bill No: <strong style={{ color: '#fbbf24' }}>{selectedGrnOrder.invoice_number || 'Pending'}</strong></div>
+              </div>
+              <div style={{ marginTop: 4 }}>B2B Agency: <strong style={{ color: '#f8fafc' }}>{getPartyName(selectedGrnOrder)}</strong></div>
+              <div style={{ marginTop: 4 }}>Original Bill Value: <strong style={{ color: '#34d399' }}>₹{(selectedGrnOrder.invoice_amount || selectedGrnOrder.total_amount || 0).toLocaleString()}</strong></div>
+              
+              {selectedGrnOrder.pod_issue_type && (
+                <div style={{ marginTop: 6, padding: '0.4rem 0.6rem', background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: 6 }}>
+                  <div style={{ color: '#fb7185', fontWeight: 800, fontSize: '0.75rem' }}>
+                    ⚠️ POD Exception: {selectedGrnOrder.pod_issue_type}
+                  </div>
+                  {selectedGrnOrder.pod_issue_details && (
+                    <div style={{ color: '#cbd5e1', fontSize: '0.72rem', marginTop: 2 }}>
+                      {selectedGrnOrder.pod_issue_details}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* GRN Inputs Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#fb7185', marginBottom: 4 }}>
+                  GRN NUMBER (Mandatory)*
+                </label>
+                <input
+                  type="text"
+                  value={grnNumberInput}
+                  onChange={event => setGrnNumberInput(event.target.value)}
+                  placeholder="e.g. GRN-2026-0001"
+                  style={{ width: '100%', padding: '0.55rem 0.65rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#38bdf8', fontWeight: 800, fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>
+                  GRN DATE (Mandatory)*
+                </label>
+                <input
+                  type="date"
+                  value={grnDateInput}
+                  onChange={event => setGrnDateInput(event.target.value)}
+                  style={{ width: '100%', padding: '0.55rem 0.65rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: 'white', fontWeight: 800, fontSize: '0.85rem' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '0.85rem' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>
+                GRN VALUE / CREDIT SETTLEMENT AMOUNT (₹)*
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={grnValueInput}
+                onChange={event => setGrnValueInput(Number(event.target.value) || 0)}
+                placeholder="Enter credit note / GRN amount"
+                style={{ width: '100%', padding: '0.55rem 0.65rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#34d399', fontWeight: 800, fontSize: '0.9rem' }}
+              />
+              <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 2, display: 'block' }}>
+                Value of damaged/returned goods or shortage adjustment for accounting credit ledger.
+              </span>
+            </div>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: 4 }}>
+                GRN REMARK / SETTLEMENT REASON*
+              </label>
+              <textarea
+                rows={3}
+                value={grnRemarkInput}
+                onChange={event => setGrnRemarkInput(event.target.value)}
+                placeholder="Enter reason for GRN issuance (e.g. 5 Pcs damaged in transit, store accepted remaining)..."
+                style={{ width: '100%', padding: '0.55rem 0.65rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', fontSize: '0.8rem', resize: 'vertical' }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
               <button className="btn btn-outline" onClick={() => setSelectedGrnOrder(null)}>Cancel</button>
-              <button className="btn btn-success" disabled={!grnNumberInput.trim() || !grnDateInput || grnValueInput <= 0 || !grnRemarkInput.trim()} onClick={() => { onCompleteGrn?.(selectedGrnOrder.id, grnNumberInput.trim(), grnDateInput, grnValueInput, grnRemarkInput.trim()); setSelectedGrnOrder(null); }}>Create GRN &amp; Send to Sales Admin</button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={!grnNumberInput.trim() || !grnDateInput || grnValueInput <= 0 || !grnRemarkInput.trim()}
+                onClick={() => {
+                  onCompleteGrn?.(selectedGrnOrder.id, grnNumberInput.trim(), grnDateInput, grnValueInput, grnRemarkInput.trim());
+                  setSelectedGrnOrder(null);
+                }}
+                style={{ fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <FileCheck2 size={16} /> Confirm &amp; Issue GRN
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Re-attempt Delivery Confirmation Modal */}
+      {selectedReattemptOrder && (
+        <div className="modal-overlay">
+          <div className="modal-card" style={{ maxWidth: 520 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.65rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Truck size={22} color="#fbbf24" />
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f8fafc' }}>
+                  Re-attempt Delivery (Create New Order)
+                </h3>
+              </div>
+              <button onClick={() => setSelectedReattemptOrder(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 8, padding: '0.85rem', marginBottom: '1rem', fontSize: '0.8rem' }}>
+              <div style={{ marginBottom: 6 }}>
+                Parent Order: <strong style={{ color: '#f8fafc' }}>{selectedReattemptOrder.order_number}</strong>
+              </div>
+              <div style={{ marginBottom: 6 }}>
+                New Order to be Created: <strong style={{ color: '#38bdf8', fontSize: '0.95rem' }}>RN-{selectedReattemptOrder.order_number.replace(/^RN-/, '')}</strong>
+              </div>
+              <div style={{ marginBottom: 6 }}>
+                B2B Agency / Party: <strong style={{ color: '#f8fafc' }}>{selectedReattemptOrder.agency_name}</strong>
+              </div>
+              <div>
+                Order Value: <strong style={{ color: '#34d399' }}>₹{Number(selectedReattemptOrder.total_amount || 0).toLocaleString()}</strong> ({selectedReattemptOrder.items?.length || 0} product lines copied)
+              </div>
+            </div>
+
+            <p style={{ color: '#cbd5e1', fontSize: '0.78rem', lineHeight: 1.45, marginBottom: '1.25rem' }}>
+              ℹ️ In accordance with standard SOP, creating a re-attempt delivery will generate a <strong>brand new order</strong> with order number <strong>RN-{selectedReattemptOrder.order_number.replace(/^RN-/, '')}</strong>. All items, quantities, and pricing are preserved so it can be billed and dispatched through the normal delivery process. The parent order will be marked as re-attempted.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button className="btn btn-outline" onClick={() => setSelectedReattemptOrder(null)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-warning"
+                onClick={() => {
+                  if (onReattemptDelivery) {
+                    onReattemptDelivery(selectedReattemptOrder);
+                  }
+                  setSelectedReattemptOrder(null);
+                }}
+                style={{ fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <Truck size={16} /> Confirm &amp; Create RN Order
+              </button>
             </div>
           </div>
         </div>

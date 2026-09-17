@@ -643,7 +643,7 @@ export const HoldReasonDirectoryModal: React.FC<HoldReasonDirectoryModalProps> =
         {/* Modal Footer */}
         <div style={{ padding: '0.85rem 1.5rem', background: '#070e20', borderTop: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0 }}>
           <div>
-            Proline OMS 360 • Order Hold & Commercial Risk Control System
+            PROKAP OMS 360 • Order Hold &amp; Commercial Risk Control System
           </div>
           <button
             onClick={onClose}

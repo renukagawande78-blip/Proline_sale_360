@@ -708,14 +708,14 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
 
               <div style={{ flex: 1, textAlign: 'center' }}>
                 <h1 style={{ fontSize: '1.65rem', fontWeight: 900, color: '#000000', margin: 0, letterSpacing: '0.03em', lineHeight: 1.1 }}>
-                  PROLINE SALES AGENCY
+                  PROKAP SALES AGENCY
                 </h1>
                 <p style={{ fontSize: '0.725rem', color: '#1e293b', margin: '3px 0 2px', fontWeight: 600, lineHeight: 1.3 }}>
                   Plot no.6, TP Block 69-70, Ladvi Patiya, Opp. Blueroof Industries, Puna-Valthan Canal Rd., Ladvi, Surat-394325
                 </p>
                 <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#000000', display: 'flex', justifyContent: 'center', gap: '15px', flexWrap: 'wrap', marginTop: 2 }}>
                   <span><strong>Contact:</strong> 9825148776 &nbsp; 9377648776</span>
-                  <span><strong>Email:</strong> info@prolinesales.in</span>
+                  <span><strong>Email:</strong> info@prokapsales.in</span>
                 </div>
               </div>
             </div>
@@ -1007,7 +1007,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
 
               <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 900 }}>
-                  {docMode === 'DISPATCH_CHALLAN' ? 'For RECEIVER / CONSIGNEE' : 'For PROLINE SALES AGENCY'}
+                  {docMode === 'DISPATCH_CHALLAN' ? 'For RECEIVER / CONSIGNEE' : 'For PROKAP SALES AGENCY'}
                 </div>
                 <div style={{ height: 35, width: 150, borderBottom: '1px solid #000000', marginTop: 4 }}></div>
                 <div style={{ fontSize: '0.675rem', color: '#475569', marginTop: 2 }}>

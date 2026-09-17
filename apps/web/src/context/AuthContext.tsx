@@ -182,6 +182,9 @@ export const INITIAL_PERMISSION_GROUPS: PermissionGroup[] = [
 ];
 
 export const SEED_USERS: User[] = [
+  // 0. Super Admin (Renuka)
+  { sno: 0, id: 'u00_renuka', full_name: 'Renuka', email: 'renuka@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '1234', active: true },
+  
   // 1. Super Admin (Chirag)
   { sno: 1, id: 'u01', full_name: 'Chirag', email: 'chirag@proline.com', role_name: 'SUPER_ADMIN', permission_group_id: 'pg_admin', permission_group_name: 'Full Super Admin Authority', company_handle: 'All', password: '0706', active: true },
   
@@ -291,7 +294,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const handle = u.company_handle || u.brand_scope || '';
                 const role = (u.role_name || u.role || '').toUpperCase();
                 // Super Admins with no handle → All; others keep their handle (empty = restrict)
-                if (!handle && (role === 'SUPER_ADMIN' || (u.full_name || '').toLowerCase().includes('chirag') || (u.full_name || '').toLowerCase().includes('harshad'))) return 'All';
+                if (!handle && (role === 'SUPER_ADMIN' || (u.full_name || '').toLowerCase().includes('chirag') || (u.full_name || '').toLowerCase().includes('renuka') || (u.full_name || '').toLowerCase().includes('harshad'))) return 'All';
                 return handle;
               })(),
               password: u.password ? String(u.password).trim() : '1234',

@@ -82,13 +82,22 @@ export const PODQueueView: React.FC<PODQueueViewProps> = ({ orders, onVerifyPOD,
                   <strong style={{ color: type === 'PENDING' ? '#fbbf24' : type === 'VERIFIED' ? '#34d399' : '#fb7185' }}>
                     {type === 'PENDING' ? 'Awaiting POD' : type === 'VERIFIED' ? 'POD Verified' : `Issue: ${order.pod_issue_type || 'Raised'}`}
                   </strong>
-                  {type === 'ISSUE' && <div style={{ color: '#f8fafc', fontSize: '0.72rem', marginTop: 2, background: 'rgba(244,63,94,0.1)', padding: '0.2rem 0.4rem', borderRadius: 4, border: '1px solid rgba(244,63,94,0.2)' }}>💬 Remarks: {order.pod_issue_details || 'Delivery exception reported.'}</div>}
+                  {type === 'ISSUE' && (
+                    <div style={{ color: '#f8fafc', fontSize: '0.72rem', marginTop: 2, background: 'rgba(244,63,94,0.1)', padding: '0.25rem 0.5rem', borderRadius: 4, border: '1px solid rgba(244,63,94,0.2)' }}>
+                      💬 {order.pod_issue_details || 'Delivery exception reported.'}
+                    </div>
+                  )}
+                  {order.grn_number && (
+                    <div style={{ color: '#34d399', fontSize: '0.72rem', marginTop: 2, fontWeight: 800 }}>
+                      📑 GRN: {order.grn_number} (₹{Number(order.grn_value || 0).toLocaleString()})
+                    </div>
+                  )}
                 </td>
                 <td>
                   {type === 'PENDING' ? (
                     canVerifyPOD ? (
                       <button className="btn btn-success" onClick={() => onVerifyPOD(order)}>
-                        <FileCheck2 size={14} /> Verify POD
+                        <FileCheck2 size={14} /> Verify POD (2 Options)
                       </button>
                     ) : (
                       <span style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 600 }}>
@@ -96,7 +105,15 @@ export const PODQueueView: React.FC<PODQueueViewProps> = ({ orders, onVerifyPOD,
                       </span>
                     )
                   ) : type === 'ISSUE' ? (
-                    isSalesAdminUser && !order.grn_workflow_status && !order.reattempt_delivery ? (
+                    order.grn_workflow_status === 'PENDING_BILLING' ? (
+                      <span style={{ color: '#fb7185', background: 'rgba(244,63,94,0.15)', border: '1px solid rgba(244,63,94,0.3)', padding: '3px 8px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 800, display: 'inline-block' }}>
+                        📦 Routed to Billing &rarr; Issue GRN
+                      </span>
+                    ) : order.grn_workflow_status === 'PENDING_SALES_ADMIN_COMPLETION' ? (
+                      <span style={{ color: '#34d399', background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', padding: '3px 8px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 800, display: 'inline-block' }}>
+                        ✅ GRN Issued by Billing ({order.grn_number})
+                      </span>
+                    ) : isSalesAdminUser && !order.grn_workflow_status && !order.reattempt_delivery ? (
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         <button className="btn btn-success" onClick={() => onResolveQuery(order.id, 'CREATE_GRN')} style={{ fontSize: '0.72rem' }}>
                           Create GRN
@@ -107,17 +124,15 @@ export const PODQueueView: React.FC<PODQueueViewProps> = ({ orders, onVerifyPOD,
                       </div>
                     ) : isSuperAdminUser ? (
                       <span style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700 }}>
-                        👁️ View Only (Routed to Sales Admin)
+                        👁️ Exception Logged (Routed to Billing)
                       </span>
-                    ) : order.grn_workflow_status === 'PENDING_SALES_ADMIN' ? (
-                      <span style={{ color: '#38bdf8', fontSize: '0.72rem', fontWeight: 800 }}>GRN in Progress</span>
                     ) : order.reattempt_delivery ? (
                       <span style={{ color: '#fbbf24', fontSize: '0.72rem', fontWeight: 800 }}>Reattempt sent to Stage 3</span>
                     ) : (
-                      <span style={{ color: '#fbbf24', fontSize: '0.72rem', fontWeight: 700 }}>Under Sales Admin Review</span>
+                      <span style={{ color: '#fbbf24', fontSize: '0.72rem', fontWeight: 700 }}>Under Review</span>
                     )
-                  ) : order.grn_workflow_status === 'PENDING_SALES_ADMIN' ? (
-                    <span style={{ color: '#38bdf8', fontSize: '0.72rem', fontWeight: 800 }}>GRN sent to Sales Admin</span>
+                  ) : order.grn_workflow_status === 'PENDING_BILLING' ? (
+                    <span style={{ color: '#fb7185', fontSize: '0.72rem', fontWeight: 800 }}>GRN Routed to Billing</span>
                   ) : order.reattempt_delivery ? (
                     <span style={{ color: '#fbbf24', fontSize: '0.72rem', fontWeight: 800 }}>Reattempt sent to Stage 3</span>
                   ) : '—'}

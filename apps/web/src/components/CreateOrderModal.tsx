@@ -1295,7 +1295,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
-              {orderToEdit ? `Edit Agency Order (${orderToEdit.order_number})` : 'Create Agency Order'}
+              {orderToEdit ? `Edit Order (${orderToEdit.order_number})` : 'Create Order'}
             </h2>
             <p style={{ fontSize: '0.825rem', color: '#94a3b8' }}>
               {orderToEdit 

@@ -8,6 +8,7 @@ import { MastersPage } from './pages/MastersPage';
 import { DispatchPage } from './pages/DispatchPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { TasksPage } from './pages/TasksPage';
 import { ReturnsRegisterView } from './modules/returns/ReturnsRegisterView';
 import { OrderTrackerView } from './modules/tracker/OrderTrackerView';
 import { PODQueueView } from './modules/pod/PODQueueView';
@@ -23,6 +24,8 @@ import { ProcessReturnModal } from './components/ProcessReturnModal';
 import { PODVerificationModal } from './components/PODVerificationModal';
 import { ZoneMasterModal } from './components/ZoneMasterModal';
 import { RegisterAgencyModal } from './components/RegisterAgencyModal';
+import { CreateTaskModal } from './components/CreateTaskModal';
+import { TaskDetailsModal } from './components/TaskDetailsModal';
 import { ActiveFiltersBar } from './components/ActiveFiltersBar';
 import { NotificationToast } from './components/NotificationToast';
 import { PullToRefresh } from './components/PullToRefresh';
@@ -35,6 +38,13 @@ import {
   MOCK_AGENCIES, 
   MOCK_PRODUCTS, 
   MOCK_HOLD_REASONS,
+  INITIAL_TASKS,
+  getCachedTasks,
+  setCachedTasks,
+  fetchTasksFromSupabase,
+  saveTaskToSupabase,
+  updateTaskStatusInSupabase,
+  deleteTaskFromSupabase,
   fetchOrdersFromSupabase,
   fetchCompaniesFromSupabase,
   fetchAgenciesFromSupabaseTable,
@@ -48,7 +58,7 @@ import {
   generateUuid,
   supabase
 } from './lib/supabase';
-import { Order, GlobalFilterState, Agency, Product, User, Company } from './types';
+import { Order, GlobalFilterState, Agency, Product, User, Company, TaskItem, TaskStatus, TaskAttachment, isOrderDispatchedOrBeyond, PriorityLevel } from './types';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -62,14 +72,14 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Proline OMS UI Catch:", error, errorInfo);
+    console.error("PROKAP OMS UI Catch:", error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
       return (
         <div style={{ padding: '3rem', textAlign: 'center', background: '#0f172a', color: 'white', minHeight: '100vh' }}>
-          <h1 style={{ color: '#f43f5e', fontSize: '1.75rem', fontWeight: 800 }}>Proline OMS UI Recovered</h1>
+          <h1 style={{ color: '#f43f5e', fontSize: '1.75rem', fontWeight: 800 }}>PROKAP OMS UI Recovered</h1>
           <p style={{ color: '#cbd5e1', margin: '1rem 0' }}>An isolated component error occurred. Reloading local state...</p>
           <pre style={{ background: '#1e293b', padding: '1rem', borderRadius: 8, color: '#fbbf24', fontSize: '0.85rem' }}>
             {this.state.error?.toString()}
@@ -129,15 +139,17 @@ const MainLayout: React.FC = () => {
   const [liveCompanies, setLiveCompanies] = useState<Company[]>([]);
   const [liveAgencies, setLiveAgencies] = useState<Agency[]>([]);
   const [liveProducts, setLiveProducts] = useState<Product[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>(() => getCachedTasks());
 
   // Global Refresh handler for Pull-To-Refresh and Header button
   const handleGlobalRefresh = async () => {
     try {
-      const [orderRes, compRes, agencyRes, prodRes] = await Promise.allSettled([
+      const [orderRes, compRes, agencyRes, prodRes, taskRes] = await Promise.allSettled([
         fetchOrdersFromSupabase(),
         fetchCompaniesFromSupabase(),
         fetchAgenciesFromSupabaseTable(),
-        fetchProductsFromSupabase()
+        fetchProductsFromSupabase(),
+        fetchTasksFromSupabase()
       ]);
 
       if (orderRes.status === 'fulfilled' && orderRes.value.orders && orderRes.value.orders.length > 0) {
@@ -157,6 +169,10 @@ const MainLayout: React.FC = () => {
 
       if (prodRes.status === 'fulfilled' && prodRes.value && prodRes.value.length > 0) {
         setLiveProducts(prodRes.value);
+      }
+
+      if (taskRes.status === 'fulfilled' && taskRes.value.tasks && taskRes.value.tasks.length > 0) {
+        setTasks(taskRes.value.tasks);
       }
     } catch (err) {
       console.warn('Global refresh error:', err);
@@ -186,6 +202,10 @@ const MainLayout: React.FC = () => {
       if (prods && prods.length > 0) setLiveProducts(prods);
     });
 
+    fetchTasksFromSupabase().then(({ tasks: liveTasks }) => {
+      if (liveTasks && liveTasks.length > 0) setTasks(liveTasks);
+    });
+
     // 1. Dedicated Supabase Broadcast Channel for cross-device order synchronization
     const syncChannel = supabase.channel('proline_oms_order_sync');
     syncChannel
@@ -202,18 +222,23 @@ const MainLayout: React.FC = () => {
       })
       .subscribe();
 
-    // 2. Smart background polling (every 15s) to keep order data up to date
+    // 2. Smart background polling (every 15s) to keep order & task data up to date
     const syncPollInterval = setInterval(async () => {
       try {
         const { orders: liveOrders, error } = await fetchOrdersFromSupabase();
-        if (error || !liveOrders || liveOrders.length === 0) return;
+        if (!error && liveOrders && liveOrders.length > 0) {
+          setOrders(liveOrders);
+          try {
+            localStorage.setItem('proline_oms_orders_v3', JSON.stringify(liveOrders));
+          } catch {}
+        }
 
-        setOrders(liveOrders);
-        try {
-          localStorage.setItem('proline_oms_orders_v3', JSON.stringify(liveOrders));
-        } catch {}
+        const { tasks: liveTasks } = await fetchTasksFromSupabase();
+        if (liveTasks && liveTasks.length > 0) {
+          setTasks(liveTasks);
+        }
       } catch (err) {
-        console.warn('Orders sync notice:', err);
+        console.warn('Sync notice:', err);
       }
     }, 15000);
 
@@ -265,12 +290,22 @@ const MainLayout: React.FC = () => {
       })
       .subscribe();
 
+    const channelTasks = supabase
+      .channel(`tasks_realtime_${generateUuid()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        fetchTasksFromSupabase().then(({ tasks: liveTasks }) => {
+          if (liveTasks && liveTasks.length > 0) setTasks(liveTasks);
+        });
+      })
+      .subscribe();
+
     return () => {
       clearInterval(syncPollInterval);
       supabase.removeChannel(syncChannel);
       supabase.removeChannel(channel);
       supabase.removeChannel(channelAgencies);
       supabase.removeChannel(channelProducts);
+      supabase.removeChannel(channelTasks);
     };
   }, []);
 
@@ -315,6 +350,156 @@ const MainLayout: React.FC = () => {
   const [isZoneMasterOpen, setIsZoneMasterOpen] = useState(false);
   const [isRegisterAgencyOpen, setIsRegisterAgencyOpen] = useState(false);
   const [createOrderInitialAgencyId, setCreateOrderInitialAgencyId] = useState<string | undefined>(undefined);
+
+  // Task Management States
+  const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<TaskItem | null>(null);
+  const [taskToEdit, setTaskToEdit] = useState<TaskItem | null>(null);
+
+  // Periodic Task Reminder & Due Alert Check
+  useEffect(() => {
+    const checkReminders = () => {
+      const now = new Date();
+      tasks.forEach(t => {
+        if (t.status === 'COMPLETED' || t.status === 'CANCELLED') return;
+
+        // Check scheduled reminder
+        if (t.reminder_date && !t.reminder_sent) {
+          const remTime = new Date(t.reminder_date);
+          if (now >= remTime) {
+            t.reminder_sent = true;
+            saveTaskToSupabase(t);
+            addNotification({
+              title: `Task Reminder: ${t.title}`,
+              message: t.reminder_note ? `${t.reminder_note} (Target Due: ${new Date(t.due_date).toLocaleDateString('en-IN')})` : `Reminder: Task "${t.title}" is due on ${new Date(t.due_date).toLocaleDateString('en-IN')}`,
+              event_type: 'TASK_REMINDER',
+              category: 'TASK',
+              task_id: t.id
+            });
+          }
+        }
+      });
+    };
+
+    const reminderInterval = setInterval(checkReminders, 30000);
+    checkReminders();
+    return () => clearInterval(reminderInterval);
+  }, [tasks]);
+
+  // Task Handlers
+  const handleCreateOrUpdateTask = async (taskData: TaskItem) => {
+    const isNew = !tasks.some(t => t.id === taskData.id);
+    const res = await saveTaskToSupabase(taskData);
+    if (res.data) {
+      setTasks(prev => {
+        const idx = prev.findIndex(t => t.id === taskData.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = res.data!;
+          return updated;
+        }
+        return [res.data!, ...prev];
+      });
+
+      if (isNew) {
+        addNotification({
+          title: `New Task Assigned: ${taskData.title}`,
+          message: `Assigned to ${taskData.assigned_to_name} (Priority: ${taskData.priority}, Target: ${new Date(taskData.due_date).toLocaleDateString('en-IN')})`,
+          event_type: 'TASK_ASSIGNED',
+          category: 'TASK',
+          task_id: taskData.id
+        });
+      }
+    }
+  };
+
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskStatus, remarks?: string, proofDocs?: TaskAttachment[]) => {
+    const existing = tasks.find(t => t.id === taskId);
+    const nowIso = new Date().toISOString();
+    const isComp = newStatus === 'COMPLETED';
+
+    // 1. Optimistic Local State Update for instantaneous UI feedback
+    if (existing) {
+      const optimisticTask: TaskItem = {
+        ...existing,
+        status: newStatus,
+        updated_at: nowIso,
+        completion_remarks: isComp ? (remarks || existing.completion_remarks || 'Task marked as completed') : existing.completion_remarks,
+        completed_at: isComp ? nowIso : (newStatus === 'PENDING' || newStatus === 'IN_PROGRESS' ? undefined : existing.completed_at),
+        completed_by_id: isComp ? (currentUser?.id || existing.completed_by_id) : existing.completed_by_id,
+        completed_by_name: isComp ? (currentUser?.full_name || existing.completed_by_name) : existing.completed_by_name,
+        completion_proof_docs: proofDocs && proofDocs.length > 0 ? proofDocs : existing.completion_proof_docs,
+        activity_log: [
+          ...(existing.activity_log || []),
+          {
+            id: generateUuid(),
+            action: isComp ? 'COMPLETED' : `STATUS_${newStatus}`,
+            user_id: currentUser?.id || 'user',
+            user_name: currentUser?.full_name || 'User',
+            timestamp: nowIso,
+            remarks: remarks || `Status updated to ${newStatus}`
+          }
+        ]
+      };
+      setTasks(prev => prev.map(t => t.id === taskId ? optimisticTask : t));
+      if (selectedTaskForDetails && selectedTaskForDetails.id === taskId) {
+        if (isComp) {
+          setSelectedTaskForDetails(null);
+        } else {
+          setSelectedTaskForDetails(optimisticTask);
+        }
+      }
+    }
+
+    // 2. Persist to data layer
+    const res = await updateTaskStatusInSupabase(
+      taskId, 
+      newStatus, 
+      remarks, 
+      currentUser ? { id: currentUser.id, name: currentUser.full_name, role: currentUser.role_name } : undefined, 
+      proofDocs,
+      existing
+    );
+
+    if (res.updatedTask) {
+      setTasks(prev => prev.map(t => t.id === taskId ? res.updatedTask! : t));
+      if (selectedTaskForDetails && selectedTaskForDetails.id === taskId) {
+        if (newStatus === 'COMPLETED') {
+          setSelectedTaskForDetails(null);
+        } else {
+          setSelectedTaskForDetails(res.updatedTask);
+        }
+      }
+
+      if (newStatus === 'COMPLETED') {
+        addNotification({
+          title: `Task Completed: ${res.updatedTask.title}`,
+          message: `${currentUser?.full_name || 'Team member'} marked the task as completed (${res.updatedTask.task_number}).`,
+          event_type: 'TASK_COMPLETED',
+          category: 'TASK',
+          task_id: taskId
+        });
+      }
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    await deleteTaskFromSupabase(taskId);
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+    if (selectedTaskForDetails?.id === taskId) {
+      setSelectedTaskForDetails(null);
+    }
+  };
+
+  const handleOpenEditTask = (task: TaskItem) => {
+    setTaskToEdit(task);
+    setIsCreateTaskOpen(true);
+  };
+
+  const myPendingTaskCount = tasks.filter(t => 
+    (t.assigned_to_id === currentUser?.id || (t.assigned_to_name || '').toLowerCase() === (currentUser?.full_name || '').toLowerCase()) &&
+    t.status !== 'COMPLETED' && t.status !== 'CANCELLED'
+  ).length;
 
   const handleOpenCreateOrderForAgency = (agencyId: string) => {
     setOrderToEdit(null);
@@ -601,6 +786,10 @@ const MainLayout: React.FC = () => {
 
   // Handlers
   const handleOpenEditOrder = (order: Order) => {
+    if (isOrderDispatchedOrBeyond(order.status)) {
+      alert(`Order ${order.order_number} has already been dispatched (${order.status}). Modification is locked.`);
+      return;
+    }
     setOrderToEdit(order);
     setIsCreateOpen(true);
   };
@@ -928,31 +1117,176 @@ const MainLayout: React.FC = () => {
     });
   };
 
-  const handleConfirmPOD = (orderId: string, podStatus: 'CLEAN' | 'ISSUE_RAISED', issueType?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN' | 'OTHER', details?: string) => {
+  const handleReattemptDelivery = async (orderId: string, reasonDetails?: string) => {
+    const target = orders.find(o => o.id === orderId);
+    if (!target) return;
+
+    const baseOrderNumber = target.order_number.replace(/^RN-/, '');
+    const newOrderNumber = `RN-${baseOrderNumber}`;
+    const newOrderId = generateUuid();
+    const timestamp = new Date().toISOString();
+
+    const clonedItems = (target.items || []).map(item => ({
+      ...item,
+      id: generateUuid(),
+      order_id: newOrderId,
+      box_qty: item.box_qty || 0,
+      loose_pcs: item.loose_pcs || 0,
+      free_pcs: item.free_pcs || 0,
+      total_qty_pcs: item.total_qty_pcs || 0,
+      unit_price: item.unit_price || 0,
+      total_price: item.total_price || 0,
+      dispatched_qty_pcs: 0,
+      issued_qty_pcs: item.total_qty_pcs || 0,
+      pending_qty_pcs: item.total_qty_pcs || 0
+    }));
+
+    const newOrder: Order = {
+      ...target,
+      id: newOrderId,
+      order_number: newOrderNumber,
+      order_date: timestamp.substring(0, 10),
+      status: 'APPROVED', // Ready for Billing Stage 4
+      priority: PriorityLevel.HIGH,
+      inventory_status: 'IN_STOCK',
+      invoice_number: undefined,
+      invoice_date: undefined,
+      invoice_amount: undefined,
+      billing_total_qty: undefined,
+      driver_name: undefined,
+      driver_mobile: undefined,
+      vehicle_number: undefined,
+      pod_status: undefined,
+      pod_issue_type: undefined,
+      pod_issue_details: undefined,
+      pod_query_raised_by: undefined,
+      pod_query_raised_at: undefined,
+      grn_workflow_status: undefined,
+      grn_number: undefined,
+      grn_date: undefined,
+      grn_value: undefined,
+      grn_remark: undefined,
+      need_accounts_approval: false,
+      accounts_approval_status: 'APPROVED',
+      accounts_approval_message: undefined,
+      accounts_approval_requested_by: undefined,
+      accounts_approval_requested_at: undefined,
+      reattempt_delivery: true,
+      original_reattempt_order_number: target.order_number,
+      remarks: `Re-attempt delivery generated from original order ${target.order_number}${reasonDetails ? ` (${reasonDetails})` : ''}`,
+      items: clonedItems,
+      order_history: [
+        {
+          id: generateUuid(),
+          order_id: newOrderId,
+          action: 'ORDER_REATTEMPT_CREATED',
+          performed_by: currentUser?.full_name || 'Billing / Admin',
+          performed_at: timestamp,
+          remarks: `Re-attempt order created from parent order ${target.order_number}`
+        }
+      ]
+    };
+
+    const parentHistoryEntry = {
+      id: generateUuid(),
+      order_id: target.id,
+      action: 'DELIVERY_REATTEMPTED',
+      performed_by: currentUser?.full_name || 'Billing / Admin',
+      performed_at: timestamp,
+      remarks: `Delivery re-attempted. New order created: ${newOrderNumber}`
+    };
+
+    const updatedTarget: Order = {
+      ...target,
+      status: 'DELIVERY_REATTEMPTED',
+      pod_status: 'ISSUE_RAISED',
+      grn_workflow_status: 'COMPLETED',
+      reattempt_delivery: true,
+      reattempt_order_number: newOrderNumber,
+      order_history: [...(target.order_history || []), parentHistoryEntry],
+      remarks: `${target.remarks || ''} [Re-attempted via ${newOrderNumber}]`.trim()
+    };
+
+    setOrders(prev => [newOrder, ...prev.map(o => o.id === target.id ? updatedTarget : o)]);
+
+    try {
+      await saveOrderToSupabase(newOrder);
+      if (clonedItems.length > 0) {
+        clonedItems.forEach(it => { void saveOrderItemToSupabase(it); });
+      }
+      await updateOrderStatusInSupabase(target.id, 'DELIVERY_REATTEMPTED', `Reattempt order ${newOrderNumber} created`);
+      await updateOrderAccountsApprovalInSupabase(target.id, {
+        status: 'DELIVERY_REATTEMPTED',
+        grn_workflow_status: 'COMPLETED',
+        order_history: updatedTarget.order_history
+      });
+    } catch (err) {
+      console.error('Error persisting reattempt order in Supabase:', err);
+    }
+
+    try {
+      const currentStored = JSON.parse(localStorage.getItem('proline_oms_orders_v3') || '[]');
+      const updatedStored = [
+        newOrder,
+        ...currentStored.map((o: any) => o.id === target.id ? updatedTarget : o)
+      ];
+      localStorage.setItem('proline_oms_orders_v3', JSON.stringify(updatedStored));
+    } catch (e) {
+      console.error('Failed to sync reattempt order to localStorage', e);
+    }
+
+    addNotification({
+      title: `🚚 Re-attempt Order Created: ${newOrderNumber}`,
+      message: `New delivery order ${newOrderNumber} created from ${target.order_number}. Items copied; routed to Billing & Dispatch.`,
+      event_type: 'REATTEMPT_DELIVERY',
+      order_id: newOrder.id,
+      target_roles: ['BILLING', 'ACCOUNTS', 'DISPATCH_MANAGER', 'SALES_ADMIN', 'SUPER_ADMIN'],
+      category: 'POD',
+      brand_name: newOrder.company_name
+    });
+    broadcastOrderSync(newOrderNumber);
+  };
+
+  const handleConfirmPOD = (
+    orderId: string,
+    podStatus: 'CLEAN' | 'ISSUE_RAISED',
+    issueType?: 'SHORTAGE' | 'DAMAGED' | 'GOOD_RETURN' | 'OTHER',
+    details?: string,
+    resolutionAction?: 'CREATE_GRN' | 'REATTEMPT_DELIVERY'
+  ) => {
     const timestamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const isBilling = currentUser?.role_name === 'BILLING' || currentUser?.role_name === 'ACCOUNTS';
-    const verifier = currentUser?.full_name || (isBilling ? 'Billing Executive' : 'Billing Team');
+    const verifier = currentUser?.full_name || (isBilling ? 'Billing Executive' : 'POD Verifier');
     const target = orders.find(order => order.id === orderId);
+
+    if (podStatus === 'ISSUE_RAISED' && resolutionAction === 'REATTEMPT_DELIVERY') {
+      void handleReattemptDelivery(orderId, details);
+      return;
+    }
+
     const podHistoryEntry = podStatus === 'ISSUE_RAISED' ? {
-      id: generateUuid(), order_id: orderId, action: 'POD_QUERY_RAISED', performed_by: verifier,
+      id: generateUuid(), order_id: orderId, action: 'POD_GRN_REQUEST_CREATED', performed_by: verifier,
       performed_at: new Date().toISOString(), remarks: details,
-      details: { issue_type: issueType, message: details, raised_by: verifier, raised_at: timestamp }
+      details: { issue_type: issueType, message: details, raised_by: verifier, raised_at: timestamp, routed_to: 'BILLING_GRN_QUEUE' }
     } : undefined;
+
     setOrders(prev => prev.map(o => o.id === orderId ? {
       ...o,
       status: podStatus === 'CLEAN' ? 'COMPLETED' : 'POD_ISSUE_RAISED',
       pod_status: podStatus,
       pod_issue_type: issueType,
       pod_issue_details: details,
+      grn_workflow_status: podStatus === 'ISSUE_RAISED' ? 'PENDING_BILLING' : o.grn_workflow_status,
       pod_query_raised_by: podStatus === 'ISSUE_RAISED' ? verifier : o.pod_query_raised_by,
       pod_query_raised_at: podStatus === 'ISSUE_RAISED' ? timestamp : o.pod_query_raised_at,
       need_accounts_approval: podStatus === 'ISSUE_RAISED',
       accounts_approval_status: podStatus === 'ISSUE_RAISED' ? 'PENDING' : o.accounts_approval_status,
-      accounts_approval_message: podStatus === 'ISSUE_RAISED' ? `POD ${issueType || 'ISSUE'} (Billing): ${details || 'Billing reports delivery exception.'}` : o.accounts_approval_message,
+      accounts_approval_message: podStatus === 'ISSUE_RAISED' ? `POD GRN Request (${verifier}): [${issueType || 'ISSUE'}] ${details || 'Delivery exception reported.'}` : o.accounts_approval_message,
       accounts_approval_requested_by: podStatus === 'ISSUE_RAISED' ? verifier : o.accounts_approval_requested_by,
       accounts_approval_requested_at: podStatus === 'ISSUE_RAISED' ? timestamp : o.accounts_approval_requested_at,
       order_history: podHistoryEntry ? [...(o.order_history || []), podHistoryEntry] : o.order_history
     } : o));
+
     if (podStatus === 'CLEAN') {
       updateOrderStatusInSupabase(orderId, 'COMPLETED', 'POD verified with no issue <!--POD_STATUS:CLEAN-->');
       if (target) {
@@ -972,18 +1306,18 @@ const MainLayout: React.FC = () => {
         status: 'POD_ISSUE_RAISED',
         need_accounts_approval: true,
         accounts_approval_status: 'PENDING',
-        accounts_approval_message: `POD ${issueType || 'ISSUE'} (Billing): ${details || 'Billing reports delivery exception.'}`,
+        accounts_approval_message: `POD GRN Request (${verifier}): [${issueType || 'ISSUE'}] ${details || 'Store exception reported.'}`,
         accounts_approval_requested_by: verifier,
         accounts_approval_requested_at: timestamp,
         order_history: podHistoryEntry ? [...(target?.order_history || []), podHistoryEntry] : target?.order_history
       });
       if (target) {
         addNotification({
-          title: `🚨 POD Query Raised: ${target.order_number}`,
-          message: `Delivery exception reported by Billing (${verifier}): [${issueType || 'ISSUE'}] ${details || 'Store stamp missing / exception'}. Sales Admin review required.`,
-          event_type: 'POD_QUERY_RAISED',
+          title: `📦 GRN Request from POD: ${target.order_number}`,
+          message: `Delivery exception reported (${verifier}): [${issueType || 'ISSUE'}] ${details || 'Delivery discrepancy'}. Routed to Accounts & Billing to Issue GRN.`,
+          event_type: 'GRN_REQUESTED',
           order_id: orderId,
-          target_roles: ['SALES_ADMIN', 'SUPER_ADMIN', 'DISPATCH_MANAGER'],
+          target_roles: ['BILLING', 'ACCOUNTS', 'SALES_ADMIN', 'SUPER_ADMIN'],
           category: 'POD',
           brand_name: target.company_name
         });
@@ -1012,41 +1346,7 @@ const MainLayout: React.FC = () => {
         order_id: target.id
       });
     } else {
-      const historyEntry = {
-        id: generateUuid(),
-        order_id: orderId,
-        action: 'REATTEMPT_DELIVERY',
-        performed_by: currentUser?.full_name || 'Sales Admin',
-        performed_at: new Date().toISOString(),
-        remarks: 'Reattempt delivery routed to Stage 3 stock check'
-      };
-      setOrders(prev => prev.map(o => o.id === orderId ? {
-        ...o,
-        status: 'SALES_ADMIN_APPROVED',
-        priority: 'HIGH',
-        inventory_status: 'IN_STOCK',
-        reattempt_delivery: true,
-        need_accounts_approval: false,
-        accounts_approval_status: 'NOT_REQUIRED',
-        order_history: [...(o.order_history || []), historyEntry]
-      } : o));
-
-      updateOrderAccountsApprovalInSupabase(orderId, {
-        status: 'SALES_ADMIN_APPROVED',
-        priority: 'HIGH',
-        inventory_status: 'IN_STOCK',
-        need_accounts_approval: false,
-        accounts_approval_status: 'NOT_REQUIRED',
-        order_history: [...(target.order_history || []), historyEntry],
-        remarks: '<!--REATTEMPT:true-->Reattempt delivery — route to Stage 3 stock check'
-      });
-
-      addNotification({
-        title: `🚨 Reattempt Delivery Dispatched: ${target.order_number}`,
-        message: `Delivery exception resolved by Sales Admin. Order re-routed back to Stage 5 Dispatch Team with HIGH PRIORITY flag.`,
-        event_type: 'REATTEMPT_DELIVERY',
-        order_id: target.id
-      });
+      void handleReattemptDelivery(orderId);
     }
   };
 
@@ -1484,6 +1784,7 @@ const MainLayout: React.FC = () => {
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        pendingTaskCount={myPendingTaskCount}
       />
 
       <div className="main-content" style={{ overflow: 'hidden' }}>
@@ -1529,6 +1830,8 @@ const MainLayout: React.FC = () => {
             onOpenCreateOrder={() => setIsCreateOpen(true)}
             onSelectOrder={(o) => setSelectedOrderForApproval(o)}
             onReleaseHold={handleReleaseHold}
+            onNavigateToTasks={() => setCurrentTab('tasks')}
+            taskCount={myPendingTaskCount}
             onNavigateToReports={(reportName) => {
               setSelectedReportName(reportName || 'Completed Orders Report');
               setCurrentTab('reports');
@@ -1627,6 +1930,7 @@ const MainLayout: React.FC = () => {
             agencies={agenciesPool}
             onGenerateInvoice={handleGenerateInvoice}
             onCompleteGrn={handleCompleteGrn}
+            onReattemptDelivery={(order) => void handleReattemptDelivery(order.id)}
             onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
           />
         )}
@@ -1660,10 +1964,28 @@ const MainLayout: React.FC = () => {
           />
         )}
 
+        {currentTab === 'tasks' && (
+          <TasksPage 
+            key="page_tasks"
+            tasks={tasks}
+            users={users}
+            onOpenCreateTask={() => {
+              setTaskToEdit(null);
+              setIsCreateTaskOpen(true);
+            }}
+            onSelectTask={(task) => setSelectedTaskForDetails(task)}
+            onUpdateTaskStatus={handleUpdateTaskStatus}
+            onDeleteTask={handleDeleteTask}
+            onEditTask={handleOpenEditTask}
+            onRefreshTasks={handleGlobalRefresh}
+          />
+        )}
+
         {currentTab === 'tracker' && (
           <OrderTrackerView
             key="page_tracker"
             orders={globallyFilteredOrders}
+            agencies={agenciesPool}
             onReleaseHold={handleReleaseHold}
           />
         )}
@@ -1772,6 +2094,27 @@ const MainLayout: React.FC = () => {
         isOpen={!!selectedOrderForPOD}
         onClose={() => setSelectedOrderForPOD(null)}
         onConfirmPOD={handleConfirmPOD}
+      />
+
+      {/* Task Management Modals */}
+      <CreateTaskModal
+        isOpen={isCreateTaskOpen}
+        onClose={() => {
+          setIsCreateTaskOpen(false);
+          setTaskToEdit(null);
+        }}
+        onSubmitTask={handleCreateOrUpdateTask}
+        users={users}
+        taskToEdit={taskToEdit}
+      />
+
+      <TaskDetailsModal
+        task={selectedTaskForDetails}
+        isOpen={!!selectedTaskForDetails}
+        onClose={() => setSelectedTaskForDetails(null)}
+        onUpdateStatus={handleUpdateTaskStatus}
+        onEditTask={handleOpenEditTask}
+        onDeleteTask={handleDeleteTask}
       />
 
       {/* Floating Realtime Notification Toast */}

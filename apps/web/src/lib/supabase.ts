@@ -10,7 +10,13 @@ import {
   ZoneMaster, 
   AreaMaster, 
   AreaTypeMaster,
-  getGroupCode 
+  getGroupCode,
+  TaskItem,
+  TaskStatus,
+  TaskPriority,
+  TaskCategory,
+  TaskAttachment,
+  TaskActivityLog
 } from '../types';
 import { 
   OFFICIAL_AREAS_MASTER, 
@@ -2040,13 +2046,15 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
           return undefined;
         })() || latestDispatchDetails.dispatch_remark || undefined,
         reattempt_delivery: Boolean(hasReattemptHistory && o.status !== 'COMPLETED' && o.status !== 'CANCELLED' && o.status !== 'POD_ISSUE_RAISED'),
-        grn_workflow_status: latestGrnEntry?.action === 'GRN_REQUESTED_BY_ADMIN'
-          ? 'PENDING_SALES_ADMIN'
-          : latestGrnEntry?.action === 'GRN_FORWARDED_TO_BILLING'
-            ? 'PENDING_BILLING'
-            : latestGrnEntry?.action === 'GRN_CREATED'
-              ? 'PENDING_SALES_ADMIN_COMPLETION'
-              : latestGrnEntry?.action === 'ORDER_COMPLETED_AFTER_GRN' ? 'COMPLETED' : undefined,
+        grn_workflow_status: (o.grn_workflow_status as any) || (
+          latestGrnEntry?.action === 'GRN_REQUESTED_BY_ADMIN'
+            ? 'PENDING_SALES_ADMIN'
+            : (latestGrnEntry?.action === 'GRN_FORWARDED_TO_BILLING' || latestGrnEntry?.action === 'POD_GRN_REQUEST_CREATED' || latestGrnEntry?.action === 'POD_QUERY_RAISED' || o.status === 'POD_ISSUE_RAISED')
+              ? 'PENDING_BILLING'
+              : latestGrnEntry?.action === 'GRN_CREATED'
+                ? 'PENDING_SALES_ADMIN_COMPLETION'
+                : latestGrnEntry?.action === 'ORDER_COMPLETED_AFTER_GRN' ? 'COMPLETED' : undefined
+        ),
         grn_number: o.grn_number || latestGrnEntry?.details?.grn_number || undefined,
         grn_date: o.grn_date || latestGrnEntry?.details?.grn_date || undefined,
         grn_value: o.grn_value == null ? latestGrnEntry?.details?.grn_value : Number(o.grn_value),
@@ -2590,3 +2598,398 @@ export const saveAreaTypeToSupabase = async (areaType: AreaTypeMaster): Promise<
     return { success: false, error: err?.message || 'Failed to save area type' };
   }
 };
+
+// ============================================================================
+// TASK MANAGEMENT DATA LAYER & CRUD
+// ============================================================================
+
+export const INITIAL_TASKS: TaskItem[] = [
+  {
+    id: 'task_001',
+    task_number: 'TSK-2026-0001',
+    title: 'Follow up on Surat City Agencies Overdue Outstanding',
+    summary: 'Coordinate with primary agencies in Surat City (Varachha & Katargam) having outstanding balance > ₹1,00,000 overdue for more than 45 days. Collect RTGS/NEFT payment receipts and update ledger balance.',
+    priority: 'HIGH',
+    category: 'ACCOUNTS',
+    status: 'PENDING',
+    assigned_to_id: 'u_asm_brijesh',
+    assigned_to_name: 'Brijesh',
+    assigned_to_role: 'AREA_SALES_MANAGER',
+    assigned_to_email: 'brijesh@proline.com',
+    created_by_id: 'u01',
+    created_by_name: 'Chirag (Super Admin)',
+    created_by_role: 'SUPER_ADMIN',
+    due_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days from now
+    reminder_date: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
+    reminder_note: 'Reminder: Send collection summary before 5:00 PM today.',
+    reminder_sent: false,
+    support_docs: [
+      {
+        id: 'doc_001',
+        name: 'Surat_City_Overdue_Statement_Sept2026.pdf',
+        size: 142800,
+        type: 'application/pdf',
+        url: 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCjQgMCBvYmoKPDwKL0tpZHMgWzUgMCBSXQovQ291bnQgMQovVHlwZSAvUGFnZXMKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL1BhcmVudCA0IDAgUgovQ29udGVudHMgNiAwIFIKL1R5cGUgL1BhZ2UKPj4KZW5kb2JqCjYgMCBvYmoKPDwKL0xlbmd0aCA2NAo+PgpzdHJlYW0KQlQKL0YxIDI0IFRmCjcwIDcwMCBUZAooU3VyYXQgQ2l0eSBPdmVyZHVlIFN0YXRlbWVudCkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iagoxIDAgb2JqCjw8Ci9UeXBlIC9DYXRhbG9nCi9QYWdlcyA0IDAgUgo+PgplbmRvYmoKeHJlZgowIDcKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMjk2IDAwMDAwIG4gCjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDE5IDAwMDAwIG4gCjAwMDAwMDAwNzAgMDAwMDAgbiAKMDAwMDAwMDEyOSAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9Sb290IDEgMCBSCi9TaXplIDcKPj4Kc3RhcnR4cmVmCjI0NAolJUVPRg==',
+        uploaded_at: new Date().toISOString()
+      }
+    ],
+    created_at: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+    activity_log: [
+      {
+        id: 'act_001',
+        action: 'CREATED',
+        user_id: 'u01',
+        user_name: 'Chirag (Super Admin)',
+        timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+        remarks: 'Task created and assigned to Brijesh'
+      }
+    ]
+  },
+  {
+    id: 'task_002',
+    task_number: 'TSK-2026-0002',
+    title: 'Physical Warehouse Stock Audit for Priyagold & Mogu Mogu',
+    summary: 'Conduct physical inventory count for all FMCG lines (Priyagold Biscuits & Mogu Mogu Juices) and tally against the system stock quantities. Note damaged or short-expiry boxes in the report.',
+    priority: 'NORMAL',
+    category: 'AUDIT',
+    status: 'IN_PROGRESS',
+    assigned_to_id: 'u_dhruv',
+    assigned_to_name: 'Dhruv',
+    assigned_to_role: 'DISPATCH_MANAGER',
+    assigned_to_email: 'dhruv@proline.com',
+    created_by_id: 'u01',
+    created_by_name: 'Chirag (Super Admin)',
+    created_by_role: 'SUPER_ADMIN',
+    due_date: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
+    reminder_date: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+    reminder_note: 'Verify carton seal counts for batch PG-2026-B4.',
+    reminder_sent: false,
+    support_docs: [
+      {
+        id: 'doc_002',
+        name: 'Warehouse_Audit_Checklist.pdf',
+        size: 98200,
+        type: 'application/pdf',
+        url: 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCjQgMCBvYmoKPDwKL0tpZHMgWzUgMCBSXQovQ291bnQgMQovVHlwZSAvUGFnZXMKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL1BhcmVudCA0IDAgUgovQ29udGVudHMgNiAwIFIKL1R5cGUgL1BhZ2UKPj4KZW5kb2JqCjYgMCBvYmoKPDwKL0xlbmd0aCA1NQo+PgpzdHJlYW0KQlQKL0YxIDI0IFRmCjcwIDcwMCBUZAooV2FyZWhvdXNlIEF1ZGl0IENoZWNrbGlzdCkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iagoxIDAgb2JqCjw8Ci9UeXBlIC9DYXRhbG9nCi9QYWdlcyA0IDAgUgo+PgplbmRvYmoKeHJlZgowIDcKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMjg3IDAwMDAwIG4gCjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDE5IDAwMDAwIG4gCjAwMDAwMDAwNzAgMDAwMDAgbiAKMDAwMDAwMDEyOSAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9Sb290IDEgMCBSCi9TaXplIDcKPj4Kc3RhcnR4cmVmCjIzNQolJUVPRg==',
+        uploaded_at: new Date().toISOString()
+      }
+    ],
+    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+    activity_log: [
+      {
+        id: 'act_002_1',
+        action: 'CREATED',
+        user_id: 'u01',
+        user_name: 'Chirag (Super Admin)',
+        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        remarks: 'Task created for warehouse audit'
+      },
+      {
+        id: 'act_002_2',
+        action: 'STATUS_CHANGED',
+        user_id: 'u_dhruv',
+        user_name: 'Dhruv',
+        timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+        remarks: 'Started counting Bay 3 and Bay 4'
+      }
+    ]
+  },
+  {
+    id: 'task_003',
+    task_number: 'TSK-2026-0003',
+    title: 'Collect Pending Physical Signed PODs for Surat Rural Zone',
+    summary: 'Urgent collection of physical signed & stamped Proof of Delivery copies for 6 dispatch orders delivered last week in Navsari and Bardoli routes.',
+    priority: 'URGENT',
+    category: 'DISPATCH',
+    status: 'PENDING',
+    assigned_to_id: 'u_fsm_keyur',
+    assigned_to_name: 'Keyur',
+    assigned_to_role: 'SALES_PERSON',
+    assigned_to_email: 'keyur@proline.com',
+    created_by_id: 'u01',
+    created_by_name: 'Chirag (Super Admin)',
+    created_by_role: 'SUPER_ADMIN',
+    due_date: new Date(Date.now() + 18 * 60 * 60 * 1000).toISOString(), // due tomorrow morning
+    reminder_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    reminder_note: 'Ensure party stamp and receiver signature are clearly visible.',
+    reminder_sent: false,
+    created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+    activity_log: [
+      {
+        id: 'act_003_1',
+        action: 'CREATED',
+        user_id: 'u01',
+        user_name: 'Chirag (Super Admin)',
+        timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+        remarks: 'Urgent POD follow-up assigned to Keyur'
+      }
+    ]
+  },
+  {
+    id: 'task_004',
+    task_number: 'TSK-2026-0004',
+    title: 'Submit Monthly Sales Target & Scheme Projections',
+    summary: 'Prepare brand-wise promotional discounts and seasonal targets for upcoming festival dispatch demand.',
+    priority: 'NORMAL',
+    category: 'SALES',
+    status: 'COMPLETED',
+    assigned_to_id: 'u_jay',
+    assigned_to_name: 'Jay',
+    assigned_to_role: 'SALES_ADMIN',
+    assigned_to_email: 'jay@proline.com',
+    created_by_id: 'u01',
+    created_by_name: 'Chirag (Super Admin)',
+    created_by_role: 'SUPER_ADMIN',
+    due_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    completed_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    completed_by_id: 'u_jay',
+    completed_by_name: 'Jay',
+    completion_remarks: 'Submitted monthly forecast spreadsheet and agreed on scheme targets with all 10 ASMs.',
+    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    activity_log: [
+      {
+        id: 'act_004_1',
+        action: 'CREATED',
+        user_id: 'u01',
+        user_name: 'Chirag (Super Admin)',
+        timestamp: new Date(Date.now() - 5 * 24 * 60 * 1000).toISOString(),
+        remarks: 'Task created for monthly sales target'
+      },
+      {
+        id: 'act_004_2',
+        action: 'COMPLETED',
+        user_id: 'u_jay',
+        user_name: 'Jay',
+        timestamp: new Date(Date.now() - 2 * 24 * 60 * 1000).toISOString(),
+        remarks: 'Forecast compiled and submitted'
+      }
+    ]
+  }
+];
+
+const TASKS_LOCAL_STORAGE_KEY = 'proline_oms_tasks_v1';
+
+export const getCachedTasks = (): TaskItem[] => {
+  try {
+    const raw = localStorage.getItem(TASKS_LOCAL_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return INITIAL_TASKS;
+};
+
+export const setCachedTasks = (tasks: TaskItem[]) => {
+  try {
+    localStorage.setItem(TASKS_LOCAL_STORAGE_KEY, JSON.stringify(tasks));
+  } catch {}
+};
+
+export const fetchTasksFromSupabase = async (): Promise<{ tasks: TaskItem[]; error: string | null }> => {
+  try {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Supabase fetch tasks error (using local cache):', error.message);
+      return { tasks: getCachedTasks(), error: null };
+    }
+
+    if (!data || data.length === 0) {
+      const cached = getCachedTasks();
+      return { tasks: cached, error: null };
+    }
+
+    const formatted: TaskItem[] = data.map((row: any) => ({
+      id: row.id,
+      task_number: row.task_number || `TSK-${row.id?.substring(0, 6)}`,
+      title: row.title || 'Untitled Task',
+      summary: row.summary || row.description || '',
+      priority: row.priority || 'NORMAL',
+      category: row.category || 'GENERAL',
+      status: row.status || 'PENDING',
+      assigned_to_id: row.assigned_to_id || '',
+      assigned_to_name: row.assigned_to_name || 'Unassigned',
+      assigned_to_role: row.assigned_to_role || '',
+      assigned_to_email: row.assigned_to_email || '',
+      created_by_id: row.created_by_id || '',
+      created_by_name: row.created_by_name || 'System Admin',
+      created_by_role: row.created_by_role || 'SUPER_ADMIN',
+      due_date: row.due_date || new Date().toISOString(),
+      reminder_date: row.reminder_date || undefined,
+      reminder_note: row.reminder_note || undefined,
+      reminder_sent: row.reminder_sent === true,
+      support_docs: Array.isArray(row.support_docs) ? row.support_docs : (typeof row.support_docs === 'string' ? JSON.parse(row.support_docs || '[]') : []),
+      completion_remarks: row.completion_remarks || undefined,
+      completion_proof_docs: Array.isArray(row.completion_proof_docs) ? row.completion_proof_docs : (typeof row.completion_proof_docs === 'string' ? JSON.parse(row.completion_proof_docs || '[]') : []),
+      completed_at: row.completed_at || undefined,
+      completed_by_id: row.completed_by_id || undefined,
+      completed_by_name: row.completed_by_name || undefined,
+      created_at: row.created_at || new Date().toISOString(),
+      updated_at: row.updated_at || new Date().toISOString(),
+      activity_log: Array.isArray(row.activity_log) ? row.activity_log : (typeof row.activity_log === 'string' ? JSON.parse(row.activity_log || '[]') : [])
+    }));
+
+    setCachedTasks(formatted);
+    return { tasks: formatted, error: null };
+  } catch (err: any) {
+    console.error('Error fetching tasks from Supabase:', err?.message || err);
+    return { tasks: getCachedTasks(), error: null };
+  }
+};
+
+export const saveTaskToSupabase = async (task: TaskItem): Promise<{ success: boolean; error: string | null; data?: TaskItem }> => {
+  try {
+    const taskId = (task.id && isValidUuid(task.id)) ? task.id : (task.id || generateUuid());
+    const nowIso = new Date().toISOString();
+
+    const normalizedTask: TaskItem = {
+      ...task,
+      id: taskId,
+      created_at: task.created_at || nowIso,
+      updated_at: nowIso
+    };
+
+    // Update local cache immediately
+    const currentCached = getCachedTasks();
+    const existingIdx = currentCached.findIndex(t => t.id === taskId || t.task_number === task.task_number);
+    let updatedList: TaskItem[];
+    if (existingIdx >= 0) {
+      updatedList = [...currentCached];
+      updatedList[existingIdx] = normalizedTask;
+    } else {
+      updatedList = [normalizedTask, ...currentCached];
+    }
+    setCachedTasks(updatedList);
+
+    // Persist to Supabase
+    const payload: Record<string, any> = {
+      id: taskId,
+      task_number: normalizedTask.task_number,
+      title: normalizedTask.title,
+      summary: normalizedTask.summary,
+      priority: normalizedTask.priority,
+      category: normalizedTask.category,
+      status: normalizedTask.status,
+      assigned_to_id: normalizedTask.assigned_to_id,
+      assigned_to_name: normalizedTask.assigned_to_name,
+      assigned_to_role: normalizedTask.assigned_to_role,
+      assigned_to_email: normalizedTask.assigned_to_email,
+      created_by_id: normalizedTask.created_by_id,
+      created_by_name: normalizedTask.created_by_name,
+      created_by_role: normalizedTask.created_by_role,
+      due_date: normalizedTask.due_date,
+      reminder_date: normalizedTask.reminder_date || null,
+      reminder_note: normalizedTask.reminder_note || null,
+      reminder_sent: normalizedTask.reminder_sent || false,
+      support_docs: normalizedTask.support_docs || [],
+      completion_remarks: normalizedTask.completion_remarks || null,
+      completion_proof_docs: normalizedTask.completion_proof_docs || [],
+      completed_at: normalizedTask.completed_at || null,
+      completed_by_id: normalizedTask.completed_by_id || null,
+      completed_by_name: normalizedTask.completed_by_name || null,
+      created_at: normalizedTask.created_at,
+      updated_at: normalizedTask.updated_at,
+      activity_log: normalizedTask.activity_log || []
+    };
+
+    const { data, error } = await supabase.from('tasks').upsert([payload]).select();
+    if (error) {
+      console.warn('Supabase saveTask note (saved locally):', error.message);
+      return { success: true, error: null, data: normalizedTask };
+    }
+
+    return { success: true, error: null, data: normalizedTask };
+  } catch (err: any) {
+    console.error('Error saving task to Supabase:', err?.message || err);
+    return { success: true, error: null, data: task };
+  }
+};
+
+export const updateTaskStatusInSupabase = async (
+  taskId: string,
+  newStatus: TaskStatus,
+  remarks?: string,
+  user?: { id: string; name: string; role?: string },
+  proofDocs?: TaskAttachment[],
+  fallbackTask?: TaskItem
+): Promise<{ success: boolean; error: string | null; updatedTask?: TaskItem }> => {
+  try {
+    const currentCached = getCachedTasks();
+    let task = currentCached.find(t => t.id === taskId) || fallbackTask;
+    if (!task) {
+      console.warn(`Task ${taskId} not found in cache or fallback; attempting to search by prefix`);
+      task = currentCached.find(t => t.id?.startsWith(taskId) || taskId?.startsWith(t.id));
+    }
+
+    if (!task) {
+      return { success: false, error: 'Task not found' };
+    }
+
+    const nowIso = new Date().toISOString();
+    const isCompleting = newStatus === 'COMPLETED';
+
+    const newLog: TaskActivityLog = {
+      id: generateUuid(),
+      action: isCompleting ? 'COMPLETED' : `STATUS_${newStatus}`,
+      user_id: user?.id || 'unknown',
+      user_name: user?.name || 'User',
+      timestamp: nowIso,
+      remarks: remarks || `Status changed to ${newStatus}`
+    };
+
+    const updatedTask: TaskItem = {
+      ...task,
+      status: newStatus,
+      updated_at: nowIso,
+      completion_remarks: isCompleting ? (remarks || task.completion_remarks || 'Task marked as completed') : task.completion_remarks,
+      completed_at: isCompleting ? nowIso : (newStatus === 'PENDING' || newStatus === 'IN_PROGRESS' ? undefined : task.completed_at),
+      completed_by_id: isCompleting ? (user?.id || task.completed_by_id) : (newStatus === 'PENDING' ? undefined : task.completed_by_id),
+      completed_by_name: isCompleting ? (user?.name || task.completed_by_name) : (newStatus === 'PENDING' ? undefined : task.completed_by_name),
+      completion_proof_docs: proofDocs && proofDocs.length > 0 ? proofDocs : task.completion_proof_docs,
+      activity_log: [...(task.activity_log || []), newLog]
+    };
+
+    // Update in local cache immediately
+    const existingIdx = currentCached.findIndex(t => t.id === updatedTask.id);
+    let updatedList: TaskItem[];
+    if (existingIdx >= 0) {
+      updatedList = [...currentCached];
+      updatedList[existingIdx] = updatedTask;
+    } else {
+      updatedList = [updatedTask, ...currentCached];
+    }
+    setCachedTasks(updatedList);
+
+    await saveTaskToSupabase(updatedTask);
+    return { success: true, error: null, updatedTask };
+  } catch (err: any) {
+    console.error('Error updating task status:', err?.message || err);
+    return { success: false, error: err?.message || 'Failed to update status' };
+  }
+};
+
+export const deleteTaskFromSupabase = async (taskId: string): Promise<{ success: boolean; error: string | null }> => {
+  try {
+    const currentCached = getCachedTasks();
+    const filtered = currentCached.filter(t => t.id !== taskId);
+    setCachedTasks(filtered);
+
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    if (error) {
+      console.warn('Supabase deleteTask note:', error.message);
+    }
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error('Error deleting task:', err?.message || err);
+    return { success: true, error: null };
+  }
+};
+

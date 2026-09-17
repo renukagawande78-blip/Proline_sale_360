@@ -97,8 +97,8 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
   const handleConfirm = () => {
     const finalVehicleNumber = dispatchType === 'Self Pickup' || isCompanyVehicle ? vehicleNumber.trim() : tempoNumber.trim();
-    if (!finalVehicleNumber || !driverName.trim() || !driverMobile.trim()) {
-      setValidationError('Vehicle number, driver name, and driver mobile number are mandatory.');
+    if (!finalVehicleNumber) {
+      setValidationError('Vehicle number is mandatory.');
       return;
     }
     if (dispatchType === 'F.O.R' && !isCompanyVehicle && (!rentalAgencyName.trim() || freightAmount <= 0)) {
@@ -223,7 +223,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   <input type="text" value={vehicleNumber} onChange={e => setVehicleNumber(e.target.value.toUpperCase())} placeholder="e.g. GJ-05-AB-1234" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>PICKUP DRIVER NAME*</label>
+                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>PICKUP DRIVER NAME (Optional)</label>
                   <input 
                     type="text" 
                     value={driverName}
@@ -233,7 +233,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>DRIVER MOBILE NO.*</label>
+                  <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#34d399', marginBottom: 4 }}>DRIVER MOBILE NO. (Optional)</label>
                   <input 
                     type="text" 
                     value={driverMobile}
@@ -264,11 +264,11 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                       <input type="text" value={vehicleNumber} onChange={e => setVehicleNumber(e.target.value.toUpperCase())} placeholder="e.g. GJ-05-AB-1234" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', fontWeight: 600 }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER NAME*</label>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER NAME (Optional)</label>
                       <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="Driver name" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER MOBILE NO.*</label>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER MOBILE NO. (Optional)</label>
                       <input type="tel" value={driverMobile} onChange={e => setDriverMobile(e.target.value)} placeholder="Mobile number" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
                     </div>
                   </>
@@ -305,11 +305,11 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER NAME*</label>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER NAME (Optional)</label>
                       <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="Driver name" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER MOBILE NO.*</label>
+                      <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DRIVER MOBILE NO. (Optional)</label>
                       <input type="text" value={driverMobile} onChange={e => setDriverMobile(e.target.value)} placeholder="+91 Mobile No." style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white' }} />
                     </div>
                   </>

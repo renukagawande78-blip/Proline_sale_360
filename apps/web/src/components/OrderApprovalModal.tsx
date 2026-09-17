@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, FileText, Truck, Edit, AlertTriangle, CheckCircle2, Package, MapPin, User, Building2 } from 'lucide-react';
-import { Order } from '../types';
+import { Order, isOrderDispatchedOrBeyond } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -75,11 +75,11 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 0' }}>
               Date: <strong style={{ color: '#cbd5e1' }}>{fmtDate(order.order_date)}</strong>
-              &nbsp;|&nbsp; Brand: <strong style={{ color: '#fbbf24' }}>{order.company_name || 'PROLINE'}</strong>
+              &nbsp;|&nbsp; Brand: <strong style={{ color: '#fbbf24' }}>{order.company_name || 'PROKAP'}</strong>
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && (
+            {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && !isOrderDispatchedOrBeyond(order.status) && (
               <button
                 type="button"
                 onClick={() => {
@@ -237,7 +237,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                           <strong style={{ color: '#f8fafc' }}>{item.product_name || 'Product Item'}</strong>
                           {item.product_code && <div style={{ fontSize: '0.675rem', color: '#64748b' }}>{item.product_code}</div>}
                         </td>
-                        <td><span style={{ color: '#fbbf24', fontWeight: 700 }}>{order.company_name || 'PROLINE'}</span></td>
+                        <td><span style={{ color: '#fbbf24', fontWeight: 700 }}>{order.company_name || 'PROKAP'}</span></td>
                         <td style={{ textAlign: 'center', color: '#94a3b8' }}>{isFMCDItem ? '1 pc (Unit)' : `${item.pcs_per_box} pcs/box`}</td>
                         <td style={{ textAlign: 'center', fontWeight: 700, color: item.box_qty > 0 ? '#38bdf8' : '#64748b' }}>
                           {item.box_qty > 0 ? `${item.box_qty} Bx` : '—'}
@@ -319,11 +319,11 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
         {/* Footer */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #1e293b', paddingTop: '1rem', flexWrap: 'wrap', gap: '0.65rem' }}>
           <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <CheckCircle2 size={14} color="#34d399" /> Proline OMS 360 Order Telemetry View
+            <CheckCircle2 size={14} color="#34d399" /> PROKAP OMS 360 Order Telemetry View
           </div>
 
           <div style={{ display: 'flex', gap: '0.55rem' }}>
-            {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && (
+            {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && !isOrderDispatchedOrBeyond(order.status) && (
               <button
                 type="button"
                 className="btn btn-outline"

@@ -12,7 +12,8 @@ import {
   BarChart3,
   Layers,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  CheckSquare
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getOrderAccessPermission, getOrderSegment, resolveSegmentForUser, checkIsSuperAdmin } from '../../lib/supabase';
@@ -24,7 +25,9 @@ interface DashboardViewProps {
   onOpenCreateOrder: () => void;
   onSelectOrder: (order: Order) => void;
   onNavigateToReports?: (reportName?: string) => void;
+  onNavigateToTasks?: () => void;
   onReleaseHold?: (orderId: string, remarks?: string) => void;
+  taskCount?: number;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -32,7 +35,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenCreateOrder,
   onSelectOrder,
   onNavigateToReports,
-  onReleaseHold
+  onNavigateToTasks,
+  onReleaseHold,
+  taskCount
 }) => {
   const { currentUser } = useAuth();
   const [isHoldDirectoryOpen, setIsHoldDirectoryOpen] = useState(false);
@@ -148,6 +153,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <AlertTriangle size={16} /> Hold Reason Directory {heldOrders.length > 0 ? `(${heldOrders.length})` : ''}
           </button>
 
+          {onNavigateToTasks && (
+            <button 
+              className="btn btn-outline" 
+              onClick={onNavigateToTasks}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#38bdf8', color: '#38bdf8', fontWeight: 700 }}
+              title="Open Task Manager & Delegations"
+            >
+              <CheckSquare size={16} /> Tasks & Delegations {taskCount !== undefined && taskCount > 0 ? `(${taskCount})` : ''}
+            </button>
+          )}
+
           {onNavigateToReports && (
             <button 
               className="btn btn-outline" 
@@ -158,7 +174,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           )}
           <button className="btn btn-primary" onClick={onOpenCreateOrder}>
-            <Plus size={16} /> Create Agency Order
+            <Plus size={16} /> Create Order
           </button>
         </div>
       </div>

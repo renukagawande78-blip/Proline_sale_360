@@ -49,7 +49,12 @@ export const resolveNotificationMeta = (
     return { target_roles: ['SUPER_ADMIN', 'SALES_ADMIN'], category: 'APPROVAL' };
   }
 
-  // 8. Order Created / Submitted -> Sales Admin, Super Admin, Sales Person, Area Sales Manager
+  // 8. Task Assignment / Reminder / Completed -> Assigned User, Super Admin
+  if (upper.includes('TASK_') || upper.includes('NEW TASK') || upper.includes('TASK COMPLETED') || upper.includes('TASK REMINDER') || upper.includes('TASK DUE')) {
+    return { target_roles: ['SUPER_ADMIN', 'SALES_ADMIN', 'SALES_PERSON', 'AREA_SALES_MANAGER', 'DISPATCH_MANAGER', 'ACCOUNTS', 'BILLING'], category: 'TASK' };
+  }
+
+  // 9. Order Created / Submitted -> Sales Admin, Super Admin, Sales Person, Area Sales Manager
   if (upper.includes('ORDER_SUBMITTED') || upper.includes('ORDER_CREATED') || upper.includes('NEW ORDER')) {
     return { target_roles: ['SALES_ADMIN', 'SUPER_ADMIN', 'SALES_PERSON', 'AREA_SALES_MANAGER'], category: 'ORDER' };
   }
@@ -96,6 +101,8 @@ export const getCategoryBadge = (category?: NotificationCategory): { label: stri
       return { label: '🧾 Billing & GRN', color: '#818cf8', bg: 'rgba(129, 140, 248, 0.12)' };
     case 'POD':
       return { label: '📑 POD', color: '#34d399', bg: 'rgba(52, 211, 153, 0.12)' };
+    case 'TASK':
+      return { label: '✅ Task', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.14)' };
     default:
       return { label: '🔔 Notice', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.12)' };
   }
@@ -400,19 +407,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Native Push Notification channel and permissions on Android Capacitor
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      PushNotifications.createChannel({
-        id: 'proline_orders',
-        name: 'Proline OMS Orders',
-        description: 'Real-time sales, order approval, and dispatch notifications',
-        importance: 5,
-        visibility: 1,
-        sound: 'default',
-        vibration: true,
-        lights: true,
-        lightColor: '#38bdf8'
-      }).catch(err => {
-        console.warn('Channel creation error:', err);
-      });
+      const setupPushChannel = async () => {
+        try {
+          await PushNotifications.createChannel({
+            id: 'prokap_oms_orders',
+            name: 'PROKAP OMS Orders',
+            description: 'Instant alerts for Orders, Status Updates, Approvals, Dispatch & Payments',
+            importance: 5,
+            visibility: 1,
+            sound: 'order_notification_sound',
+            vibration: true,
+            lights: true,
+            lightColor: '#10b981'
+          });
+          console.log('FCM Notification channel created: prokap_oms_orders');
+        } catch (err) {
+          console.warn('Could not create FCM channel:', err);
+        }
+      };
+      setupPushChannel();
 
       PushNotifications.checkPermissions().then(result => {
         if (result.receive === 'granted') {
@@ -447,7 +460,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
 
       const pushListener = PushNotifications.addListener('pushNotificationReceived', notification => {
-        const title = notification.title || 'Proline OMS Alert';
+        const title = notification.title || 'PROKAP OMS Alert';
         const body = notification.body || '';
         const data = notification.data || {};
         const orderId = data.order_id || '';
@@ -492,7 +505,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const actionListener = PushNotifications.addListener('pushNotificationActionPerformed', notification => {
         console.log('Push notification action performed:', notification.actionId);
         const notifData = notification.notification;
-        const title = notifData.title || 'Proline OMS Alert';
+        const title = notifData.title || 'PROKAP OMS Alert';
         const body = notifData.body || '';
         const data = notifData.data || {};
         const orderId = data.order_id || '';
