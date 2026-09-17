@@ -15,7 +15,9 @@ import {
   ArrowDown,
   ArrowRight,
   Package,
-  Inbox
+  Inbox,
+  Plus,
+  X
 } from 'lucide-react';
 import { Order } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -28,6 +30,7 @@ interface ReturnsRegisterViewProps {
   onResolveException?: (orderId: string, action: 'CREATE_GRN' | 'REATTEMPT_DELIVERY', grnNumber?: string, grnValue?: number) => void;
   onForwardGrnToBilling?: (orderId: string) => void;
   onCompleteOrderAfterGrn?: (orderId: string) => void;
+  onOpenReturnRequestModal?: (order: Order) => void;
 }
 
 type ReturnStatusFilter = 'ALL' | 'PENDING_ADMIN_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DISPATCH_PROCESSED';
@@ -54,7 +57,8 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
   onSelectOrder,
   onResolveException,
   onForwardGrnToBilling,
-  onCompleteOrderAfterGrn
+  onCompleteOrderAfterGrn,
+  onOpenReturnRequestModal
 }) => {
   const { currentUser } = useAuth();
   const role = currentUser?.role_name || '';
@@ -64,6 +68,10 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<ReturnStatusFilter>('ALL');
   const [typeFilter, setTypeFilter] = useState<ReturnTypeFilter>('ALL');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Picker modal state to raise return on any order
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
 
   // Stage 7 Exception Desk State
   const [selectedExceptionOrder, setSelectedExceptionOrder] = useState<Order | null>(null);
@@ -111,24 +119,49 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
             Centralized register for all Damaged Goods Returns & Stock Replacement Requests — from Salesperson raise to Dispatch settlement
           </p>
         </div>
-        {kpiPending > 0 && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-            background: 'rgba(244,63,94,0.12)', border: '1px solid rgba(244,63,94,0.35)',
-            borderRadius: 10, padding: '0.5rem 1rem', color: '#fb7185', fontSize: '0.825rem', fontWeight: 800
-          }}>
-            <AlertTriangle size={16} /> {kpiPending} Awaiting Admin Approval
-          </div>
-        )}
-        {kpiApproved > 0 && isDispatch && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-            background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.35)',
-            borderRadius: 10, padding: '0.5rem 1rem', color: '#38bdf8', fontSize: '0.825rem', fontWeight: 800
-          }}>
-            <Truck size={16} /> {kpiApproved} Approved — Dispatch Action Required
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {onOpenReturnRequestModal && (
+            <button
+              type="button"
+              onClick={() => setIsPickerOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                background: 'linear-gradient(135deg, #f43f5e, #e11d48)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 8,
+                padding: '0.55rem 1rem',
+                fontWeight: 800,
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(244,63,94,0.3)'
+              }}
+              title="Create a new damaged goods return or replacement request"
+            >
+              <Plus size={16} /> Raise Return / Damage Request
+            </button>
+          )}
+          {kpiPending > 0 && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+              background: 'rgba(244,63,94,0.12)', border: '1px solid rgba(244,63,94,0.35)',
+              borderRadius: 10, padding: '0.5rem 1rem', color: '#fb7185', fontSize: '0.825rem', fontWeight: 800
+            }}>
+              <AlertTriangle size={16} /> {kpiPending} Awaiting Admin Approval
+            </div>
+          )}
+          {kpiApproved > 0 && isDispatch && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+              background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.35)',
+              borderRadius: 10, padding: '0.5rem 1rem', color: '#38bdf8', fontSize: '0.825rem', fontWeight: 800
+            }}>
+              <Truck size={16} /> {kpiApproved} Approved — Dispatch Action Required
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Flow Guide Banner */}
@@ -276,6 +309,28 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                         ? 'Returns are raised from Sales Orders → order Actions → Raise Return / Replacement'
                         : 'Try clearing your search or filter'}
                     </span>
+                    {onOpenReturnRequestModal && (
+                      <button
+                        type="button"
+                        onClick={() => setIsPickerOpen(true)}
+                        style={{
+                          marginTop: '0.5rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          background: 'rgba(244,63,94,0.15)',
+                          color: '#fb7185',
+                          border: '1px solid rgba(244,63,94,0.35)',
+                          borderRadius: 8,
+                          padding: '0.45rem 0.85rem',
+                          fontWeight: 800,
+                          fontSize: '0.825rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Plus size={15} /> Select Order to Raise Return
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -667,6 +722,107 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                   ? 'Forward GRN Request to Billing'
                   : exceptionAction === 'CREATE_GRN' ? 'Forward GRN Request to Sales Admin' : 'Re-route to Stage 3 Stock Check'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Picker Modal for Raising Return / Damage */}
+      {isPickerOpen && (
+        <div className="modal-overlay" onClick={() => setIsPickerOpen(false)}>
+          <div
+            className="modal-card"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: 680, width: '92vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.75rem', borderBottom: '1px solid #334155', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <PackageX color="#f43f5e" size={20} /> Select Order to Raise Return / Damage
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: 2 }}>
+                  Pick an active, dispatched, or delivered sales order to raise damage return or stock replacement
+                </p>
+              </div>
+              <button
+                onClick={() => setIsPickerOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1rem', position: 'relative' }}>
+              <Search size={16} color="#64748b" style={{ position: 'absolute', left: 12, top: 11 }} />
+              <input
+                type="text"
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+                placeholder="Search by Order #, Agency Name, or Invoice #..."
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem 0.55rem 2.25rem',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 8,
+                  color: '#f8fafc',
+                  fontSize: '0.85rem'
+                }}
+              />
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {orders
+                .filter(o => {
+                  const matchSearch =
+                    o.order_number.toLowerCase().includes(pickerSearch.toLowerCase()) ||
+                    (o.agency_name || '').toLowerCase().includes(pickerSearch.toLowerCase()) ||
+                    (o.invoice_number || '').toLowerCase().includes(pickerSearch.toLowerCase());
+                  return matchSearch && !o.return_request;
+                })
+                .slice(0, 30)
+                .map(o => (
+                  <div
+                    key={o.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.75rem',
+                      background: '#1e293b',
+                      borderRadius: 8,
+                      border: '1px solid #334155'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.9rem' }}>{o.order_number}</span>
+                        <span style={{ fontSize: '0.72rem', background: '#0f172a', padding: '0.15rem 0.4rem', borderRadius: 4, color: '#94a3b8' }}>{o.status}</span>
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#cbd5e1', marginTop: 2 }}>
+                        Agency: <strong>{o.agency_name}</strong> | Items: {o.items?.length || 0}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsPickerOpen(false);
+                        onOpenReturnRequestModal?.(o);
+                      }}
+                      style={{
+                        background: 'linear-gradient(135deg, #f43f5e, #e11d48)',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '0.4rem 0.75rem',
+                        fontWeight: 800,
+                        fontSize: '0.78rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Raise Return ➔
+                    </button>
+                  </div>
+                ))}
             </div>
           </div>
         </div>

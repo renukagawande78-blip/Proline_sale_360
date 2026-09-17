@@ -4,7 +4,7 @@ import {
   RefreshCw, Edit, PauseCircle, CheckCircle, Clock, AlertTriangle,
   Truck, Receipt, CheckCircle2, User, Building2, Phone, CreditCard,
   Package, MapPin, MessageSquare, Send, ChevronRight, Zap, Shield,
-  XCircle, Lock, Upload
+  XCircle, Lock, Upload, PackageX
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { fetchCompaniesFromSupabase, isCompanyAllowedForUser, getOrderAccessPermission, MOCK_COMPANIES } from '../../lib/supabase';
@@ -974,6 +974,49 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                             <CheckCircle2 size={12} /> Verify POD
                           </button>
                         )}
+                        {/* Return / Damage Request Button */}
+                        {onOpenReturnRequestModal && ['DELIVERED', 'COMPLETED', 'DISPATCHED', 'OUT_FOR_DELIVERY'].includes(order.status) && !order.return_request && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              onOpenReturnRequestModal(order);
+                            }}
+                            style={{
+                              background: 'rgba(244, 63, 94, 0.12)',
+                              border: '1px solid rgba(244, 63, 94, 0.35)',
+                              color: '#fb7185',
+                              padding: '0.3rem 0.55rem',
+                              borderRadius: 5,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              whiteSpace: 'nowrap'
+                            }}
+                            title="Raise Post-Delivery Damaged Goods Return or Replacement Request"
+                          >
+                            <PackageX size={12} /> Return/Damage
+                          </button>
+                        )}
+                        {order.return_request && (
+                          <span
+                            style={{
+                              background: 'rgba(251, 191, 36, 0.12)',
+                              border: '1px solid rgba(251, 191, 36, 0.35)',
+                              color: '#fbbf24',
+                              padding: '0.25rem 0.45rem',
+                              borderRadius: 5,
+                              fontSize: '0.7rem',
+                              fontWeight: 800,
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={`Return Request ${order.return_request.status}`}
+                          >
+                            🔁 Return: {order.return_request.status === 'APPROVED' ? 'Approved' : 'Pending'}
+                          </span>
+                        )}
                         {/* Super Admin Quick Response Button */}
                         {isSuperAdmin && order.need_accounts_approval && order.accounts_approval_status === 'PENDING' && (
                           <button
@@ -1395,6 +1438,37 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             {selectedOrder.pod_status === 'ISSUE_RAISED' && (
               <div style={{ width: '100%', padding: '0.55rem', background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: 8, color: '#fb7185', fontWeight: 800, fontSize: '0.78rem', textAlign: 'center' }}>
                 ⚠️ POD Issue Raised — {selectedOrder.pod_issue_type || 'Exception'}
+              </div>
+            )}
+
+            {/* Raise Return / Damage Request */}
+            {onOpenReturnRequestModal && ['DELIVERED', 'COMPLETED', 'DISPATCHED', 'OUT_FOR_DELIVERY'].includes(selectedOrder.status) && !selectedOrder.return_request && (
+              <button
+                type="button"
+                onClick={() => onOpenReturnRequestModal(selectedOrder)}
+                style={{
+                  width: '100%',
+                  padding: '0.6rem',
+                  background: 'rgba(244, 63, 94, 0.12)',
+                  border: '1px solid rgba(244, 63, 94, 0.35)',
+                  borderRadius: 8,
+                  color: '#fb7185',
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.45rem'
+                }}
+              >
+                <PackageX size={15} /> Raise Return / Damage Request
+              </button>
+            )}
+
+            {selectedOrder.return_request && (
+              <div style={{ width: '100%', padding: '0.55rem', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: 8, color: '#fbbf24', fontWeight: 800, fontSize: '0.78rem', textAlign: 'center' }}>
+                🔁 Return Active ({selectedOrder.return_request.return_type === 'DAMAGED_RETURN' ? 'Damaged Return' : 'Stock Replacement'}) — Status: {selectedOrder.return_request.status}
               </div>
             )}
 

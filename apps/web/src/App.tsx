@@ -1952,6 +1952,7 @@ const MainLayout: React.FC = () => {
             onResolveException={handleResolveException}
             onForwardGrnToBilling={handleForwardGrnToBilling}
             onCompleteOrderAfterGrn={handleCompleteOrderAfterGrn}
+            onOpenReturnRequestModal={(o) => setSelectedOrderForReturnRequest(o)}
           />
         )}
 
