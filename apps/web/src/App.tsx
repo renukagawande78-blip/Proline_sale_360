@@ -1585,7 +1585,7 @@ const MainLayout: React.FC = () => {
     const invoiceDate = new Date().toISOString().substring(0, 10);
     const updatedItems = (order.items || []).map(item => ({
       ...item,
-      issued_qty_pcs: Math.max(0, Math.min(item.total_qty_pcs || 0, billedQtyByItem[item.id] || 0))
+      issued_qty_pcs: billedQtyByItem[item.id] !== undefined ? Math.max(0, billedQtyByItem[item.id]) : (item.issued_qty_pcs ?? item.total_qty_pcs ?? 0)
     }));
     const updatedOrder: Order = {
       ...order,

@@ -736,7 +736,7 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                     let billedTotalPcs = 0;
 
                     (order.items || []).forEach(it => {
-                      const issued = it.issued_qty_pcs != null && it.issued_qty_pcs > 0 ? it.issued_qty_pcs : (it.total_qty_pcs || 0);
+                      const issued = it.issued_qty_pcs !== undefined ? Number(it.issued_qty_pcs) : (it.total_qty_pcs || 0);
                       const pack = it.pcs_per_box && it.pcs_per_box > 0 ? it.pcs_per_box : 1;
                       if (!isFMCD && pack > 1) {
                         billedBoxes += Math.floor(issued / pack);

@@ -50,8 +50,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
   const [billingAmountInput, setBillingAmountInput] = useState<number | ''>('');
   const [invoiceRemark, setInvoiceRemark] = useState('');
   const [billedQtyByItem, setBilledQtyByItem] = useState<Record<string, number>>({});
-  const [billedBoxesByItem, setBilledBoxesByItem] = useState<Record<string, number>>({});
-  const [billedLooseByItem, setBilledLooseByItem] = useState<Record<string, number>>({});
+  const [billedBoxesByItem, setBilledBoxesByItem] = useState<Record<string, number | ''>>({});
+  const [billedLooseByItem, setBilledLooseByItem] = useState<Record<string, number | ''>>({});
   const [selectedGrnOrder, setSelectedGrnOrder] = useState<Order | null>(null);
   const [selectedReattemptOrder, setSelectedReattemptOrder] = useState<Order | null>(null);
   const [grnNumberInput, setGrnNumberInput] = useState('');
@@ -122,15 +122,23 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
   const formatBilledQtyDisplay = (order: Order) => {
     if (!order.invoice_number && (order.billing_total_qty == null || order.billing_total_qty === 0)) return '—';
     
+    const isFMCD = Boolean(
+      (order as any).company_segment?.toUpperCase() === 'FMCD' ||
+      (order as any).segment?.toUpperCase() === 'FMCD' ||
+      ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((order.company_name || (order as any).company_handle || '').toUpperCase()) ||
+      ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (order.order_number || '').toUpperCase().startsWith(k)) ||
+      ((order.items || []).length > 0 && (order.items || []).every(it => !it.pcs_per_box || it.pcs_per_box <= 1))
+    );
+
     const items = order.items || [];
     let totalBilledBoxes = 0;
     let totalBilledLoose = 0;
     let totalBilledPcs = 0;
 
     items.forEach(it => {
-      const issued = it.issued_qty_pcs != null && it.issued_qty_pcs > 0 ? it.issued_qty_pcs : (it.total_qty_pcs || 0);
+      const issued = it.issued_qty_pcs !== undefined ? Number(it.issued_qty_pcs) : (it.total_qty_pcs || 0);
       const pcsPerBox = it.pcs_per_box && it.pcs_per_box > 0 ? it.pcs_per_box : 1;
-      if (pcsPerBox > 1) {
+      if (!isFMCD && pcsPerBox > 1) {
         const boxes = Math.floor(issued / pcsPerBox);
         const loose = issued % pcsPerBox;
         totalBilledBoxes += boxes;
@@ -142,7 +150,11 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
     });
 
     if (totalBilledPcs === 0 && order.billing_total_qty) {
-      return `${order.billing_total_qty.toLocaleString()} PCS`;
+      totalBilledPcs = order.billing_total_qty;
+    }
+
+    if (isFMCD) {
+      return `${totalBilledPcs.toLocaleString()} PCS`;
     }
 
     if (totalBilledBoxes > 0 && totalBilledLoose > 0) {
@@ -163,39 +175,54 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
     setInvoiceNumberInput(order.invoice_number || '');
     setCreditDaysInput(order.payment_type === 'ADVANCE' ? 0 : (order.credit_days != null && order.credit_days > 0 ? order.credit_days : ''));
 
-    const initialBoxes: Record<string, number> = {};
-    const initialLoose: Record<string, number> = {};
+    const isOrderFMCD = Boolean(
+      (order as any).company_segment?.toUpperCase() === 'FMCD' ||
+      (order as any).segment?.toUpperCase() === 'FMCD' ||
+      ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((order.company_name || (order as any).company_handle || '').toUpperCase()) ||
+      ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (order.order_number || '').toUpperCase().startsWith(k)) ||
+      ((order.items || []).length > 0 && (order.items || []).every(it => !it.pcs_per_box || it.pcs_per_box <= 1))
+    );
+
+    const initialBoxes: Record<string, number | ''> = {};
+    const initialLoose: Record<string, number | ''> = {};
     const initialQty: Record<string, number> = {};
 
     (order.items || []).forEach(item => {
       const pcsPerBox = item.pcs_per_box && item.pcs_per_box > 0 ? item.pcs_per_box : 1;
-      let bBox = 0;
-      let bLoose = 0;
+      const isItemFmcd = isOrderFMCD || pcsPerBox === 1;
+      let bBox: number | '' = 0;
+      let bLoose: number | '' = 0;
 
-      if (item.issued_qty_pcs != null && item.issued_qty_pcs > 0) {
-        if (pcsPerBox > 1) {
-          bBox = Math.floor(item.issued_qty_pcs / pcsPerBox);
-          bLoose = item.issued_qty_pcs % pcsPerBox;
+      if (item.issued_qty_pcs != null) {
+        if (!isItemFmcd && pcsPerBox > 1) {
+          bBox = Math.floor(Number(item.issued_qty_pcs) / pcsPerBox);
+          bLoose = Number(item.issued_qty_pcs) % pcsPerBox;
         } else {
           bBox = 0;
-          bLoose = item.issued_qty_pcs;
+          bLoose = Number(item.issued_qty_pcs);
         }
       } else {
-        bBox = item.box_qty || 0;
-        bLoose = item.loose_pcs || 0;
-        if (bBox === 0 && bLoose === 0 && (item.total_qty_pcs || 0) > 0) {
-          if (pcsPerBox > 1) {
+        // Default value: EXACT ORDER QUANTITY
+        if (isItemFmcd) {
+          bBox = 0;
+          bLoose = item.total_qty_pcs || item.loose_pcs || item.box_qty || 0;
+        } else {
+          if (item.box_qty != null && item.box_qty > 0) {
+            bBox = item.box_qty;
+            bLoose = item.loose_pcs || 0;
+          } else if (item.total_qty_pcs != null && item.total_qty_pcs > 0) {
             bBox = Math.floor(item.total_qty_pcs / pcsPerBox);
             bLoose = item.total_qty_pcs % pcsPerBox;
           } else {
-            bLoose = item.total_qty_pcs;
+            bBox = 0;
+            bLoose = item.loose_pcs || 0;
           }
         }
       }
 
       initialBoxes[item.id] = bBox;
       initialLoose[item.id] = bLoose;
-      initialQty[item.id] = (bBox * pcsPerBox) + bLoose;
+      initialQty[item.id] = ((Number(bBox) || 0) * pcsPerBox) + (Number(bLoose) || 0);
     });
 
     setBilledBoxesByItem(initialBoxes);
@@ -218,10 +245,11 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
     setGrnRemarkInput(order.grn_remark || '');
   };
 
-  const handleItemBoxChange = (itemId: string, val: number, pcsPerBox: number) => {
-    const nextBox = Math.max(0, val);
-    const currentLoose = billedLooseByItem[itemId] ?? 0;
-    const nextTotalPcs = (nextBox * pcsPerBox) + currentLoose;
+  const handleItemBoxChange = (itemId: string, rawVal: string, pcsPerBox: number) => {
+    const nextBox: number | '' = rawVal === '' ? '' : Math.max(0, parseInt(rawVal, 10) || 0);
+    const currentLoose = Number(billedLooseByItem[itemId]) || 0;
+    const boxNum = Number(nextBox) || 0;
+    const nextTotalPcs = (boxNum * pcsPerBox) + currentLoose;
 
     setBilledBoxesByItem(prev => ({ ...prev, [itemId]: nextBox }));
     setBilledQtyByItem(prev => {
@@ -232,10 +260,11 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
     });
   };
 
-  const handleItemLooseChange = (itemId: string, val: number, pcsPerBox: number) => {
-    const nextLoose = Math.max(0, val);
-    const currentBox = billedBoxesByItem[itemId] ?? 0;
-    const nextTotalPcs = (currentBox * pcsPerBox) + nextLoose;
+  const handleItemLooseChange = (itemId: string, rawVal: string, pcsPerBox: number) => {
+    const nextLoose: number | '' = rawVal === '' ? '' : Math.max(0, parseInt(rawVal, 10) || 0);
+    const currentBox = Number(billedBoxesByItem[itemId]) || 0;
+    const looseNum = Number(nextLoose) || 0;
+    const nextTotalPcs = (currentBox * pcsPerBox) + looseNum;
 
     setBilledLooseByItem(prev => ({ ...prev, [itemId]: nextLoose }));
     setBilledQtyByItem(prev => {
@@ -1218,15 +1247,24 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
               <div style={{ border: '1px solid #334155', borderRadius: 8, overflow: 'hidden', background: '#0b1120' }}>
                 {(selectedOrderForInvoice.items || []).map((item, idx) => {
                   const pcsPerBox = item.pcs_per_box && item.pcs_per_box > 0 ? item.pcs_per_box : 1;
-                  const isFmcd = pcsPerBox === 1;
+                  const isOrderFMCD = Boolean(
+                    (selectedOrderForInvoice as any).company_segment?.toUpperCase() === 'FMCD' ||
+                    (selectedOrderForInvoice as any).segment?.toUpperCase() === 'FMCD' ||
+                    ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((selectedOrderForInvoice.company_name || (selectedOrderForInvoice as any).company_handle || '').toUpperCase()) ||
+                    ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (selectedOrderForInvoice.order_number || '').toUpperCase().startsWith(k)) ||
+                    ((selectedOrderForInvoice.items || []).length > 0 && (selectedOrderForInvoice.items || []).every(it => !it.pcs_per_box || it.pcs_per_box <= 1))
+                  );
+                  const isFmcd = isOrderFMCD || pcsPerBox === 1;
                   const ordBox = item.box_qty || 0;
                   const ordLoose = item.loose_pcs || 0;
                   const ordFree = item.free_pcs || 0;
                   const ordTotalPcs = item.total_qty_pcs || ((ordBox * pcsPerBox) + ordLoose + ordFree) || 0;
 
-                  const curBox = billedBoxesByItem[item.id] ?? 0;
-                  const curLoose = billedLooseByItem[item.id] ?? 0;
-                  const curRowTotalPcs = (curBox * pcsPerBox) + curLoose;
+                  const curBox = billedBoxesByItem[item.id] !== undefined ? billedBoxesByItem[item.id] : (isFmcd ? 0 : ordBox);
+                  const curLoose = billedLooseByItem[item.id] !== undefined ? billedLooseByItem[item.id] : (isFmcd ? ordTotalPcs : ordLoose);
+                  const boxNum = Number(curBox) || 0;
+                  const looseNum = Number(curLoose) || 0;
+                  const curRowTotalPcs = (boxNum * pcsPerBox) + looseNum;
 
                   return (
                     <div key={item.id || idx} style={{ padding: '0.75rem 0.85rem', borderBottom: idx !== (selectedOrderForInvoice.items || []).length - 1 ? '1px solid #1e293b' : 'none' }}>
@@ -1235,7 +1273,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                           <strong style={{ color: '#f8fafc', fontSize: '0.825rem' }}>{item.product_name || item.product_code || 'Product SKU'}</strong>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: '0.72rem', color: '#fbbf24', fontWeight: 700 }}>
-                              Approved Qty: {ordBox > 0 ? `${ordBox} BOX` : ''}{ordBox > 0 && ordLoose > 0 ? ', ' : ''}{ordLoose > 0 ? `${ordLoose} PCS` : ''}{ordBox === 0 && ordLoose === 0 ? `${ordTotalPcs} PCS` : ''}{ordFree > 0 ? ` (+${ordFree} Free)` : ''} ({ordTotalPcs.toLocaleString()} PCS Total)
+                              Approved Qty: {isFmcd ? `${ordTotalPcs.toLocaleString()} PCS` : `${ordBox > 0 ? `${ordBox} BOX` : ''}${ordBox > 0 && ordLoose > 0 ? ', ' : ''}${ordLoose > 0 ? `${ordLoose} PCS` : ''}${ordBox === 0 && ordLoose === 0 ? `${ordTotalPcs} PCS` : ''}`}{ordFree > 0 ? ` (+${ordFree} Free)` : ''} ({ordTotalPcs.toLocaleString()} PCS Total)
                             </span>
                             {!isFmcd && (
                               <span style={{ fontSize: '0.675rem', color: '#94a3b8', background: '#1e293b', padding: '1px 6px', borderRadius: 4 }}>
@@ -1246,7 +1284,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '2px 8px', borderRadius: 6 }}>
-                            Billed: {!isFmcd && curBox > 0 ? `${curBox} BOX` : ''}{!isFmcd && curBox > 0 && curLoose > 0 ? ', ' : ''}{curLoose > 0 || (isFmcd && curBox === 0) ? `${curLoose} PCS` : ''}{!isFmcd && curBox === 0 && curLoose === 0 ? '0 PCS' : ''} ({curRowTotalPcs.toLocaleString()} PCS)
+                            Billed: {isFmcd ? `${curRowTotalPcs.toLocaleString()} PCS` : `${boxNum > 0 ? `${boxNum} BOX` : ''}${boxNum > 0 && looseNum > 0 ? ', ' : ''}${looseNum > 0 ? `${looseNum} PCS` : ''}${boxNum === 0 && looseNum === 0 ? '0 PCS' : ''} (${curRowTotalPcs.toLocaleString()} PCS)`}
                           </span>
                         </div>
                       </div>
@@ -1259,8 +1297,12 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                             <input
                               type="number"
                               min="0"
-                              value={curBox}
-                              onChange={e => handleItemBoxChange(item.id, Number(e.target.value) || 0, pcsPerBox)}
+                              value={curBox === '' ? '' : curBox}
+                              onFocus={e => {
+                                if (e.target.value === '0') e.target.select();
+                              }}
+                              onChange={e => handleItemBoxChange(item.id, e.target.value, pcsPerBox)}
+                              placeholder="0"
                               style={{ width: '100%', padding: '0.45rem 0.6rem', background: '#0f172a', color: '#38bdf8', border: '1px solid #475569', borderRadius: 6, fontWeight: 800, fontSize: '0.85rem' }}
                               aria-label={`Billing box quantity for ${item.product_name || 'product'}`}
                             />
@@ -1273,8 +1315,12 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                           <input
                             type="number"
                             min="0"
-                            value={curLoose}
-                            onChange={e => handleItemLooseChange(item.id, Number(e.target.value) || 0, pcsPerBox)}
+                            value={curLoose === '' ? '' : curLoose}
+                            onFocus={e => {
+                              if (e.target.value === '0') e.target.select();
+                            }}
+                            onChange={e => handleItemLooseChange(item.id, e.target.value, pcsPerBox)}
+                            placeholder="0"
                             style={{ width: '100%', padding: '0.45rem 0.6rem', background: '#0f172a', color: '#38bdf8', border: '1px solid #475569', borderRadius: 6, fontWeight: 800, fontSize: '0.85rem' }}
                             aria-label={`Billing loose quantity for ${item.product_name || 'product'}`}
                           />
@@ -1287,20 +1333,31 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
 
               {/* Bottom Totals KPI Strip for Billing Modal */}
               {(() => {
-                const totalBilledBoxes = Object.values(billedBoxesByItem).reduce((a, b) => a + b, 0);
-                const totalBilledLoose = Object.values(billedLooseByItem).reduce((a, b) => a + b, 0);
+                const isOrderFMCD = Boolean(
+                  (selectedOrderForInvoice as any).company_segment?.toUpperCase() === 'FMCD' ||
+                  (selectedOrderForInvoice as any).segment?.toUpperCase() === 'FMCD' ||
+                  ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((selectedOrderForInvoice.company_name || (selectedOrderForInvoice as any).company_handle || '').toUpperCase()) ||
+                  ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (selectedOrderForInvoice.order_number || '').toUpperCase().startsWith(k)) ||
+                  ((selectedOrderForInvoice.items || []).length > 0 && (selectedOrderForInvoice.items || []).every(it => !it.pcs_per_box || it.pcs_per_box <= 1))
+                );
+                const totalBilledBoxes = Object.values(billedBoxesByItem).reduce<number>((a, b) => a + (Number(b) || 0), 0);
+                const totalBilledLoose = Object.values(billedLooseByItem).reduce<number>((a, b) => a + (Number(b) || 0), 0);
                 const totalOrderedFreePcs = (selectedOrderForInvoice.items || []).reduce((s, it) => s + (it.free_pcs || 0), 0);
 
                 return (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' }}>
-                      <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>BILLED BOXES</span>
-                      <strong style={{ fontSize: '0.825rem', color: '#38bdf8' }}>{totalBilledBoxes} BOX</strong>
-                    </div>
-                    <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' }}>
-                      <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>BILLED LOOSE PCS</span>
-                      <strong style={{ fontSize: '0.825rem', color: '#34d399' }}>{totalBilledLoose} PCS</strong>
-                    </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: isOrderFMCD ? '1fr' : 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    {!isOrderFMCD && (
+                      <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>BILLED BOXES</span>
+                        <strong style={{ fontSize: '0.825rem', color: '#38bdf8' }}>{totalBilledBoxes} BOX</strong>
+                      </div>
+                    )}
+                    {!isOrderFMCD && (
+                      <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>BILLED LOOSE PCS</span>
+                        <strong style={{ fontSize: '0.825rem', color: '#34d399' }}>{totalBilledLoose} PCS</strong>
+                      </div>
+                    )}
                     {totalOrderedFreePcs > 0 && (
                       <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' }}>
                         <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', fontWeight: 700 }}>FREE PCS</span>
@@ -1328,14 +1385,28 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
             </div>
 
             {(() => {
-              const totalBilledBoxes = Object.values(billedBoxesByItem).reduce((a, b) => a + b, 0);
-              const totalBilledLoose = Object.values(billedLooseByItem).reduce((a, b) => a + b, 0);
+              const isOrderFMCD = Boolean(
+                (selectedOrderForInvoice as any).company_segment?.toUpperCase() === 'FMCD' ||
+                (selectedOrderForInvoice as any).segment?.toUpperCase() === 'FMCD' ||
+                ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((selectedOrderForInvoice.company_name || (selectedOrderForInvoice as any).company_handle || '').toUpperCase()) ||
+                ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (selectedOrderForInvoice.order_number || '').toUpperCase().startsWith(k)) ||
+                ((selectedOrderForInvoice.items || []).length > 0 && (selectedOrderForInvoice.items || []).every(it => !it.pcs_per_box || it.pcs_per_box <= 1))
+              );
+              const totalBilledBoxes = Object.values(billedBoxesByItem).reduce<number>((a, b) => a + (Number(b) || 0), 0);
+              const totalBilledLoose = Object.values(billedLooseByItem).reduce<number>((a, b) => a + (Number(b) || 0), 0);
               return (
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>TOTAL BILLING QUANTITY</label>
                     <div style={{ background: '#1e293b', border: '1px solid #475569', borderRadius: 6, padding: '0.55rem 0.75rem', color: '#34d399', fontWeight: 800, fontSize: '0.85rem' }}>
-                      {totalBilledBoxes > 0 ? `${totalBilledBoxes} BOX` : ''}{totalBilledBoxes > 0 && totalBilledLoose > 0 ? ', ' : ''}{totalBilledLoose > 0 ? `${totalBilledLoose} PCS` : ''}{totalBilledBoxes === 0 && totalBilledLoose === 0 ? '0 PCS' : ''} ({billingTotalQtyInput.toLocaleString()} PCS Total)
+                      {isOrderFMCD
+                        ? `${billingTotalQtyInput.toLocaleString()} PCS`
+                        : (totalBilledBoxes > 0 && totalBilledLoose > 0)
+                          ? `${totalBilledBoxes} BOX, ${totalBilledLoose} PCS (${billingTotalQtyInput.toLocaleString()} PCS Total)`
+                          : totalBilledBoxes > 0
+                            ? `${totalBilledBoxes} BOX (${billingTotalQtyInput.toLocaleString()} PCS Total)`
+                            : `${billingTotalQtyInput.toLocaleString()} PCS`
+                      }
                     </div>
                     <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 2, display: 'block' }}>Calculated from item billing box &amp; loose quantities.</span>
                   </div>

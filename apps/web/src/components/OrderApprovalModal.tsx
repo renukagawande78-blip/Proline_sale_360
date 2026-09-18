@@ -257,7 +257,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                         {order.invoice_number && (
                           <td style={{ textAlign: 'center', fontWeight: 900, color: '#10b981', background: 'rgba(16, 185, 129, 0.08)' }}>
                             {(() => {
-                              const issued = item.issued_qty_pcs != null && item.issued_qty_pcs > 0 ? item.issued_qty_pcs : (item.total_qty_pcs || 0);
+                              const issued = item.issued_qty_pcs !== undefined ? Number(item.issued_qty_pcs) : (item.total_qty_pcs || 0);
                               const pack = item.pcs_per_box && item.pcs_per_box > 0 ? item.pcs_per_box : 1;
                               if (isFMCDItem || pack <= 1) {
                                 return `${issued.toLocaleString()} PCS`;
