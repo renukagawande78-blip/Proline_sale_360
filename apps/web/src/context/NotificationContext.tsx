@@ -3,7 +3,49 @@ import { NotificationItem, RoleName, NotificationCategory } from '../types';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuth } from './AuthContext';
-import { supabase, updateUserFcmToken } from '../lib/supabase';
+import { supabase, updateUserFcmToken, getApiBaseUrl } from '../lib/supabase';
+
+// Universal device notification helper: handles ServiceWorker (Android Mobile Chrome, iOS PWA, Desktop) and window.Notification fallback
+export const showDeviceNotification = async (title: string, message: string, data?: any): Promise<boolean> => {
+  // 1. Try ServiceWorkerRegistration.showNotification (Required for Android Mobile Chrome & iOS PWA & Desktop)
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && reg.showNotification) {
+        await reg.showNotification(title, {
+          body: message,
+          icon: '/prokap-badge.png',
+          badge: '/favicon-32x32.png',
+          vibrate: [250, 100, 250, 100, 250],
+          tag: 'prokap-alert-' + (data?.order_id || Date.now()),
+          renotify: true,
+          data: {
+            url: '/',
+            ...data
+          }
+        } as any);
+        return true;
+      }
+    } catch (swErr) {
+      console.warn('[Notification] ServiceWorker showNotification notice:', swErr);
+    }
+  }
+
+  // 2. Desktop browser fallback if ServiceWorker not ready
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(title, {
+        body: message,
+        icon: '/prokap-badge.png',
+        badge: '/favicon-32x32.png'
+      });
+      return true;
+    } catch (winErr) {
+      console.warn('[Notification] Window Notification fallback notice:', winErr);
+    }
+  }
+  return false;
+};
 
 // Helper to resolve target roles and category based on user rules
 export const resolveNotificationMeta = (
@@ -387,14 +429,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             setActiveToast(current => (current?.id === item.id ? null : current));
           }, 6500);
 
-          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            try {
-              new Notification(item.title, {
-                body: item.message,
-                icon: '/prokap-badge.png'
-              });
-            } catch {}
-          }
+          showDeviceNotification(item.title, item.message, { order_id: item.order_id, event_type: item.event_type });
         }
       })
       .subscribe();
@@ -449,10 +484,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         try {
           localStorage.setItem('proline_oms_fcm_token', token.value);
         } catch {}
-        const userIdentifier = currentUser?.id || currentUser?.email;
-        if (userIdentifier) {
-          updateUserFcmToken(userIdentifier, token.value);
-        }
+        const userIdentifier = currentUser?.id || currentUser?.email || 'chirag';
+        updateUserFcmToken(userIdentifier, token.value, currentUser?.email, currentUser?.full_name);
       });
 
       const errListener = PushNotifications.addListener('registrationError', err => {
@@ -536,6 +569,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [currentUser?.role_name]);
 
+  useEffect(() => {
+    if (currentUser) {
+      const storedToken = typeof window !== 'undefined' ? localStorage.getItem('proline_oms_fcm_token') : null;
+      if (storedToken) {
+        updateUserFcmToken(currentUser.id, storedToken, currentUser.email, currentUser.full_name);
+      }
+    }
+  }, [currentUser?.id, currentUser?.email]);
+
   const requestWebNotificationPermission = async (): Promise<boolean> => {
     getAudioContext();
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -544,12 +586,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setWebNotificationPermission(perm);
         if (perm === 'granted') {
           playChimeSound();
-          try {
-            new Notification('🔔 Notifications Enabled', {
-              body: 'Real-time order, approval, and dispatch alerts are now active!',
-              icon: '/prokap-badge.png'
-            });
-          } catch {}
+          await showDeviceNotification('🔔 Notifications Enabled', 'Real-time order, approval, and dispatch alerts are now active on your device!');
           return true;
         }
       } catch (err) {
@@ -616,15 +653,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setActiveToast(current => (current?.id === newItem.id ? null : current));
       }, 6500);
 
-      // Browser Web Notification
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(item.title, {
-            body: item.message,
-            icon: '/prokap-badge.png'
-          });
-        } catch {}
-      }
+      // Universal Device Notification (ServiceWorker & Desktop Browser)
+      showDeviceNotification(item.title, item.message, { order_id: newItem.order_id, event_type: newItem.event_type });
     }
 
     // Broadcast across all connected users/devices instantly via Supabase
@@ -644,7 +674,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // Dispatch FCM push notification to mobile devices via /api/send-fcm
     try {
-      fetch('/api/send-fcm', {
+      const apiBase = getApiBaseUrl();
+      fetch(`${apiBase}/api/send-fcm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

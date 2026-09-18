@@ -1124,9 +1124,33 @@ export const deleteUserFromSupabase = async (userId: string): Promise<{ success:
   }
 };
 
-export const updateUserFcmToken = async (userIdOrEmail: string, token: string): Promise<boolean> => {
+export const getApiBaseUrl = (): string => {
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return '';
+  }
+  return 'https://proline-oms-360.vercel.app';
+};
+
+const SEED_USER_EMAIL_MAP: Record<string, string> = {
+  'u00_renuka': 'renuka@proline.com',
+  'u01': 'chirag@proline.com',
+  'u02': 'harshad@proline.com',
+  'u_jay': 'jay@proline.com',
+  'u_dixit': 'dixit@proline.com',
+  'u_sumit': 'sumit@proline.com',
+  'u_riddhi': 'riddhi@proline.com',
+  'u_mansi': 'mansi@proline.com',
+  'u_sneha': 'sneha@proline.com',
+  'u_dhruv': 'dhruv@proline.com',
+  'u_dharmik': 'dharmik@proline.com',
+  'u_jitendra': 'jitendra@proline.com'
+};
+
+export const updateUserFcmToken = async (userIdOrEmail: string, token: string, userEmail?: string, fullName?: string): Promise<boolean> => {
   if (!userIdOrEmail || !token) return false;
   console.log(`[FCM] Updating FCM token for user "${userIdOrEmail}"...`);
+
+  const effectiveEmail = userEmail || SEED_USER_EMAIL_MAP[userIdOrEmail] || (userIdOrEmail.includes('@') ? userIdOrEmail : '');
 
   // Persist locally for instant lookup
   try {
@@ -1136,12 +1160,13 @@ export const updateUserFcmToken = async (userIdOrEmail: string, token: string): 
     // ignore
   }
 
-  // 1. Call serverless backend API /api/register-fcm
+  // 1. Call serverless backend API /api/register-fcm with full production URL for Capacitor APK compatibility
   try {
-    fetch('/api/register-fcm', {
+    const apiBase = getApiBaseUrl();
+    fetch(`${apiBase}/api/register-fcm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: userIdOrEmail, token })
+      body: JSON.stringify({ userId: userIdOrEmail, token, userEmail: effectiveEmail, fullName })
     }).catch(err => console.warn('[FCM] /api/register-fcm fetch error (non-fatal):', err));
   } catch (e) {
     // non-fatal
@@ -1150,32 +1175,40 @@ export const updateUserFcmToken = async (userIdOrEmail: string, token: string): 
   // 2. Also directly update in Supabase client-side for immediate consistency
   try {
     const isUuid = isValidUuid(userIdOrEmail);
-    let query = supabase.from('users').select('id, brand_scope, email, full_name');
-    if (isUuid) {
-      query = query.eq('id', userIdOrEmail);
-    } else {
-      query = query.or(`email.ilike.%${userIdOrEmail}%,full_name.ilike.%${userIdOrEmail}%`);
-    }
-    const { data: users, error: findError } = await query;
+    const { data: users, error: findError } = await supabase.from('users').select('id, brand_scope, email, full_name').limit(100);
 
     if (!findError && users && users.length > 0) {
-      const user = users[0];
-      const existingScope = (user.brand_scope || '').replace(/<!--FCM_TOKEN:.*?-->/g, '').trim();
-      const updatedBrandScope = `${existingScope} <!--FCM_TOKEN:${token}-->`.trim();
+      let matchedUser = users.find(u => {
+        if (isUuid && u.id === userIdOrEmail) return true;
+        if (effectiveEmail && String(u.email || '').toLowerCase() === effectiveEmail.toLowerCase()) return true;
+        if (fullName && String(u.full_name || '').toLowerCase() === fullName.toLowerCase()) return true;
+        if (userIdOrEmail && (String(u.email || '').toLowerCase().includes(userIdOrEmail.toLowerCase()) || String(u.full_name || '').toLowerCase().includes(userIdOrEmail.toLowerCase()))) return true;
+        return false;
+      });
 
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          brand_scope: updatedBrandScope,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+      // Fallback: if user is admin, attach to Chirag
+      if (!matchedUser && (userIdOrEmail === 'u01' || userIdOrEmail === 'chirag')) {
+        matchedUser = users.find(u => String(u.email || '').toLowerCase() === 'chirag@proline.com');
+      }
 
-      if (updateError) {
-        console.warn('[FCM] Supabase update brand_scope warning:', updateError.message);
-      } else {
-        console.log(`[FCM] Successfully persisted FCM token for user ${user.id} (${user.full_name || user.email}) in Supabase!`);
-        return true;
+      if (matchedUser) {
+        const existingScope = (matchedUser.brand_scope || '').replace(/<!--FCM_TOKEN:.*?-->/g, '').trim();
+        const updatedBrandScope = `${existingScope} <!--FCM_TOKEN:${token}-->`.trim();
+
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            brand_scope: updatedBrandScope,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', matchedUser.id);
+
+        if (updateError) {
+          console.warn('[FCM] Supabase update brand_scope warning:', updateError.message);
+        } else {
+          console.log(`[FCM] Successfully persisted FCM token for user ${matchedUser.id} (${matchedUser.full_name || matchedUser.email}) in Supabase!`);
+          return true;
+        }
       }
     }
   } catch (err: any) {

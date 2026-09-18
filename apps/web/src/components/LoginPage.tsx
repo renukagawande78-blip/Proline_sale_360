@@ -60,7 +60,7 @@ export const LoginPage: React.FC = () => {
         handleEnableNotifications();
         const existingToken = typeof window !== 'undefined' ? localStorage.getItem('proline_oms_fcm_token') : null;
         if (existingToken) {
-          updateUserFcmToken(usernameInput, existingToken);
+          updateUserFcmToken(usernameInput, existingToken, usernameInput.includes('@') ? usernameInput : undefined);
         }
         addNotification({
           title: '🔔 Notifications Active',

@@ -188,25 +188,27 @@ module.exports = async function handler(req, res) {
     }
 
     const sendResults = [];
+    const invalidTokens = [];
 
     // 1. Send to all registered user tokens
     for (const token of recipientTokens) {
       try {
         const sendRes = await sendSingleMessage(accessToken, sa.project_id, { token }, alertTitle, alertBody, dataPayload);
+        if (sendRes?.error?.code === 404 || sendRes?.error?.message?.includes('NotRegistered')) {
+          invalidTokens.push(token);
+        }
         sendResults.push({ token: token.slice(0, 12) + '...', result: sendRes });
       } catch (err) {
         sendResults.push({ token: token.slice(0, 12) + '...', error: err.message });
       }
     }
 
-    // 2. Only send to topic if explicit topic provided or no specific tokens were found
+    // 2. Always broadcast to default topic 'prokap_oms_orders' so all devices listening receive it
     let topicResult = null;
-    if (topic || recipientTokens.size === 0) {
-      try {
-        topicResult = await sendSingleMessage(accessToken, sa.project_id, { topic: topic || 'prokap_oms_orders' }, alertTitle, alertBody, dataPayload);
-      } catch (tErr) {
-        topicResult = { error: tErr.message };
-      }
+    try {
+      topicResult = await sendSingleMessage(accessToken, sa.project_id, { topic: topic || 'prokap_oms_orders' }, alertTitle, alertBody, dataPayload);
+    } catch (tErr) {
+      topicResult = { error: tErr.message };
     }
 
     return res.status(200).json({
