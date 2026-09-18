@@ -1,6 +1,6 @@
 import React from 'react';
-import { X, FileText, Truck, Edit, AlertTriangle, CheckCircle2, Package, MapPin, User, Building2 } from 'lucide-react';
-import { Order, isOrderDispatchedOrBeyond } from '../types';
+import { X, FileText, Truck, Edit, AlertTriangle, CheckCircle2, Package, MapPin, User, Building2, Lock } from 'lucide-react';
+import { Order, isOrderDispatchedOrBeyond, isSalesAdminApprovedOrBeyond } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -81,28 +81,52 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && !isOrderDispatchedOrBeyond(order.status) && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenEditOrder(order);
-                }}
-                className="btn btn-outline"
-                style={{
-                  borderColor: '#38bdf8',
-                  color: '#38bdf8',
-                  padding: '0.35rem 0.75rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 800,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem'
-                }}
-                title="Edit Order"
-              >
-                <Edit size={13} /> Edit Order
-              </button>
+            {onOpenEditOrder && order.status !== 'CANCELLED' && (
+              isSalesAdminApprovedOrBeyond(order) ? (
+                <button
+                  type="button"
+                  disabled
+                  style={{
+                    background: 'rgba(148, 163, 184, 0.08)',
+                    border: '1px solid rgba(148, 163, 184, 0.25)',
+                    color: '#64748b',
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    cursor: 'not-allowed',
+                    borderRadius: 6,
+                    opacity: 0.75
+                  }}
+                  title="Order has been approved by Sales Admin. Editing is locked for all users."
+                >
+                  <Lock size={13} /> Edit Locked
+                </button>
+              ) : canEditOriginalOrder && !isOrderDispatchedOrBeyond(order.status) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenEditOrder(order);
+                  }}
+                  className="btn btn-outline"
+                  style={{
+                    borderColor: '#38bdf8',
+                    color: '#38bdf8',
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                  title="Edit Order"
+                >
+                  <Edit size={13} /> Edit Order
+                </button>
+              ) : null
             )}
             <button 
               onClick={onClose} 
@@ -474,26 +498,50 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: '0.55rem' }}>
-            {onOpenEditOrder && canEditOriginalOrder && order.status !== 'CANCELLED' && !isOrderDispatchedOrBeyond(order.status) && (
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => {
-                  onClose();
-                  onOpenEditOrder(order);
-                }}
-                style={{
-                  borderColor: '#38bdf8',
-                  color: '#38bdf8',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.35rem'
-                }}
-              >
-                <Edit size={14} /> Edit Order
-              </button>
+            {onOpenEditOrder && order.status !== 'CANCELLED' && (
+              isSalesAdminApprovedOrBeyond(order) ? (
+                <button
+                  type="button"
+                  disabled
+                  style={{
+                    background: 'rgba(148, 163, 184, 0.08)',
+                    border: '1px solid rgba(148, 163, 184, 0.25)',
+                    color: '#64748b',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.45rem 0.85rem',
+                    cursor: 'not-allowed',
+                    borderRadius: 6,
+                    opacity: 0.75
+                  }}
+                  title="Order has been approved by Sales Admin. Editing is locked for all users."
+                >
+                  <Lock size={14} /> Edit Locked
+                </button>
+              ) : canEditOriginalOrder && !isOrderDispatchedOrBeyond(order.status) ? (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => {
+                    onClose();
+                    onOpenEditOrder(order);
+                  }}
+                  style={{
+                    borderColor: '#38bdf8',
+                    color: '#38bdf8',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                >
+                  <Edit size={14} /> Edit Order
+                </button>
+              ) : null
             )}
             <button 
               className="btn btn-primary" 

@@ -489,6 +489,32 @@ export const isOrderDispatchedOrBeyond = (status?: string): boolean => {
   ].includes(s);
 };
 
+// Helper to determine if an order has been approved by Sales Admin or progressed beyond
+export const isSalesAdminApprovedOrBeyond = (order?: Partial<Order> | null): boolean => {
+  if (!order) return false;
+  if (order.sales_admin_approved) return true;
+  const status = (order.status || '').toUpperCase();
+  const approvedStatuses = [
+    'SALES_ADMIN_APPROVED',
+    'APPROVED',
+    'ACCOUNTS_APPROVED',
+    'INVENTORY_AUDITED',
+    'WAIT_FOR_STOCK',
+    'BILLED',
+    'INVOICED',
+    'DISPATCHED',
+    'OUT_FOR_DELIVERY',
+    'DELIVERED',
+    'COMPLETED',
+    'READY_FOR_PICKUP',
+    'READY_FOR_SELF_PICKUP',
+    'PARTIALLY_DISPATCHED',
+    'POD_ISSUE_RAISED',
+    'DELIVERY_REATTEMPTED'
+  ];
+  return approvedStatuses.includes(status) || Boolean(order.invoice_number);
+};
+
 export type ReturnType = 'REPLACEMENT' | 'DAMAGED_RETURN';
 
 export type ReturnRequestStatus = 

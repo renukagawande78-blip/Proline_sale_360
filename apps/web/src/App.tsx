@@ -61,7 +61,7 @@ import {
   getNextRecurrenceDueDate,
   supabase
 } from './lib/supabase';
-import { Order, GlobalFilterState, Agency, Product, User, Company, TaskItem, TaskStatus, TaskAttachment, isOrderDispatchedOrBeyond, PriorityLevel } from './types';
+import { Order, GlobalFilterState, Agency, Product, User, Company, TaskItem, TaskStatus, TaskAttachment, isOrderDispatchedOrBeyond, isSalesAdminApprovedOrBeyond, PriorityLevel } from './types';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -893,6 +893,10 @@ const MainLayout: React.FC = () => {
 
   // Handlers
   const handleOpenEditOrder = (order: Order) => {
+    if (isSalesAdminApprovedOrBeyond(order)) {
+      alert(`Order ${order.order_number} has been approved by Sales Admin. Modification is locked for all users.`);
+      return;
+    }
     if (isOrderDispatchedOrBeyond(order.status)) {
       alert(`Order ${order.order_number} has already been dispatched (${order.status}). Modification is locked.`);
       return;

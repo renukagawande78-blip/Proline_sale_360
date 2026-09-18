@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Receipt, DollarSign, CheckCircle2, X, Truck, FileSpreadsheet, PackageX, FileCheck2, AlertTriangle, ArrowRight, ShieldCheck, FileText, MoreVertical } from 'lucide-react';
+import { Receipt, DollarSign, CheckCircle2, X, Truck, FileSpreadsheet, PackageX, FileCheck2, AlertTriangle, ArrowRight, ShieldCheck, FileText, MoreVertical, Lock } from 'lucide-react';
 import { Order, Agency, isOrderDispatchedOrBeyond } from '../../types';
 import { useNotifications } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
@@ -277,6 +277,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
 
   const handleConfirmInvoice = () => {
     if (!selectedOrderForInvoice || !invoiceNumberInput.trim()) return;
+    if (isOrderDispatchedOrBeyond(selectedOrderForInvoice.status)) {
+      alert(`Order ${selectedOrderForInvoice.order_number} has already been dispatched (${selectedOrderForInvoice.status}). Bill editing is locked.`);
+      return;
+    }
 
     const fallbackQty = (selectedOrderForInvoice.items || []).reduce((sum, it) => sum + (it.issued_qty_pcs || it.total_qty_pcs || 0), 0) || selectedOrderForInvoice.total_qty_pcs || 0;
     const finalBillingQty = billingTotalQtyInput > 0 ? billingTotalQtyInput : fallbackQty;
@@ -644,9 +648,28 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                             <button 
                               className="btn btn-primary" 
                               onClick={() => handleOpenInvoiceModal(order)}
-                              style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                              disabled={isOrderDispatchedOrBeyond(order.status)}
+                              style={isOrderDispatchedOrBeyond(order.status) ? {
+                                padding: '0.35rem 0.65rem',
+                                fontSize: '0.75rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                opacity: 0.6,
+                                cursor: 'not-allowed',
+                                background: '#1e293b',
+                                borderColor: '#334155',
+                                color: '#94a3b8'
+                              } : {
+                                padding: '0.35rem 0.65rem',
+                                fontSize: '0.75rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem'
+                              }}
+                              title={isOrderDispatchedOrBeyond(order.status) ? "Order has already been dispatched. Billing cannot be edited." : (order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill')}
                             >
-                              <Receipt size={14} /> {order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}
+                              {isOrderDispatchedOrBeyond(order.status) ? <Lock size={13} color="#94a3b8" /> : <Receipt size={14} />} {order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}
                             </button>
                             
                             <div className="action-menu-container" style={{ position: 'relative', display: 'inline-block' }}>
@@ -752,33 +775,54 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
 
                                   <div style={{ height: 1, background: '#1e293b', margin: '0.25rem 0' }} />
 
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setOpenActionMenuId(null);
-                                      handleOpenInvoiceModal(order);
-                                    }}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem',
-                                      width: '100%',
-                                      padding: '0.5rem 0.75rem',
-                                      background: 'none',
-                                      border: 'none',
-                                      color: '#f8fafc',
-                                      fontSize: '0.78rem',
-                                      fontWeight: 700,
-                                      cursor: 'pointer',
-                                      textAlign: 'left'
-                                    }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
-                                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-                                  >
-                                    <Receipt size={15} color="#60a5fa" />
-                                    <span>{order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}</span>
-                                  </button>
+                                  {isOrderDispatchedOrBeyond(order.status) ? (
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        width: '100%',
+                                        padding: '0.5rem 0.75rem',
+                                        color: '#64748b',
+                                        fontSize: '0.78rem',
+                                        fontWeight: 600,
+                                        cursor: 'not-allowed',
+                                        background: 'rgba(100, 116, 139, 0.05)'
+                                      }}
+                                      title="Order is already dispatched. Bill editing is deactivated."
+                                    >
+                                      <Lock size={15} color="#64748b" />
+                                      <span>{order.reattempt_delivery ? 'Review Bill (Locked - Dispatched)' : 'Issue Bill (Locked - Dispatched)'}</span>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionMenuId(null);
+                                        handleOpenInvoiceModal(order);
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        width: '100%',
+                                        padding: '0.5rem 0.75rem',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#f8fafc',
+                                        fontSize: '0.78rem',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        textAlign: 'left'
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                    >
+                                      <Receipt size={15} color="#60a5fa" />
+                                      <span>{order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}</span>
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -925,7 +969,26 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                                     <span>Delivery Challan</span>
                                   </button>
 
-                                  {!isOrderDispatchedOrBeyond(order.status) && (
+                                  {isOrderDispatchedOrBeyond(order.status) ? (
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        width: '100%',
+                                        padding: '0.5rem 0.75rem',
+                                        color: '#64748b',
+                                        fontSize: '0.78rem',
+                                        fontWeight: 600,
+                                        cursor: 'not-allowed',
+                                        background: 'rgba(100, 116, 139, 0.05)'
+                                      }}
+                                      title="Order is already dispatched. Bill editing is deactivated."
+                                    >
+                                      <Lock size={15} color="#64748b" />
+                                      <span>Edit Invoice (Locked - Dispatched)</span>
+                                    </div>
+                                  ) : (
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -1227,6 +1290,13 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
               ℹ️ <strong>Order Reference:</strong> {selectedOrderForInvoice.order_number} &bull; Directly modifies billing details for this existing order. <em>No duplicate or new order will be created.</em>
             </div>
 
+            {isOrderDispatchedOrBeyond(selectedOrderForInvoice.status) && (
+              <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 8, padding: '0.65rem 0.85rem', marginBottom: '1rem', fontSize: '0.8rem', color: '#fca5a5', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Lock size={16} color="#ef4444" />
+                <span>Order has been dispatched ({selectedOrderForInvoice.status}). Bill modifications are locked.</span>
+              </div>
+            )}
+
             <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '0.85rem', marginBottom: '1rem', fontSize: '0.8rem' }}>
               <div style={{ color: '#94a3b8' }}>Party Name: <strong style={{ color: '#f8fafc' }}>{getPartyName(selectedOrderForInvoice)}</strong></div>
               <div style={{ color: '#94a3b8', marginTop: 3 }}>Payment Type: <strong style={{ color: '#38bdf8' }}>{selectedOrderForInvoice.payment_type || 'CREDIT'}</strong></div>
@@ -1494,7 +1564,15 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
 
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button className="btn btn-outline" onClick={() => setSelectedOrderForInvoice(null)}>Cancel</button>
-                <button className="btn btn-success" onClick={handleConfirmInvoice} style={{ fontWeight: 800 }}>
+                <button 
+                  className="btn btn-success" 
+                  onClick={handleConfirmInvoice} 
+                  disabled={isOrderDispatchedOrBeyond(selectedOrderForInvoice.status)}
+                  style={{ 
+                    fontWeight: 800,
+                    ...(isOrderDispatchedOrBeyond(selectedOrderForInvoice.status) ? { opacity: 0.5, cursor: 'not-allowed' } : {})
+                  }}
+                >
                   <CheckCircle2 size={16} /> {selectedOrderForInvoice.invoice_number ? 'Update & Save Invoice' : 'Confirm Bill & Lock Credit'}
                 </button>
               </div>

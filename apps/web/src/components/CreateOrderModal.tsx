@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare, UserCheck, Layers } from 'lucide-react';
+import { X, Plus, Trash2, Calculator, Search, ChevronDown, Check, MessageSquare, UserCheck, Layers, Lock } from 'lucide-react';
 import { 
   MOCK_COMPANIES, 
   MOCK_AGENCIES, 
@@ -17,7 +17,7 @@ import {
   isValidUuid
 } from '../lib/supabase';
 
-import { Order, OrderItem, Agency, Product, User, getBrandByCode, getBrandByName } from '../types';
+import { Order, OrderItem, Agency, Product, User, getBrandByCode, getBrandByName, isSalesAdminApprovedOrBeyond } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface SearchableAgencySelectProps {
@@ -1199,7 +1199,13 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
     return clean.substring(0, 3) || 'PRD';
   };
 
+  const isLockedDueToSalesAdminApproval = Boolean(orderToEdit && isSalesAdminApprovedOrBeyond(orderToEdit));
+
   const handleSubmit = (status: 'DRAFT' | 'SUBMITTED') => {
+    if (isLockedDueToSalesAdminApproval) {
+      alert(`Order ${orderToEdit?.order_number} has already been approved by Sales Admin. Modifications are locked for all users.`);
+      return;
+    }
     // Validation: ensure products are selected and minimum 1 box or 1 pcs quantity
     const emptyProductItem = items.find(i => !i.product_id);
     if (emptyProductItem) {
@@ -1362,6 +1368,13 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             <X size={20} />
           </button>
         </div>
+
+        {isLockedDueToSalesAdminApproval && (
+          <div style={{ padding: '0.75rem 1rem', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 8, color: '#fca5a5', fontSize: '0.85rem', fontWeight: 700, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Lock size={18} color="#ef4444" />
+            <span>This order has already been approved by Sales Admin. Modifications are permanently locked for all users.</span>
+          </div>
+        )}
 
         {/* Form Fields Grid: Segment (Multi-Select), Salesperson, Company/Brand (Multi-Select), Agency (Single Select), Delivery */}
         <div className="create-order-grid">
@@ -1706,13 +1719,20 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             >
               Cancel
             </button>
-            <button className="btn btn-outline" onClick={() => handleSubmit('DRAFT')}>
+            <button 
+              className="btn btn-outline" 
+              onClick={() => handleSubmit('DRAFT')}
+              disabled={isLockedDueToSalesAdminApproval}
+              style={isLockedDueToSalesAdminApproval ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+            >
               Save as Draft
             </button>
             <button 
               data-testid="create-order-submit"
               className="btn btn-primary" 
               onClick={() => handleSubmit('SUBMITTED')}
+              disabled={isLockedDueToSalesAdminApproval}
+              style={isLockedDueToSalesAdminApproval ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
             >
               Submit Order
             </button>
