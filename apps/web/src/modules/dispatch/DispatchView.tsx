@@ -31,6 +31,7 @@ interface DispatchViewProps {
   agencies?: Agency[];
   onOpenDispatchModal: (order: Order) => void;
   onUpdateOrderStatus?: (orderId: string, newStatus: OrderStatus, notificationMsg?: string) => void;
+  onOpenProcessReturnModal?: (order: Order) => void;
   onOpenPODModal?: (order: Order) => void;
   onViewInvoice?: (order: Order) => void;
 }
@@ -40,13 +41,14 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
   agencies,
   onOpenDispatchModal,
   onUpdateOrderStatus,
+  onOpenProcessReturnModal,
   onOpenPODModal,
   onViewInvoice
 }) => {
   const { currentUser } = useAuth();
   const { addNotification } = useNotifications();
 
-  const [dispatchFilter, setDispatchFilter] = useState<'cleared' | 'awaiting_billing'>('cleared');
+  const [dispatchFilter, setDispatchFilter] = useState<'ALL' | 'UPCOMING' | 'COMPLETED' | 'AWAITING_BILL'>('ALL');
   const [deliveryModeFilter, setDeliveryModeFilter] = useState<'ALL' | 'F.O.R' | 'Self Pickup'>('ALL');
   const [selectedZoneFilter, setSelectedZoneFilter] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped');
@@ -70,26 +72,45 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
   const isDispatchUser = userRole === 'DISPATCH_MANAGER' || userRole === 'DISPATCH';
   const canViewAll = isSuperAdmin || isDispatchUser || !currentUser?.company_handle || currentUser?.company_handle === 'All';
 
-  // Active Dispatch Orders (All bills with completed Tax Invoicing / Stage 4 clearance)
-  const dispatchQueueOrders = orders.filter(o => 
-    (o.status === 'BILLED' || 
-     o.status === 'INVOICED' || 
-     Boolean(o.invoice_number) ||
-     o.status === 'READY_FOR_PICKUP' || 
+  // 1. Orders completed dispatched / delivered
+  const completedDispatchOrders = useMemo(() => orders.filter(o => 
+    (o.status === 'DISPATCHED' || 
      o.status === 'PARTIALLY_DISPATCHED' || 
-     o.status === 'DISPATCHED' || 
      o.status === 'OUT_FOR_DELIVERY' ||
      o.status === 'DELIVERED' ||
      o.status === 'COMPLETED') &&
     (canViewAll || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle))
-  );
+  ), [orders, canViewAll, currentUser]);
 
-  // Orders awaiting Billing in Stage 4 (exclude orders that already have an invoice number)
-  const awaitingBillingOrders = orders.filter(o =>
-    !o.invoice_number &&
-    (o.status === 'APPROVED' || o.status === 'ACCOUNTS_APPROVED' || o.status === 'SALES_ADMIN_APPROVED') &&
+  // 2. Upcoming For Dispatch: Billed / Cleared orders awaiting vehicle loading or self pickup
+  const upcomingDispatchOrders = useMemo(() => orders.filter(o => 
+    (Boolean(o.invoice_number) || 
+     o.status === 'BILLED' || 
+     o.status === 'INVOICED' || 
+     o.status === 'READY_FOR_PICKUP' || 
+     o.status === 'READY_FOR_SELF_PICKUP' ||
+     o.status === 'DISPATCH_PENDING') &&
+    !['DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(o.status) &&
     (canViewAll || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle))
-  );
+  ), [orders, canViewAll, currentUser]);
+
+  // 3. Orders awaiting Billing in Stage 4 (exclude orders that already have an invoice number)
+  const awaitingBillingOrders = useMemo(() => orders.filter(o =>
+    !o.invoice_number &&
+    o.status !== 'BILLED' &&
+    o.status !== 'INVOICED' &&
+    !['DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(o.status) &&
+    (o.status === 'APPROVED' || o.status === 'ACCOUNTS_APPROVED' || o.status === 'SALES_ADMIN_APPROVED' || o.status === 'WAIT_FOR_STOCK' || o.status === 'INVENTORY_AUDITED') &&
+    (canViewAll || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle))
+  ), [orders, canViewAll, currentUser]);
+
+  // 4. All Dispatch Pipeline Orders (Upcoming + Completed + Awaiting Bill)
+  const allDispatchOrders = useMemo(() => orders.filter(o =>
+    (upcomingDispatchOrders.some(u => u.id === o.id) ||
+     completedDispatchOrders.some(c => c.id === o.id) ||
+     awaitingBillingOrders.some(a => a.id === o.id)) &&
+    (canViewAll || isCompanyAllowedForUser(o.company_name, currentUser?.company_handle))
+  ), [orders, upcomingDispatchOrders, completedDispatchOrders, awaitingBillingOrders, canViewAll, currentUser]);
 
   // Orders on Hold
   const heldOrders = orders.filter(o =>
@@ -122,7 +143,24 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
     };
   };
 
-  const currentPoolOrders = dispatchFilter === 'cleared' ? dispatchQueueOrders : awaitingBillingOrders;
+  const currentPoolOrders = useMemo(() => {
+    switch (dispatchFilter) {
+      case 'UPCOMING':
+        return upcomingDispatchOrders;
+      case 'COMPLETED':
+        return completedDispatchOrders;
+      case 'AWAITING_BILL':
+        return awaitingBillingOrders;
+      case 'ALL':
+      default:
+        return allDispatchOrders;
+    }
+  }, [dispatchFilter, upcomingDispatchOrders, completedDispatchOrders, awaitingBillingOrders, allDispatchOrders]);
+
+  // Return & damaged orders approved by Sale Admin awaiting vehicle & collection
+  const approvedReturnOrders = useMemo(() => orders.filter(o => 
+    o.return_request && (o.return_request.status === 'APPROVED_FOR_COLLECTION' || o.return_request.status === 'APPROVED')
+  ), [orders]);
 
   // Counts for delivery mode filters
   const forCountTotal = currentPoolOrders.filter(o => o.delivery_type !== 'Self Pickup').length;
@@ -237,51 +275,118 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
       <div className="data-table-container">
         <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Stage 5: Warehouse Packing & Logistics Allocation ({dispatchQueueOrders.length})</h2>
-            <span style={{ fontSize: '0.775rem', color: '#94a3b8' }}>Only orders with completed Tax Invoicing (Stage 4) are cleared for vehicle loading</span>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>
+              Stage 5: Warehouse Packing &amp; Logistics Allocation ({currentPoolOrders.length})
+            </h2>
+            <span style={{ fontSize: '0.775rem', color: '#94a3b8' }}>
+              {dispatchFilter === 'UPCOMING' && 'Orders with completed Tax Invoicing cleared for vehicle loading or customer pickup'}
+              {dispatchFilter === 'COMPLETED' && 'Orders that have been dispatched, out for delivery, or completed & delivered'}
+              {dispatchFilter === 'AWAITING_BILL' && 'Orders currently awaiting Stage 4 Tax Invoicing in Accounts & Billing'}
+              {dispatchFilter === 'ALL' && 'All orders across dispatch and delivery pipeline'}
+            </span>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               type="button"
               onClick={() => {
-                setDispatchFilter('cleared');
-                setDeliveryModeFilter('ALL');
-                setSelectedZoneFilter('ALL');
-              }}
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 800,
-                color: '#34d399',
-                background: dispatchFilter === 'cleared' ? 'rgba(52, 211, 153, 0.22)' : 'rgba(52, 211, 153, 0.08)',
-                border: dispatchFilter === 'cleared' ? '1.5px solid #34d399' : '1px solid rgba(52, 211, 153, 0.3)',
-                padding: '0.3rem 0.75rem',
-                borderRadius: 6,
-                cursor: 'pointer'
-              }}
-            >
-              🟢 Cleared for Dispatch ({dispatchQueueOrders.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDispatchFilter('awaiting_billing');
+                setDispatchFilter('ALL');
                 setDeliveryModeFilter('ALL');
                 setSelectedZoneFilter('ALL');
               }}
               style={{
                 padding: '0.4rem 0.85rem',
-                borderRadius: 8,
-                border: '1px solid #334155',
-                background: dispatchFilter === 'awaiting_billing' ? '#fbbf24' : '#1e293b',
-                color: dispatchFilter === 'awaiting_billing' ? '#0f172a' : '#f8fafc',
+                borderRadius: 20,
+                border: dispatchFilter === 'ALL' ? '1.5px solid #38bdf8' : '1px solid #334155',
+                background: dispatchFilter === 'ALL' ? 'rgba(56, 189, 248, 0.18)' : '#0f172a',
+                color: dispatchFilter === 'ALL' ? '#38bdf8' : '#94a3b8',
                 fontWeight: 800,
                 fontSize: '0.75rem',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              All Orders ({allDispatchOrders.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDispatchFilter('UPCOMING');
+                setDeliveryModeFilter('ALL');
+                setSelectedZoneFilter('ALL');
+              }}
+              style={{
+                padding: '0.4rem 0.85rem',
+                borderRadius: 20,
+                border: dispatchFilter === 'UPCOMING' ? '1.5px solid #34d399' : '1px solid #334155',
+                background: dispatchFilter === 'UPCOMING' ? 'rgba(52, 211, 153, 0.18)' : '#0f172a',
+                color: dispatchFilter === 'UPCOMING' ? '#34d399' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              🚚 Upcoming For Dispatch ({upcomingDispatchOrders.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDispatchFilter('COMPLETED');
+                setDeliveryModeFilter('ALL');
+                setSelectedZoneFilter('ALL');
+              }}
+              style={{
+                padding: '0.4rem 0.85rem',
+                borderRadius: 20,
+                border: dispatchFilter === 'COMPLETED' ? '1.5px solid #a78bfa' : '1px solid #334155',
+                background: dispatchFilter === 'COMPLETED' ? 'rgba(167, 139, 250, 0.18)' : '#0f172a',
+                color: dispatchFilter === 'COMPLETED' ? '#a78bfa' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              ✅ Completed Dispatched ({completedDispatchOrders.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDispatchFilter('AWAITING_BILL');
+                setDeliveryModeFilter('ALL');
+                setSelectedZoneFilter('ALL');
+              }}
+              style={{
+                padding: '0.4rem 0.85rem',
+                borderRadius: 20,
+                border: dispatchFilter === 'AWAITING_BILL' ? '1.5px solid #fbbf24' : '1px solid #334155',
+                background: dispatchFilter === 'AWAITING_BILL' ? 'rgba(251, 191, 36, 0.18)' : '#0f172a',
+                color: dispatchFilter === 'AWAITING_BILL' ? '#fbbf24' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                transition: 'all 0.15s ease'
               }}
             >
               🔒 Awaiting Bill in Stage 4 ({awaitingBillingOrders.length})
             </button>
+
             {heldOrders.length > 0 && (
               <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#fbbf24', background: 'rgba(251, 191, 36, 0.15)', border: '1px solid rgba(251, 191, 36, 0.3)', padding: '0.3rem 0.75rem', borderRadius: 6 }}>
                 ⏸️ On Hold ({heldOrders.length})
@@ -289,6 +394,76 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* Sale Admin Approved Return & Damaged Collections Banner for Dispatched Person */}
+        {approvedReturnOrders.length > 0 && (
+          <div style={{
+            margin: '0.85rem 1.25rem 0 1.25rem',
+            padding: '0.85rem 1.15rem',
+            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(16, 185, 129, 0.08))',
+            border: '1px solid rgba(56, 189, 248, 0.35)',
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{
+                width: 36,
+                height: 36,
+                borderRadius: 9,
+                background: 'rgba(56, 189, 248, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#38bdf8'
+              }}>
+                <Truck size={18} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span>{approvedReturnOrders.length} Return / Damaged Collection(s) Approved by Sale Admin</span>
+                  <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem', borderRadius: 4, background: '#10b981', color: 'white', fontWeight: 800 }}>
+                    Dispatched Collection Required
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.73rem', color: '#94a3b8', marginTop: 2 }}>
+                  Sale Admin approved collection. Dispatched person: allocate vehicle, driver, and collect damaged stock.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+              {approvedReturnOrders.slice(0, 4).map(ro => (
+                <button
+                  key={ro.id}
+                  type="button"
+                  onClick={() => onOpenProcessReturnModal ? onOpenProcessReturnModal(ro) : onOpenDispatchModal(ro)}
+                  style={{
+                    padding: '0.35rem 0.65rem',
+                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                    border: 'none',
+                    borderRadius: 7,
+                    color: 'white',
+                    fontSize: '0.725rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    boxShadow: '0 2px 6px rgba(2, 132, 199, 0.3)'
+                  }}
+                  title={`Enter vehicle info & collect damaged stock for ${ro.order_number}`}
+                >
+                  <Truck size={12} /> Collect: {ro.order_number}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Secondary Filter & Logistics Arrangement Controls Bar */}
         <div style={{
@@ -544,27 +719,44 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                 </td>
                 <td>
                   {(() => {
+                    const isFMCD = Boolean(
+                      (order as any).company_segment?.toUpperCase() === 'FMCD' ||
+                      (order as any).segment?.toUpperCase() === 'FMCD' ||
+                      ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((order.company_name || (order as any).company_handle || '').toUpperCase()) ||
+                      ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (order.order_number || '').toUpperCase().startsWith(k)) ||
+                      ((order.items || []).length > 0 && (order.items || []).every(it => !it.pcs_per_box || it.pcs_per_box <= 1))
+                    );
+
                     const issuedItems = (order.items || []).filter(item => (item.issued_qty_pcs || 0) > 0);
                     const totalItemsCount = issuedItems.length > 0 ? issuedItems.length : (order.items?.length || 0);
 
-                    const computedBoxes = (order.items || []).reduce((sum, it) => {
-                      if (it.box_qty && it.box_qty > 0) return sum + it.box_qty;
-                      const pcsPerBox = it.pcs_per_box || 1;
-                      const pcs = it.issued_qty_pcs || it.total_qty_pcs || 0;
-                      return sum + Math.ceil(pcs / pcsPerBox);
-                    }, 0);
+                    // Compute Billed Breakdown
+                    let billedBoxes = 0;
+                    let billedLoose = 0;
+                    let billedTotalPcs = 0;
 
-                    const totalBoxes = order.total_box_qty || computedBoxes || 0;
-                    const totalPcs = order.billing_total_qty || (order.items || []).reduce((sum, it) => sum + (it.issued_qty_pcs || it.total_qty_pcs || 0), 0) || order.total_qty_pcs || 0;
+                    (order.items || []).forEach(it => {
+                      const issued = it.issued_qty_pcs != null && it.issued_qty_pcs > 0 ? it.issued_qty_pcs : (it.total_qty_pcs || 0);
+                      const pack = it.pcs_per_box && it.pcs_per_box > 0 ? it.pcs_per_box : 1;
+                      if (!isFMCD && pack > 1) {
+                        billedBoxes += Math.floor(issued / pack);
+                        billedLoose += (issued % pack);
+                      } else {
+                        billedLoose += issued;
+                      }
+                      billedTotalPcs += issued;
+                    });
 
-                    if (!order.invoice_number && totalPcs === 0 && totalBoxes === 0) {
+                    if (billedTotalPcs === 0 && order.billing_total_qty) {
+                      billedTotalPcs = order.billing_total_qty;
+                    }
+
+                    if (!order.invoice_number && billedTotalPcs === 0 && billedBoxes === 0) {
                       return <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Not Billed</span>;
                     }
 
-                    const boxesWord = totalBoxes === 1 ? 'Box' : 'Boxes';
-
                     return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 155 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 165 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: '0.725rem', color: '#94a3b8', fontWeight: 700 }}>Total Items:</span>
                           <span style={{
@@ -582,7 +774,7 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.725rem', color: '#94a3b8', fontWeight: 700 }}>Total Qty:</span>
+                          <span style={{ fontSize: '0.725rem', color: '#94a3b8', fontWeight: 700 }}>Billed Qty:</span>
                           <span style={{
                             fontSize: '0.775rem',
                             fontWeight: 900,
@@ -593,7 +785,15 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                             borderRadius: 6,
                             whiteSpace: 'nowrap'
                           }}>
-                            {totalBoxes} {boxesWord} ({totalPcs.toLocaleString()} PCS)
+                            {isFMCD ? (
+                              `⚡ ${billedTotalPcs.toLocaleString()} PCS`
+                            ) : (
+                              billedBoxes > 0 && billedLoose > 0
+                                ? `📦 ${billedBoxes} BOX, ${billedLoose} PCS`
+                                : billedBoxes > 0
+                                  ? `📦 ${billedBoxes} BOX (${billedTotalPcs.toLocaleString()} PCS)`
+                                  : `${billedTotalPcs.toLocaleString()} PCS`
+                            )}
                           </span>
                         </div>
                       </div>
@@ -610,21 +810,10 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                   </span>
                 </td>
                 <td style={{ textAlign: 'center' }}>
-                  {dispatchFilter === 'awaiting_billing' && (
-                    <span style={{ fontSize: '0.725rem', color: '#38bdf8', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <Clock size={13} color="#38bdf8" /> Awaiting Stage 4 Bill
+                  {!order.invoice_number && order.status !== 'BILLED' && order.status !== 'INVOICED' && !['DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(order.status) && (
+                    <span style={{ fontSize: '0.725rem', color: '#fbbf24', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Clock size={13} color="#fbbf24" /> Awaiting Stage 4 Bill
                     </span>
-                  )}
-
-                  {/* Step 1: Initial Warehouse Dispatch Allocation (Pre-billing) */}
-                  {dispatchFilter !== 'awaiting_billing' && !order.invoice_number && (order.status === 'APPROVED' || order.status === 'PARTIALLY_DISPATCHED') && (
-                    <button 
-                      className="btn btn-primary"
-                      onClick={() => onOpenDispatchModal(order)}
-                      style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-                    >
-                      <Truck size={14} /> Stock Check & Send to Accounts
-                    </button>
                   )}
 
                   {/* Step 2: Bill is Ready (Accounts Issued Invoice / Stage 4 Cleared) -> Load Vehicle & Deliver */}
@@ -726,9 +915,13 @@ export const DispatchView: React.FC<DispatchViewProps> = ({
                 <p style={{ fontSize: '0.8rem', color: '#64748b', maxWidth: 480, margin: '0 auto 1rem' }}>
                   {hasPoolOrders
                     ? `There are ${currentPoolOrders.length} order(s) in this queue, but none match the active delivery mode ("${deliveryModeFilter}") or zone filter.`
-                    : dispatchFilter === 'cleared'
-                    ? 'No orders are currently cleared for dispatch. When bill details are issued in Accounts & Billing, orders immediately move here.'
-                    : 'No orders are currently awaiting Stage 4 billing.'}
+                    : dispatchFilter === 'UPCOMING'
+                    ? 'No orders are currently awaiting dispatch. When bill details are issued in Accounts & Billing, orders immediately move here.'
+                    : dispatchFilter === 'COMPLETED'
+                    ? 'No orders have been dispatched or completed yet.'
+                    : dispatchFilter === 'AWAITING_BILL'
+                    ? 'No orders are currently awaiting Stage 4 billing.'
+                    : 'No orders found in the dispatch pipeline.'}
                 </p>
                 {hasPoolOrders && (
                   <button

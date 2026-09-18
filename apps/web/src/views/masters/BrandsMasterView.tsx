@@ -46,7 +46,7 @@ const DEFAULT_SEGMENT_THEME = {
   pillColor: '#8b5cf6',
 };
 
-export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery }) => {
+export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ companies, searchQuery }) => {
   const { currentUser, updateUser } = useAuth();
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const [selectedSegment, setSelectedSegment] = useState<string>('ALL');
@@ -104,6 +104,12 @@ export const BrandsMasterView: React.FC<BrandsMasterViewProps> = ({ searchQuery 
 
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    if (companies && companies.length > 0) {
+      setLocalCompanies(deduplicateCompanies(companies));
+    }
+  }, [companies]);
 
   const showFeedback = (msg: string) => {
     setFeedbackMsg(msg);

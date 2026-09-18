@@ -17,11 +17,18 @@ import {
   Package,
   Inbox,
   Plus,
-  X
+  X,
+  FileSpreadsheet,
+  PhoneCall,
+  Receipt,
+  Store,
+  Building2
 } from 'lucide-react';
-import { Order } from '../../types';
+import { Order, ReturnRequestStatus } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { isCompanyAllowedForUser } from '../../lib/supabase';
+import { ProcessCollectionModal } from '../../components/ProcessCollectionModal';
+import { BrandDamagedReportModal } from '../../components/BrandDamagedReportModal';
 
 interface ReturnsRegisterViewProps {
   orders: Order[];
@@ -31,22 +38,31 @@ interface ReturnsRegisterViewProps {
   onForwardGrnToBilling?: (orderId: string) => void;
   onCompleteOrderAfterGrn?: (orderId: string) => void;
   onOpenReturnRequestModal?: (order: Order) => void;
+  onApproveReturnRequest?: (orderId: string) => void;
+  onRejectReturnRequest?: (orderId: string) => void;
+  onConfirmReturnCollection?: (orderId: string, collectionData: any) => void;
+  onMarkTalkedWithCompany?: (orderId: string, notes: string) => void;
+  onReleaseGRN?: (orderId: string, grnData: any) => void;
+  onCreateReplacementOrder?: (orderId: string, replacementData: any) => void;
 }
 
-type ReturnStatusFilter = 'ALL' | 'PENDING_ADMIN_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DISPATCH_PROCESSED';
+type ReturnStatusFilter = 'ALL' | ReturnRequestStatus;
 type ReturnTypeFilter = 'ALL' | 'DAMAGED_RETURN' | 'REPLACEMENT';
 
 const FLOW_STEPS = [
-  { key: 'raised', label: 'Return Raised', color: '#94a3b8', icon: Package },
-  { key: 'approved', label: 'Admin Approved', color: '#34d399', icon: CheckCircle2 },
-  { key: 'dispatch', label: 'Dispatch Action', color: '#38bdf8', icon: Truck },
-  { key: 'closed', label: 'Closed / Settled', color: '#fbbf24', icon: CheckCircle2 },
+  { key: 'raised', label: '1. Raised (Salesperson)', color: '#94a3b8', icon: Package },
+  { key: 'approved', label: '2. Approved for Collection (Admin)', color: '#38bdf8', icon: CheckCircle2 },
+  { key: 'collected', label: '3. Collected (Dispatch & Vehicle)', color: '#a78bfa', icon: Truck },
+  { key: 'waiting_company', label: '4. Wait for Company Approval (Admin)', color: '#fbbf24', icon: Clock },
+  { key: 'settled', label: '5. Settled (GRN / Replacement RN)', color: '#34d399', icon: CheckCircle2 },
 ];
 
 function getActiveStep(status: string): number {
   if (status === 'PENDING_ADMIN_APPROVAL') return 0;
-  if (status === 'APPROVED') return 1;
-  if (status === 'DISPATCH_PROCESSED') return 3;
+  if (status === 'APPROVED' || status === 'APPROVED_FOR_COLLECTION') return 1;
+  if (status === 'COLLECTED' || status === 'DISPATCH_PROCESSED') return 2;
+  if (status === 'WAITING_FOR_COMPANY_APPROVAL' || status === 'TALKED_WITH_COMPANY') return 3;
+  if (status === 'GRN_RELEASED' || status === 'REPLACEMENT_ORDER_CREATED') return 4;
   if (status === 'REJECTED') return -1;
   return 0;
 }
@@ -58,16 +74,28 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
   onResolveException,
   onForwardGrnToBilling,
   onCompleteOrderAfterGrn,
-  onOpenReturnRequestModal
+  onOpenReturnRequestModal,
+  onApproveReturnRequest,
+  onRejectReturnRequest,
+  onConfirmReturnCollection,
+  onMarkTalkedWithCompany,
+  onReleaseGRN,
+  onCreateReplacementOrder
 }) => {
   const { currentUser } = useAuth();
   const role = currentUser?.role_name || '';
+  const isSuperAdmin = role === 'SUPER_ADMIN';
+  const isSalesAdmin = role === 'SALES_ADMIN';
   const isDispatch = ['DISPATCH_MANAGER', 'SUPER_ADMIN', 'SALES_ADMIN'].includes(role);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ReturnStatusFilter>('ALL');
   const [typeFilter, setTypeFilter] = useState<ReturnTypeFilter>('ALL');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Modals state
+  const [selectedOrderForCollection, setSelectedOrderForCollection] = useState<Order | null>(null);
+  const [isBrandReportOpen, setIsBrandReportOpen] = useState(false);
 
   // Picker modal state to raise return on any order
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -94,19 +122,23 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
       o.order_number.toLowerCase().includes(q) ||
       (o.agency_name || '').toLowerCase().includes(q) ||
       (rr.requested_by_name || '').toLowerCase().includes(q) ||
-      (rr.reason || '').toLowerCase().includes(q);
-    const matchStatus = statusFilter === 'ALL' || rr.status === statusFilter;
+      (rr.reason || '').toLowerCase().includes(q) ||
+      (rr.vehicle_number || '').toLowerCase().includes(q) ||
+      (rr.driver_name || '').toLowerCase().includes(q);
+    const matchStatus = statusFilter === 'ALL' || 
+      rr.status === statusFilter || 
+      (statusFilter === 'WAITING_FOR_COMPANY_APPROVAL' && rr.status === 'TALKED_WITH_COMPANY');
     const matchType = typeFilter === 'ALL' || rr.return_type === typeFilter;
     return matchSearch && matchStatus && matchType;
   });
 
   // KPI counts
   const kpiPending   = returnOrders.filter(o => o.return_request?.status === 'PENDING_ADMIN_APPROVAL').length;
-  const kpiApproved  = returnOrders.filter(o => o.return_request?.status === 'APPROVED').length;
-  const kpiProcessed = returnOrders.filter(o => o.return_request?.status === 'DISPATCH_PROCESSED').length;
+  const kpiApproved  = returnOrders.filter(o => ['APPROVED', 'APPROVED_FOR_COLLECTION'].includes(o.return_request?.status || '')).length;
+  const kpiCollected = returnOrders.filter(o => ['COLLECTED', 'DISPATCH_PROCESSED'].includes(o.return_request?.status || '')).length;
+  const kpiWaitingCompany = returnOrders.filter(o => o.return_request?.status === 'WAITING_FOR_COMPANY_APPROVAL' || o.return_request?.status === 'TALKED_WITH_COMPANY').length;
+  const kpiSettled   = returnOrders.filter(o => ['GRN_RELEASED', 'REPLACEMENT_ORDER_CREATED'].includes(o.return_request?.status || '')).length;
   const kpiRejected  = returnOrders.filter(o => o.return_request?.status === 'REJECTED').length;
-  const kpiDamaged   = returnOrders.filter(o => o.return_request?.return_type === 'DAMAGED_RETURN').length;
-  const kpiReplace   = returnOrders.filter(o => o.return_request?.return_type === 'REPLACEMENT').length;
 
   return (
     <div className="page-body">
@@ -120,6 +152,29 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Brand Wise Damaged Report Button */}
+          <button
+            type="button"
+            onClick={() => setIsBrandReportOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '0.55rem 1rem',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(245,158,11,0.3)'
+            }}
+            title="Open Super Admin Brand-Wise Damaged Stock Collection & Settlement Report"
+          >
+            <FileSpreadsheet size={16} /> Brand-Wise Damaged Report
+          </button>
+
           {onOpenReturnRequestModal && (
             <button
               type="button"
@@ -172,9 +227,9 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
       }}>
         {[
           { label: '1. Salesperson Raises Request', color: '#94a3b8', icon: Package },
-          { label: '2. System Admin Reviews & Approves', color: '#34d399', icon: CheckCircle2 },
-          { label: '3. Dispatch Collects Damage / Dispatches Replacement', color: '#38bdf8', icon: Truck },
-          { label: '4. Closed & Settled', color: '#fbbf24', icon: CheckCircle2 }
+          { label: '2. Sale Admin Approves for Collect', color: '#34d399', icon: CheckCircle2 },
+          { label: '3. Dispatched Person Collects (Vehicle Info)', color: '#38bdf8', icon: Truck },
+          { label: '4. Wait for Company Approval (GRN / RN- Order)', color: '#fbbf24', icon: CheckCircle2 }
         ].map((step, idx, arr) => {
           const Icon = step.icon;
           return (
@@ -232,12 +287,12 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: '0.85rem', marginBottom: '1.5rem' }}>
         {[
-          { label: 'Pending Approval', value: kpiPending, color: '#fbbf24', bg: 'rgba(251,191,36,0.1)', border: 'rgba(251,191,36,0.25)', sub: 'Awaiting System Admin' },
-          { label: 'Admin Approved', value: kpiApproved, color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.25)', sub: 'Dispatch Action Needed' },
-          { label: 'Settled / Closed', value: kpiProcessed, color: '#38bdf8', bg: 'rgba(56,189,248,0.1)', border: 'rgba(56,189,248,0.25)', sub: 'Dispatch Processed' },
-          { label: 'Rejected', value: kpiRejected, color: '#fb7185', bg: 'rgba(244,63,94,0.1)', border: 'rgba(244,63,94,0.25)', sub: 'Admin Rejected' },
-          { label: 'Damaged Returns', value: kpiDamaged, color: '#f97316', bg: 'rgba(249,115,22,0.1)', border: 'rgba(249,115,22,0.25)', sub: 'Credit Note Required' },
-          { label: 'Replacements', value: kpiReplace, color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.25)', sub: 'Fresh Stock Dispatch' },
+          { label: 'Pending Approval', value: kpiPending, color: '#fbbf24', bg: 'rgba(251,191,36,0.1)', border: 'rgba(251,191,36,0.25)', sub: 'Awaiting Admin Review' },
+          { label: 'Approved for Collect', value: kpiApproved, color: '#38bdf8', bg: 'rgba(56,189,248,0.1)', border: 'rgba(56,189,248,0.25)', sub: 'Dispatch Vehicle Collection' },
+          { label: 'Damaged Collected', value: kpiCollected, color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.25)', sub: 'Physical Stock in Warehouse' },
+          { label: 'Wait for Co. Approval', value: kpiWaitingCompany, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)', sub: 'Awaiting Brand Clearance' },
+          { label: 'Settled / Closed', value: kpiSettled, color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.25)', sub: 'GRN / RN Order Released' },
+          { label: 'Rejected', value: kpiRejected, color: '#fb7185', bg: 'rgba(244,63,94,0.1)', border: 'rgba(244,63,94,0.25)', sub: 'Request Rejected' },
         ].map(k => (
           <div key={k.label} style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 14, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             <span style={{ fontSize: '0.675rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{k.label}</span>
@@ -257,7 +312,7 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
           <Search size={15} color="#64748b" />
           <input
             type="text"
-            placeholder="Search by order no., agency, salesperson, or reason..."
+            placeholder="Search by order no., brand, agency, salesperson, vehicle, driver..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             style={{ background: 'transparent', border: 'none', outline: 'none', color: '#f8fafc', fontSize: '0.825rem', width: '100%' }}
@@ -267,9 +322,12 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
           style={{ padding: '0.5rem 0.85rem', background: '#141f36', border: '1px solid #1e293b', borderRadius: 10, color: '#f8fafc', fontSize: '0.825rem', outline: 'none', fontWeight: 700 }}>
           <option value="ALL">All Statuses</option>
           <option value="PENDING_ADMIN_APPROVAL">⏳ Pending Approval</option>
-          <option value="APPROVED">✅ Admin Approved</option>
+          <option value="APPROVED_FOR_COLLECTION">🚚 Approved for Collection</option>
+          <option value="COLLECTED">📦 Stock Collected</option>
+          <option value="WAITING_FOR_COMPANY_APPROVAL">⏳ Wait for Company Approval</option>
+          <option value="GRN_RELEASED">📄 GRN Released</option>
+          <option value="REPLACEMENT_ORDER_CREATED">🔄 Replacement Order Created</option>
           <option value="REJECTED">❌ Rejected</option>
-          <option value="DISPATCH_PROCESSED">📦 Dispatch Processed</option>
         </select>
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as ReturnTypeFilter)}
           style={{ padding: '0.5rem 0.85rem', background: '#141f36', border: '1px solid #1e293b', borderRadius: 10, color: '#f8fafc', fontSize: '0.825rem', outline: 'none', fontWeight: 700 }}>
@@ -287,14 +345,14 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
         <table className="data-table">
           <thead>
             <tr>
-              <th>ORDER NO.</th>
-              <th>TYPE</th>
+              <th>ORDER NO. & BRAND</th>
+              <th>TYPE & SEGMENT</th>
               <th>AGENCY / PARTY</th>
               <th>RAISED BY</th>
               <th>DATE</th>
-              <th>REASON</th>
+              <th>REASON / NOTES</th>
               <th>WORKFLOW STATUS</th>
-              <th style={{ textAlign: 'center' }}>DISPATCH ACTION</th>
+              <th style={{ textAlign: 'center' }}>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
@@ -306,7 +364,7 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                     <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>No return or damage requests found</span>
                     <span style={{ fontSize: '0.8rem' }}>
                       {returnOrders.length === 0
-                        ? 'Returns are raised from Sales Orders → order Actions → Raise Return / Replacement'
+                        ? 'Returns are raised from "+ Raise Return / Damage Request" button above or Orders screen'
                         : 'Try clearing your search or filter'}
                     </span>
                     {onOpenReturnRequestModal && (
@@ -339,21 +397,40 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                 const rr = order.return_request!;
                 const isDamaged = rr.return_type === 'DAMAGED_RETURN';
                 const isExpanded = expandedId === order.id;
-                const activeStep = getActiveStep(rr.status);
-                const totalRequestedPcs = rr.items.reduce((s, i) => s + i.requested_qty_pcs, 0);
-                const isAdminApproved = rr.status === 'APPROVED';
-                const isProcessed = rr.status === 'DISPATCH_PROCESSED';
+                const totalRequestedPcs = rr.items.reduce((s, i) => s + (i.requested_qty_pcs || 0), 0);
+                const totalRequestedBoxes = rr.items.reduce((s, i) => s + (i.box_qty || 0), 0);
+                const totalLoosePcs = rr.items.reduce((s, i) => s + (i.loose_pcs || 0), 0);
+                const isFMCD = rr.segment === 'FMCD';
+
                 const isPending = rr.status === 'PENDING_ADMIN_APPROVAL';
+                const isApprovedForCollection = rr.status === 'APPROVED' || rr.status === 'APPROVED_FOR_COLLECTION';
+                const isAdminApproved = isApprovedForCollection;
+                const isCollected = rr.status === 'COLLECTED';
+                const isWaitingCompany = rr.status === 'WAITING_FOR_COMPANY_APPROVAL' || rr.status === 'TALKED_WITH_COMPANY';
+                const isGRNReleased = rr.status === 'GRN_RELEASED';
+                const isReplacementCreated = rr.status === 'REPLACEMENT_ORDER_CREATED';
+                const isProcessed = rr.status === 'DISPATCH_PROCESSED' || isGRNReleased || isReplacementCreated;
                 const isRejected = rr.status === 'REJECTED';
 
                 // Status badge config
-                const statusBadge = isRejected
-                  ? { label: 'Rejected by Admin', color: '#fb7185', bg: 'rgba(244,63,94,0.15)', border: 'rgba(244,63,94,0.3)' }
-                  : isPending
-                  ? { label: 'Pending Admin Approval', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' }
-                  : isAdminApproved
-                  ? { label: 'Admin Approved — Dispatch Pending', color: '#38bdf8', bg: 'rgba(56,189,248,0.15)', border: 'rgba(56,189,248,0.3)' }
-                  : { label: 'Dispatch Processed & Closed', color: '#34d399', bg: 'rgba(52,211,153,0.15)', border: 'rgba(52,211,153,0.3)' };
+                let statusBadge = { label: 'Pending Approval', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' };
+                if (isRejected) {
+                  statusBadge = { label: 'Rejected by Admin', color: '#fb7185', bg: 'rgba(244,63,94,0.15)', border: 'rgba(244,63,94,0.3)' };
+                } else if (isPending) {
+                  statusBadge = { label: '⏳ Pending Sale Admin Approval', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' };
+                } else if (isApprovedForCollection) {
+                  statusBadge = { label: '🚚 Approved by Sale Admin (Dispatched)', color: '#38bdf8', bg: 'rgba(56,189,248,0.15)', border: 'rgba(56,189,248,0.3)' };
+                } else if (isCollected) {
+                  statusBadge = { label: '📦 Damaged Stock Collected', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', border: 'rgba(167,139,250,0.3)' };
+                } else if (isWaitingCompany) {
+                  statusBadge = { label: '⏳ Waiting for Company Approval', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.3)' };
+                } else if (isGRNReleased) {
+                  statusBadge = { label: `📄 GRN Released (${rr.grn_number || 'GRN'})`, color: '#34d399', bg: 'rgba(52,211,153,0.15)', border: 'rgba(52,211,153,0.3)' };
+                } else if (isReplacementCreated) {
+                  statusBadge = { label: `🔄 RN Order: ${rr.replacement_order_number || 'Created'}`, color: '#34d399', bg: 'rgba(52,211,153,0.15)', border: 'rgba(52,211,153,0.3)' };
+                } else if (isProcessed) {
+                  statusBadge = { label: '✅ Dispatch Processed & Closed', color: '#34d399', bg: 'rgba(52,211,153,0.15)', border: 'rgba(52,211,153,0.3)' };
+                }
 
                 return (
                   <React.Fragment key={order.id}>
@@ -364,26 +441,36 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                           style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
                         >
                           <strong style={{ color: '#38bdf8', fontFamily: 'monospace', fontSize: '0.875rem' }}>{order.order_number}</strong>
-                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{order.company_name}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#f8fafc', fontWeight: 700, marginTop: 2 }}>
+                            {rr.brand_name || order.company_name}
+                          </div>
                         </button>
                       </td>
 
                       <td>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-                          padding: '0.25rem 0.65rem', borderRadius: 8, fontSize: '0.725rem', fontWeight: 800,
-                          background: isDamaged ? 'rgba(249,115,22,0.15)' : 'rgba(167,139,250,0.15)',
-                          color: isDamaged ? '#f97316' : '#a78bfa',
-                          border: `1px solid ${isDamaged ? 'rgba(249,115,22,0.3)' : 'rgba(167,139,250,0.3)'}`
-                        }}>
-                          {isDamaged ? <PackageX size={12} /> : <RefreshCw size={12} />}
-                          {isDamaged ? 'Damaged Return' : 'Replacement'}
-                        </span>
-                        <div style={{ fontSize: '0.675rem', color: '#64748b', marginTop: 3 }}>{totalRequestedPcs} PCS</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                            padding: '0.2rem 0.55rem', borderRadius: 6, fontSize: '0.725rem', fontWeight: 800,
+                            background: isDamaged ? 'rgba(249,115,22,0.15)' : 'rgba(167,139,250,0.15)',
+                            color: isDamaged ? '#f97316' : '#a78bfa',
+                            border: `1px solid ${isDamaged ? 'rgba(249,115,22,0.3)' : 'rgba(167,139,250,0.3)'}`,
+                            width: 'fit-content'
+                          }}>
+                            {isDamaged ? <PackageX size={12} /> : <RefreshCw size={12} />}
+                            {isDamaged ? 'Damaged Return' : 'Replacement'}
+                          </span>
+                          <span style={{ fontSize: '0.675rem', color: isFMCD ? '#38bdf8' : '#34d399', fontWeight: 700 }}>
+                            {isFMCD ? 'FMCD (PCS Only)' : 'FMCG (Box + Loose)'}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: '#cbd5e1', fontWeight: 700 }}>
+                            {isFMCD ? `${totalRequestedPcs} PCS` : `${totalRequestedBoxes} Box + ${totalLoosePcs} PCS`}
+                          </span>
+                        </div>
                       </td>
 
                       <td>
-                        <strong style={{ color: '#f8fafc', fontSize: '0.85rem' }}>{order.agency_name}</strong>
+                        <strong style={{ color: '#f8fafc', fontSize: '0.85rem' }}>{rr.agency_name || order.agency_name}</strong>
                       </td>
 
                       <td>
@@ -404,6 +491,16 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                         <span style={{ fontSize: '0.8rem', color: '#cbd5e1', maxWidth: 180, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={rr.reason}>
                           {rr.reason}
                         </span>
+                        {rr.vehicle_number && (
+                          <div style={{ fontSize: '0.68rem', color: '#a78bfa', fontWeight: 700, marginTop: 2, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Truck size={10} /> {rr.vehicle_number} | {rr.driver_name}
+                          </div>
+                        )}
+                        {rr.company_discussion_notes && (
+                          <div style={{ fontSize: '0.68rem', color: '#f59e0b', fontStyle: 'italic', marginTop: 2 }}>
+                            💬 {rr.company_discussion_notes}
+                          </div>
+                        )}
                       </td>
 
                       <td>
@@ -416,18 +513,23 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                         </span>
                         {rr.approved_by_name && (
                           <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: 3 }}>
-                            By: {rr.approved_by_name}
+                            Appr: {rr.approved_by_name}
+                          </div>
+                        )}
+                        {rr.collected_by_name && (
+                          <div style={{ fontSize: '0.65rem', color: '#a78bfa', marginTop: 1 }}>
+                            Collected: {new Date(rr.collected_at || '').toLocaleDateString('en-IN')}
                           </div>
                         )}
                       </td>
 
                       <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
                           {/* Details toggle */}
                           <button
                             onClick={() => setExpandedId(isExpanded ? null : order.id)}
                             style={{
-                              padding: '0.35rem 0.6rem',
+                              padding: '0.35rem 0.55rem',
                               background: isExpanded ? 'rgba(56,189,248,0.2)' : '#1e293b',
                               border: `1px solid ${isExpanded ? '#38bdf8' : '#334155'}`,
                               borderRadius: 7, color: isExpanded ? '#38bdf8' : '#94a3b8',
@@ -438,26 +540,91 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
                             {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Items
                           </button>
 
-                          {/* DISPATCH ACTION BUTTON — shown when Admin Approved */}
-                          {isAdminApproved && isDispatch && onOpenProcessReturnModal && (
+                          {/* ACTION 1: Super Admin / Sales Admin Approval */}
+                          {isPending && (isSuperAdmin || isSalesAdmin) && (
+                            <>
+                              <button
+                                onClick={() => onApproveReturnRequest?.(order.id)}
+                                style={{
+                                  padding: '0.35rem 0.65rem',
+                                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                                  border: 'none',
+                                  borderRadius: 7,
+                                  color: 'white',
+                                  fontSize: '0.725rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem'
+                                }}
+                                title="Sale Admin: Approve this request for physical collection by Dispatched person"
+                              >
+                                <CheckCircle2 size={12} /> Approve Collect (Sale Admin)
+                              </button>
+                              <button
+                                onClick={() => onRejectReturnRequest?.(order.id)}
+                                style={{
+                                  padding: '0.35rem 0.55rem',
+                                  background: 'rgba(244,63,94,0.15)',
+                                  border: '1px solid rgba(244,63,94,0.35)',
+                                  borderRadius: 7,
+                                  color: '#fb7185',
+                                  fontSize: '0.725rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer'
+                                }}
+                                title="Reject return request"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+
+                          {/* ACTION 2: Dispatch Team Process Collection (Vehicle info) */}
+                          {isApprovedForCollection && isDispatch && (
                             <button
-                              onClick={() => onOpenProcessReturnModal(order)}
+                              onClick={() => setSelectedOrderForCollection(order)}
                               style={{
                                 padding: '0.35rem 0.75rem',
-                                background: isDamaged
-                                  ? 'linear-gradient(135deg, rgba(249,115,22,0.25), rgba(249,115,22,0.1))'
-                                  : 'linear-gradient(135deg, rgba(56,189,248,0.25), rgba(56,189,248,0.1))',
-                                border: isDamaged ? '1px solid rgba(249,115,22,0.5)' : '1px solid rgba(56,189,248,0.5)',
+                                background: 'linear-gradient(135deg, #38bdf8, #0284c7)',
+                                border: 'none',
                                 borderRadius: 7,
-                                color: isDamaged ? '#f97316' : '#38bdf8',
-                                fontSize: '0.75rem', cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 800
+                                color: 'white',
+                                fontSize: '0.725rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                fontWeight: 800,
+                                boxShadow: '0 2px 8px rgba(56,189,248,0.3)'
                               }}
-                              title={isDamaged ? 'Collect damaged stock from party & update inventory' : 'Dispatch fresh replacement stock to party'}
+                              title="Enter vehicle & driver details and mark damaged goods collected"
                             >
-                              {isDamaged
-                                ? <><ArrowDown size={13} /> Collect Damaged</>
-                                : <><Truck size={13} /> Dispatch Replacement</>}
+                              <Truck size={13} /> Collect (Vehicle)
+                            </button>
+                          )}
+
+                          {/* ACTION 3: Super Admin settlement actions once collected or waiting for company approval */}
+                          {(isCollected || isWaitingCompany) && (isSuperAdmin || isSalesAdmin) && (
+                            <button
+                              onClick={() => setIsBrandReportOpen(true)}
+                              style={{
+                                padding: '0.35rem 0.65rem',
+                                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                border: 'none',
+                                borderRadius: 7,
+                                color: 'white',
+                                fontSize: '0.725rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                fontWeight: 800
+                              }}
+                              title="Open Brand-Wise Damaged Report & Settlement Desk"
+                            >
+                              <Receipt size={12} /> Settle
                             </button>
                           )}
 
@@ -827,6 +994,35 @@ export const ReturnsRegisterView: React.FC<ReturnsRegisterViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Process Collection Modal (Dispatch) */}
+      {selectedOrderForCollection && (
+        <ProcessCollectionModal
+          order={selectedOrderForCollection}
+          isOpen={!!selectedOrderForCollection}
+          onClose={() => setSelectedOrderForCollection(null)}
+          onConfirmCollection={(orderId, collectionData) => {
+            onConfirmReturnCollection?.(orderId, collectionData);
+            setSelectedOrderForCollection(null);
+          }}
+        />
+      )}
+
+      {/* Brand-Wise Damaged Report & Settlement Desk Modal (Super Admin) */}
+      <BrandDamagedReportModal
+        orders={orders}
+        isOpen={isBrandReportOpen}
+        onClose={() => setIsBrandReportOpen(false)}
+        onMarkTalkedWithCompany={(orderId, notes) => {
+          onMarkTalkedWithCompany?.(orderId, notes);
+        }}
+        onReleaseGRN={(orderId, grnData) => {
+          onReleaseGRN?.(orderId, grnData);
+        }}
+        onCreateReplacementOrder={(orderId, replacementData) => {
+          onCreateReplacementOrder?.(orderId, replacementData);
+        }}
+      />
     </div>
   );
 };

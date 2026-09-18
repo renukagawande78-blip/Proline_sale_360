@@ -319,7 +319,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
           </div>
           <div style={{ marginTop: '0.85rem' }}>
             <label style={{ display: 'block', fontSize: '0.725rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>DISPATCH REMARK</label>
-            <textarea rows={2} value={dispatchRemark} onChange={e => setDispatchRemark(e.target.value)} placeholder="Transport or delivery instructions" style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', resize: 'vertical' }} />
+            <textarea rows={2} value={dispatchRemark || ''} onChange={e => setDispatchRemark(e.target.value)} placeholder="Remark..." style={{ width: '100%', padding: '0.55rem', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: 'white', resize: 'vertical' }} />
           </div>
           {validationError && <div style={{ marginTop: '0.75rem', color: '#fb7185', fontSize: '0.75rem', fontWeight: 800 }}>{validationError}</div>}
         </div>

@@ -8,7 +8,7 @@ interface AccountsPageProps {
   onGenerateInvoice?: (order: Order, invoiceNumber: string, billingTotalQty: number, invoiceAmount: number, creditDays: number, remark: string, billedQtyByItem: Record<string, number>) => void;
   onCompleteGrn?: (orderId: string, grnNumber: string, grnDate: string, grnValue: number, grnRemark: string) => void;
   onReattemptDelivery?: (order: Order) => void;
-  onViewInvoice?: (order: Order) => void;
+  onViewInvoice?: (order: Order, mode?: 'SALES_ORDER' | 'DISPATCH_CHALLAN') => void;
 }
 
 export const AccountsPage: React.FC<AccountsPageProps> = (props) => {

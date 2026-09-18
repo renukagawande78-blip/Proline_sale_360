@@ -7,11 +7,13 @@ import {
   CheckCircle2, 
   Paperclip, 
   Trash2, 
-  Bell, 
   FileCheck,
-  Sparkles
+  Sparkles,
+  Repeat,
+  CheckSquare,
+  Bell
 } from 'lucide-react';
-import { TaskItem, TaskPriority, TaskCategory, TaskAttachment, User } from '../types';
+import { TaskItem, TaskPriority, TaskCategory, TaskAttachment, User, TaskRepeatFrequency, TaskAssignmentType, TaskChecklistItem } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { generateUuid } from '../lib/supabase';
 import { getRoleBadge } from '../context/NotificationContext';
@@ -25,12 +27,13 @@ interface CreateTaskModalProps {
 }
 
 const CATEGORIES: { id: TaskCategory; label: string; icon: string; color: string }[] = [
+  { id: 'CHECKLIST', label: 'Operation Checklist', icon: '📋', color: '#10b981' },
+  { id: 'OPERATIONS', label: 'Operations', icon: '⚙️', color: '#a855f7' },
   { id: 'SALES', label: 'Sales & Orders', icon: '🛒', color: '#38bdf8' },
   { id: 'ACCOUNTS', label: 'Accounts & Ledger', icon: '🧾', color: '#ec4899' },
   { id: 'BILLING', label: 'Billing & Invoicing', icon: '💳', color: '#818cf8' },
   { id: 'DISPATCH', label: 'Dispatch & Logistics', icon: '🚚', color: '#f59e0b' },
   { id: 'AUDIT', label: 'Audit & Inventory', icon: '🔍', color: '#10b981' },
-  { id: 'OPERATIONS', label: 'Operations', icon: '⚙️', color: '#a855f7' },
   { id: 'FOLLOW_UP', label: 'Party Follow-Up', icon: '📞', color: '#06b6d4' },
   { id: 'GENERAL', label: 'General Task', icon: '📌', color: '#94a3b8' }
 ];
@@ -64,9 +67,23 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   // Form State
   const [title, setTitle] = useState(taskToEdit?.title || '');
   const [summary, setSummary] = useState(taskToEdit?.summary || '');
-  const [category, setCategory] = useState<TaskCategory>(taskToEdit?.category || 'GENERAL');
+  const [category, setCategory] = useState<TaskCategory>(taskToEdit?.category || 'CHECKLIST');
   const [priority, setPriority] = useState<TaskPriority>(taskToEdit?.priority || 'NORMAL');
+  
+  // Assignment State: For Self vs Assign to Other
+  const [assignmentType, setAssignmentType] = useState<TaskAssignmentType>(() => {
+    if (taskToEdit?.assignment_type) return taskToEdit.assignment_type;
+    if (taskToEdit?.assigned_to_id && currentUser?.id && taskToEdit.assigned_to_id === currentUser.id) return 'SELF';
+    return 'OTHER';
+  });
   const [assignedToId, setAssignedToId] = useState(taskToEdit?.assigned_to_id || '');
+
+  // Recurrence / Repeat Frequency State
+  const [repeatFrequency, setRepeatFrequency] = useState<TaskRepeatFrequency>(taskToEdit?.repeat_frequency || 'NONE');
+  const [skipWeekends, setSkipWeekends] = useState<boolean>(taskToEdit?.skip_weekends !== false);
+
+  // Operation Checklist items
+  const [checklistItems, setChecklistItems] = useState<TaskChecklistItem[]>(taskToEdit?.checklist_items || []);
   
   // Format default due date (tomorrow 17:00 local time)
   const defaultDueDate = () => {
@@ -112,27 +129,36 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
         setSummary(taskToEdit.summary);
         setCategory(taskToEdit.category);
         setPriority(taskToEdit.priority);
+        const resolvedAssignType = taskToEdit.assignment_type || (taskToEdit.assigned_to_id === currentUser?.id ? 'SELF' : 'OTHER');
+        setAssignmentType(resolvedAssignType);
         setAssignedToId(taskToEdit.assigned_to_id);
         setDueDate(new Date(taskToEdit.due_date).toISOString().slice(0, 16));
         setEnableReminder(!!taskToEdit.reminder_date);
         setReminderDate(taskToEdit.reminder_date ? new Date(taskToEdit.reminder_date).toISOString().slice(0, 16) : defaultReminderDate());
         setReminderNote(taskToEdit.reminder_note || '');
         setSupportDocs(taskToEdit.support_docs || []);
+        setRepeatFrequency(taskToEdit.repeat_frequency || 'NONE');
+        setSkipWeekends(taskToEdit.skip_weekends !== false);
+        setChecklistItems(taskToEdit.checklist_items || []);
       } else {
         setTitle('');
         setSummary('');
-        setCategory('GENERAL');
+        setCategory('CHECKLIST');
         setPriority('NORMAL');
-        setAssignedToId('');
+        setAssignmentType('SELF');
+        setAssignedToId(currentUser?.id || '');
         setDueDate(defaultDueDate());
         setEnableReminder(true);
         setReminderDate(defaultReminderDate());
         setReminderNote('');
         setSupportDocs([]);
+        setRepeatFrequency('NONE');
+        setSkipWeekends(true);
+        setChecklistItems([]);
       }
       setErrorMsg(null);
     }
-  }, [isOpen, taskToEdit]);
+  }, [isOpen, taskToEdit, currentUser]);
 
   if (!isOpen) return null;
 
@@ -201,8 +227,9 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       return;
     }
 
-    if (!assignedToId) {
-      setErrorMsg('Please select a user to assign this task.');
+    const finalAssignedToId = assignmentType === 'SELF' ? (currentUser?.id || assignedToId) : assignedToId;
+    if (!finalAssignedToId) {
+      setErrorMsg('Please select a user to assign this task or select "For Self".');
       return;
     }
 
@@ -211,7 +238,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       return;
     }
 
-    const assignedUser = users.find(u => u.id === assignedToId);
+    const assignedUser = assignmentType === 'SELF' 
+      ? currentUser 
+      : users.find(u => u.id === finalAssignedToId);
+
     const nowIso = new Date().toISOString();
     const taskNumber = taskToEdit?.task_number || `TSK-${Date.now().toString().slice(-4)}`;
 
@@ -223,8 +253,9 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       priority,
       category,
       status: taskToEdit?.status || 'PENDING',
-      assigned_to_id: assignedToId,
-      assigned_to_name: assignedUser?.full_name || 'Assigned User',
+      assignment_type: assignmentType,
+      assigned_to_id: finalAssignedToId,
+      assigned_to_name: assignedUser?.full_name || (assignmentType === 'SELF' ? 'Self' : 'Assigned User'),
       assigned_to_role: assignedUser?.role_name,
       assigned_to_email: assignedUser?.email,
       created_by_id: currentUser?.id || 'admin',
@@ -234,6 +265,11 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       reminder_date: enableReminder && reminderDate ? new Date(reminderDate).toISOString() : undefined,
       reminder_note: enableReminder ? reminderNote.trim() : undefined,
       reminder_sent: false,
+      repeat_frequency: repeatFrequency,
+      skip_weekends: repeatFrequency !== 'NONE' ? skipWeekends : false,
+      checklist_items: checklistItems.filter(ci => ci.text.trim().length > 0),
+      parent_task_id: taskToEdit?.parent_task_id,
+      iteration_count: taskToEdit?.iteration_count || 1,
       support_docs: supportDocs,
       completion_remarks: taskToEdit?.completion_remarks,
       completion_proof_docs: taskToEdit?.completion_proof_docs,
@@ -250,7 +286,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           user_id: currentUser?.id || 'admin',
           user_name: currentUser?.full_name || 'Super Admin',
           timestamp: nowIso,
-          remarks: taskToEdit ? 'Task updated by Super Admin' : `Task assigned to ${assignedUser?.full_name || 'User'}`
+          remarks: taskToEdit ? 'Task updated' : `Task created (${assignmentType === 'SELF' ? 'For Self' : `Assigned to ${assignedUser?.full_name || 'User'}`}${repeatFrequency !== 'NONE' ? `, Repeat: ${repeatFrequency}` : ''})`
         }
       ]
     };
@@ -453,75 +489,307 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             </div>
           </div>
 
-          {/* Assignee & Completion Date */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-            {/* Assign To User */}
-            <div>
-              <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: '0.4rem' }}>
-                Assign To User <span style={{ color: '#f43f5e' }}>*</span>
-              </label>
-              <select
-                value={assignedToId}
-                onChange={(e) => setAssignedToId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  background: '#1e293b',
-                  border: '1px solid #334155',
-                  borderRadius: 8,
-                  color: '#f8fafc',
-                  fontSize: '0.9rem',
-                  outline: 'none'
+          {/* Assignment Selection: For Self vs Assign to Other */}
+          <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: '1rem' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: '0.65rem' }}>
+              Task Assignment <span style={{ color: '#f43f5e' }}>*</span>
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.85rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssignmentType('SELF');
+                  if (currentUser?.id) setAssignedToId(currentUser.id);
                 }}
-                required
+                style={{
+                  padding: '0.75rem 1rem',
+                  borderRadius: 10,
+                  border: assignmentType === 'SELF' ? '2px solid #a855f7' : '1px solid #334155',
+                  background: assignmentType === 'SELF' ? 'rgba(168, 85, 247, 0.18)' : '#0f172a',
+                  color: assignmentType === 'SELF' ? '#c084fc' : '#94a3b8',
+                  fontWeight: 800,
+                  fontSize: '0.875rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
               >
-                <option value="">-- Select Team Member / User --</option>
-                {activeUsers.map(u => {
-                  const roleBadge = getRoleBadge(u.role_name);
-                  return (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name} ({roleBadge.label}) - {u.email}
-                    </option>
-                  );
-                })}
-              </select>
+                <span>🙋 For Self (Personal Task / Checklist)</span>
+              </button>
 
-              {selectedUser && (
-                <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: '#94a3b8' }}>
-                  <span style={{ padding: '0.15rem 0.5rem', borderRadius: 4, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700 }}>
-                    {selectedUser.role_name}
-                  </span>
-                  {selectedUser.company_handle && (
-                    <span>Handle: {selectedUser.company_handle}</span>
-                  )}
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setAssignmentType('OTHER');
+                  if (assignedToId === currentUser?.id) setAssignedToId('');
+                }}
+                style={{
+                  padding: '0.75rem 1rem',
+                  borderRadius: 10,
+                  border: assignmentType === 'OTHER' ? '2px solid #38bdf8' : '1px solid #334155',
+                  background: assignmentType === 'OTHER' ? 'rgba(56, 189, 248, 0.18)' : '#0f172a',
+                  color: assignmentType === 'OTHER' ? '#38bdf8' : '#94a3b8',
+                  fontWeight: 800,
+                  fontSize: '0.875rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>👥 Assign to Other (Delegate)</span>
+              </button>
             </div>
 
-            {/* Completion / Due Date */}
-            <div>
-              <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: '0.4rem' }}>
-                Target Completion Date & Time <span style={{ color: '#f43f5e' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input 
-                  type="datetime-local"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
+            {assignmentType === 'SELF' ? (
+              <div style={{ background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.3)', borderRadius: 8, padding: '0.65rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #6366f1)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.85rem' }}>
+                  {(currentUser?.full_name || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f8fafc' }}>
+                    {currentUser?.full_name || 'Current User'} <span style={{ color: '#c084fc', fontWeight: 600 }}>(You)</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    Role: <strong style={{ color: '#38bdf8' }}>{currentUser?.role_name || 'User'}</strong> {currentUser?.email ? `• ${currentUser.email}` : ''}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <select
+                  value={assignedToId}
+                  onChange={(e) => setAssignedToId(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '0.75rem 1rem',
-                    background: '#1e293b',
+                    background: '#0f172a',
                     border: '1px solid #334155',
                     borderRadius: 8,
                     color: '#f8fafc',
                     fontSize: '0.9rem',
                     outline: 'none'
                   }}
-                  required
-                />
+                  required={assignmentType === 'OTHER'}
+                >
+                  <option value="">-- Select Team Member to Assign --</option>
+                  {activeUsers.map(u => {
+                    const roleBadge = getRoleBadge(u.role_name);
+                    return (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({roleBadge.label}) - {u.email}
+                      </option>
+                    );
+                  })}
+                </select>
+                {selectedUser && (
+                  <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: '#94a3b8' }}>
+                    <span style={{ padding: '0.15rem 0.5rem', borderRadius: 4, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700 }}>
+                      {selectedUser.role_name}
+                    </span>
+                    {selectedUser.company_handle && <span>Handle: {selectedUser.company_handle}</span>}
+                  </div>
+                )}
               </div>
+            )}
+          </div>
+
+          {/* Repeat Task & Recurrence Settings (Daily, Weekly, Monthly, Skip Weekends) */}
+          <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+              <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Repeat size={16} color="#a855f7" />
+                <span>Repeat Task / Operational Checklist Frequency</span>
+              </label>
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Auto-recreates on completion</span>
             </div>
+
+            {/* Repeat Frequency Options: None, Daily, Weekly, Monthly */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: '0.5rem', marginBottom: '0.85rem' }}>
+              {[
+                { id: 'NONE', label: '⏹️ One-Time', desc: 'No Repeat' },
+                { id: 'DAILY', label: '📅 Daily', desc: 'Repeats everyday' },
+                { id: 'WEEKLY', label: '🗓️ Weekly', desc: 'Repeats every 7 days' },
+                { id: 'MONTHLY', label: '📆 Monthly', desc: 'Repeats every month' }
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    setRepeatFrequency(opt.id as any);
+                    if (opt.id !== 'NONE' && category === 'GENERAL') {
+                      setCategory('CHECKLIST');
+                    }
+                  }}
+                  style={{
+                    padding: '0.65rem 0.75rem',
+                    borderRadius: 8,
+                    border: repeatFrequency === opt.id ? '2px solid #a855f7' : '1px solid #334155',
+                    background: repeatFrequency === opt.id ? 'rgba(168, 85, 247, 0.2)' : '#0f172a',
+                    color: repeatFrequency === opt.id ? '#c084fc' : '#94a3b8',
+                    fontWeight: 700,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 3,
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span>{opt.label}</span>
+                  <span style={{ fontSize: '0.68rem', color: '#64748b' }}>{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* If repeating: Skip Weekends toggle */}
+            {repeatFrequency !== 'NONE' && (
+              <div style={{ background: 'rgba(15, 23, 42, 0.75)', border: '1px solid #334155', borderRadius: 8, padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>⏭️ Skip Weekends (Saturday &amp; Sunday)</span>
+                    {skipWeekends && (
+                      <span style={{ fontSize: '0.65rem', background: 'rgba(52, 211, 153, 0.2)', color: '#34d399', padding: '1px 6px', borderRadius: 4, fontWeight: 800 }}>
+                        Active (Mon–Fri only)
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>
+                    When scheduled or completed, tasks falling on Saturday or Sunday advance to Monday.
+                  </div>
+                </div>
+
+                <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={skipWeekends}
+                    onChange={(e) => setSkipWeekends(e.target.checked)}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    background: skipWeekends ? '#a855f7' : '#334155',
+                    borderRadius: 24,
+                    transition: '0.2s'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      height: 18, width: 18,
+                      left: skipWeekends ? 22 : 3,
+                      bottom: 3,
+                      background: 'white',
+                      borderRadius: '50%',
+                      transition: '0.2s'
+                    }} />
+                  </span>
+                </label>
+              </div>
+            )}
+          </div>
+
+          {/* Operation Checklist Items (Sub-tasks to tick off) */}
+          <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+              <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <CheckSquare size={16} color="#34d399" />
+                <span>Operation Checklist Items (Optional Steps)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setChecklistItems(prev => [...prev, { id: generateUuid(), text: '', completed: false }]);
+                }}
+                style={{
+                  background: 'rgba(52, 211, 153, 0.15)',
+                  border: '1px solid #34d399',
+                  color: '#34d399',
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: 6,
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+              >
+                + Add Step
+              </button>
+            </div>
+
+            {checklistItems.length === 0 ? (
+              <div style={{ fontSize: '0.78rem', color: '#64748b', fontStyle: 'italic' }}>
+                No checklist steps added yet. Click "+ Add Step" to add action items like "1. Verify carton seals", "2. Check tax invoice copy", etc.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {checklistItems.map((ci, idx) => (
+                  <div key={ci.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700, width: 20 }}>
+                      {idx + 1}.
+                    </span>
+                    <input
+                      type="text"
+                      placeholder={`Checklist item #${idx + 1}`}
+                      value={ci.text}
+                      onChange={(e) => {
+                        const updated = [...checklistItems];
+                        updated[idx].text = e.target.value;
+                        setChecklistItems(updated);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '0.45rem 0.75rem',
+                        background: '#0f172a',
+                        border: '1px solid #334155',
+                        borderRadius: 6,
+                        color: '#f8fafc',
+                        fontSize: '0.85rem',
+                        outline: 'none'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setChecklistItems(prev => prev.filter((_, i) => i !== idx))}
+                      style={{ background: 'transparent', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: 4 }}
+                      title="Remove step"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Completion Date */}
+          <div>
+            <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: '0.4rem' }}>
+              Target Due Date &amp; Time <span style={{ color: '#f43f5e' }}>*</span>
+            </label>
+            <input 
+              type="datetime-local"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem',
+                background: '#1e293b',
+                border: '1px solid #334155',
+                borderRadius: 8,
+                color: '#f8fafc',
+                fontSize: '0.9rem',
+                outline: 'none'
+              }}
+              required
+            />
           </div>
 
           {/* Summary / Detailed Instructions */}

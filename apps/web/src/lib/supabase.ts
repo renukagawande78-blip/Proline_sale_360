@@ -2072,11 +2072,8 @@ export const fetchOrdersFromSupabase = async (): Promise<{ orders: Order[]; erro
         pod_query_raised_by: o.pod_query_raised_by || latestPodQuery?.details?.raised_by,
         pod_query_raised_at: o.pod_query_raised_at || latestPodQuery?.details?.raised_at,
         remarks: (o.remarks || '')
-          .replace(/<!--DISPATCH:.*?-->/g, '')
-          .replace(/<!--ITEMS_DATA:.*?-->/g, '')
-          .replace(/<!--AGENCY_INFO:.*?-->/g, '')
-          .replace(/<!--REATTEMPT:.*?-->/g, '')
-          .replace(/<!--POD_STATUS:.*?-->/g, '')
+          .replace(/<!--[\s\S]*?-->/g, '')
+          .replace(/<[^>]*>/g, '')
           .trim(),
         delivery_type: o.delivery_type || latestDispatchDetails.dispatch_type || (() => {
           const match = (o.remarks || '').match(/<!--DISPATCH:(.*?)-->/);
@@ -2661,7 +2658,11 @@ export const INITIAL_TASKS: TaskItem[] = [
     created_by_id: 'u01',
     created_by_name: 'Chirag (Super Admin)',
     created_by_role: 'SUPER_ADMIN',
-    due_date: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
+    due_date: (() => {
+      const d = new Date();
+      d.setHours(20, 0, 0, 0);
+      return d.toISOString();
+    })(),
     reminder_date: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
     reminder_note: 'Verify carton seal counts for batch PG-2026-B4.',
     reminder_sent: false,
@@ -2711,7 +2712,12 @@ export const INITIAL_TASKS: TaskItem[] = [
     created_by_id: 'u01',
     created_by_name: 'Chirag (Super Admin)',
     created_by_role: 'SUPER_ADMIN',
-    due_date: new Date(Date.now() + 18 * 60 * 60 * 1000).toISOString(), // due tomorrow morning
+    due_date: (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(17, 0, 0, 0);
+      return d.toISOString();
+    })(), // due tomorrow afternoon
     reminder_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
     reminder_note: 'Ensure party stamp and receiver signature are clearly visible.',
     reminder_sent: false,
@@ -2756,7 +2762,7 @@ export const INITIAL_TASKS: TaskItem[] = [
         action: 'CREATED',
         user_id: 'u01',
         user_name: 'Chirag (Super Admin)',
-        timestamp: new Date(Date.now() - 5 * 24 * 60 * 1000).toISOString(),
+        timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
         remarks: 'Task created for monthly sales target'
       },
       {
@@ -2764,14 +2770,56 @@ export const INITIAL_TASKS: TaskItem[] = [
         action: 'COMPLETED',
         user_id: 'u_jay',
         user_name: 'Jay',
-        timestamp: new Date(Date.now() - 2 * 24 * 60 * 1000).toISOString(),
+        timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
         remarks: 'Forecast compiled and submitted'
+      }
+    ]
+  },
+  {
+    id: 'task_005',
+    task_number: 'TSK-2026-0005',
+    title: 'Daily Warehouse Dispatch & Vehicle Inspection Checklist',
+    summary: 'Routine operational morning checklist to ensure warehouse loading dock clearance, transporter vehicle safety, driver invoice stamping, and GPS tracking clearance.',
+    priority: 'HIGH',
+    category: 'CHECKLIST',
+    status: 'IN_PROGRESS',
+    assignment_type: 'SELF',
+    assigned_to_id: 'u01',
+    assigned_to_name: 'Super Admin',
+    assigned_to_role: 'SUPER_ADMIN',
+    created_by_id: 'u01',
+    created_by_name: 'Super Admin',
+    created_by_role: 'SUPER_ADMIN',
+    due_date: (() => {
+      const d = new Date();
+      d.setHours(18, 30, 0, 0);
+      return d.toISOString();
+    })(),
+    repeat_frequency: 'DAILY',
+    skip_weekends: true,
+    iteration_count: 1,
+    checklist_items: [
+      { id: 'ci_01', text: 'Verify carton box counts for pending City-A & City-B orders', completed: true },
+      { id: 'ci_02', text: 'Check driver physical tax invoice & gate pass stamping', completed: false },
+      { id: 'ci_03', text: 'Transporter vehicle tyre & seal inspection at warehouse bay', completed: false },
+      { id: 'ci_04', text: 'Update dispatch tracking notes in system', completed: false }
+    ],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    activity_log: [
+      {
+        id: 'act_005_1',
+        action: 'CREATED',
+        user_id: 'u01',
+        user_name: 'Super Admin',
+        timestamp: new Date().toISOString(),
+        remarks: 'Daily operational checklist scheduled (Excludes weekends)'
       }
     ]
   }
 ];
 
-const TASKS_LOCAL_STORAGE_KEY = 'proline_oms_tasks_v1';
+const TASKS_LOCAL_STORAGE_KEY = 'proline_oms_tasks_v2';
 
 export const getCachedTasks = (): TaskItem[] => {
   try {
@@ -2790,12 +2838,41 @@ export const setCachedTasks = (tasks: TaskItem[]) => {
   } catch {}
 };
 
+export const getNextRecurrenceDueDate = (
+  currentDate: string | Date,
+  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY',
+  skipWeekends: boolean = false
+): string => {
+  const date = new Date(currentDate);
+  if (isNaN(date.getTime())) return new Date().toISOString();
+
+  if (frequency === 'DAILY') {
+    date.setDate(date.getDate() + 1);
+  } else if (frequency === 'WEEKLY') {
+    date.setDate(date.getDate() + 7);
+  } else if (frequency === 'MONTHLY') {
+    date.setMonth(date.getMonth() + 1);
+  }
+
+  // If skipWeekends is true, avoid Saturday (6) and Sunday (0)
+  if (skipWeekends) {
+    const day = date.getDay();
+    if (day === 6) { // Saturday -> advance 2 days to Monday
+      date.setDate(date.getDate() + 2);
+    } else if (day === 0) { // Sunday -> advance 1 day to Monday
+      date.setDate(date.getDate() + 1);
+    }
+  }
+
+  return date.toISOString();
+};
+
 export const fetchTasksFromSupabase = async (): Promise<{ tasks: TaskItem[]; error: string | null }> => {
   try {
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('due_date', { ascending: true });
 
     if (error) {
       console.warn('Supabase fetch tasks error (using local cache):', error.message);
@@ -2815,6 +2892,7 @@ export const fetchTasksFromSupabase = async (): Promise<{ tasks: TaskItem[]; err
       priority: row.priority || 'NORMAL',
       category: row.category || 'GENERAL',
       status: row.status || 'PENDING',
+      assignment_type: row.assignment_type || (row.assigned_to_id === row.created_by_id ? 'SELF' : 'OTHER'),
       assigned_to_id: row.assigned_to_id || '',
       assigned_to_name: row.assigned_to_name || 'Unassigned',
       assigned_to_role: row.assigned_to_role || '',
@@ -2826,6 +2904,11 @@ export const fetchTasksFromSupabase = async (): Promise<{ tasks: TaskItem[]; err
       reminder_date: row.reminder_date || undefined,
       reminder_note: row.reminder_note || undefined,
       reminder_sent: row.reminder_sent === true,
+      repeat_frequency: row.repeat_frequency || 'NONE',
+      skip_weekends: row.skip_weekends === true,
+      parent_task_id: row.parent_task_id || undefined,
+      iteration_count: row.iteration_count || 1,
+      checklist_items: Array.isArray(row.checklist_items) ? row.checklist_items : (typeof row.checklist_items === 'string' ? JSON.parse(row.checklist_items || '[]') : []),
       support_docs: Array.isArray(row.support_docs) ? row.support_docs : (typeof row.support_docs === 'string' ? JSON.parse(row.support_docs || '[]') : []),
       completion_remarks: row.completion_remarks || undefined,
       completion_proof_docs: Array.isArray(row.completion_proof_docs) ? row.completion_proof_docs : (typeof row.completion_proof_docs === 'string' ? JSON.parse(row.completion_proof_docs || '[]') : []),
@@ -2878,6 +2961,7 @@ export const saveTaskToSupabase = async (task: TaskItem): Promise<{ success: boo
       priority: normalizedTask.priority,
       category: normalizedTask.category,
       status: normalizedTask.status,
+      assignment_type: normalizedTask.assignment_type || 'OTHER',
       assigned_to_id: normalizedTask.assigned_to_id,
       assigned_to_name: normalizedTask.assigned_to_name,
       assigned_to_role: normalizedTask.assigned_to_role,
@@ -2889,6 +2973,11 @@ export const saveTaskToSupabase = async (task: TaskItem): Promise<{ success: boo
       reminder_date: normalizedTask.reminder_date || null,
       reminder_note: normalizedTask.reminder_note || null,
       reminder_sent: normalizedTask.reminder_sent || false,
+      repeat_frequency: normalizedTask.repeat_frequency || 'NONE',
+      skip_weekends: normalizedTask.skip_weekends === true,
+      parent_task_id: normalizedTask.parent_task_id || null,
+      iteration_count: normalizedTask.iteration_count || 1,
+      checklist_items: normalizedTask.checklist_items || [],
       support_docs: normalizedTask.support_docs || [],
       completion_remarks: normalizedTask.completion_remarks || null,
       completion_proof_docs: normalizedTask.completion_proof_docs || [],

@@ -21,6 +21,7 @@ import { OrderInvoiceModal } from './components/OrderInvoiceModal';
 import { GlobalFilterModal } from './components/GlobalFilterModal';
 import { ReturnRequestModal } from './components/ReturnRequestModal';
 import { ProcessReturnModal } from './components/ProcessReturnModal';
+import { ProcessCollectionModal } from './components/ProcessCollectionModal';
 import { PODVerificationModal } from './components/PODVerificationModal';
 import { ZoneMasterModal } from './components/ZoneMasterModal';
 import { RegisterAgencyModal } from './components/RegisterAgencyModal';
@@ -49,6 +50,7 @@ import {
   fetchCompaniesFromSupabase,
   fetchAgenciesFromSupabaseTable,
   fetchProductsFromSupabase,
+  fetchUsersFromSupabase,
   getOrderAccessPermission,
   saveOrderToSupabase,
   deleteOrderFromSupabase,
@@ -56,6 +58,7 @@ import {
   updateOrderAccountsApprovalInSupabase,
   saveOrderItemToSupabase,
   generateUuid,
+  getNextRecurrenceDueDate,
   supabase
 } from './lib/supabase';
 import { Order, GlobalFilterState, Agency, Product, User, Company, TaskItem, TaskStatus, TaskAttachment, isOrderDispatchedOrBeyond, PriorityLevel } from './types';
@@ -139,17 +142,20 @@ const MainLayout: React.FC = () => {
   const [liveCompanies, setLiveCompanies] = useState<Company[]>([]);
   const [liveAgencies, setLiveAgencies] = useState<Agency[]>([]);
   const [liveProducts, setLiveProducts] = useState<Product[]>([]);
+  const [liveUsers, setLiveUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>(() => getCachedTasks());
+  const [refreshCount, setRefreshCount] = useState(0);
 
   // Global Refresh handler for Pull-To-Refresh and Header button
   const handleGlobalRefresh = async () => {
     try {
-      const [orderRes, compRes, agencyRes, prodRes, taskRes] = await Promise.allSettled([
+      const [orderRes, compRes, agencyRes, prodRes, taskRes, userRes] = await Promise.allSettled([
         fetchOrdersFromSupabase(),
         fetchCompaniesFromSupabase(),
         fetchAgenciesFromSupabaseTable(),
         fetchProductsFromSupabase(),
-        fetchTasksFromSupabase()
+        fetchTasksFromSupabase(),
+        fetchUsersFromSupabase()
       ]);
 
       if (orderRes.status === 'fulfilled' && orderRes.value.orders && orderRes.value.orders.length > 0) {
@@ -174,6 +180,12 @@ const MainLayout: React.FC = () => {
       if (taskRes.status === 'fulfilled' && taskRes.value.tasks && taskRes.value.tasks.length > 0) {
         setTasks(taskRes.value.tasks);
       }
+
+      if (userRes.status === 'fulfilled' && userRes.value && userRes.value.length > 0) {
+        setLiveUsers(userRes.value);
+      }
+
+      setRefreshCount(c => c + 1);
     } catch (err) {
       console.warn('Global refresh error:', err);
     }
@@ -200,6 +212,10 @@ const MainLayout: React.FC = () => {
 
     fetchProductsFromSupabase().then(prods => {
       if (prods && prods.length > 0) setLiveProducts(prods);
+    });
+
+    fetchUsersFromSupabase().then(usrs => {
+      if (usrs && usrs.length > 0) setLiveUsers(usrs);
     });
 
     fetchTasksFromSupabase().then(({ tasks: liveTasks }) => {
@@ -342,7 +358,23 @@ const MainLayout: React.FC = () => {
   const [selectedOrderForApproval, setSelectedOrderForApproval] = useState<Order | null>(null);
   const [selectedOrderForDispatch, setSelectedOrderForDispatch] = useState<Order | null>(null);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
+  const [selectedInvoiceDocMode, setSelectedInvoiceDocMode] = useState<'SALES_ORDER' | 'DISPATCH_CHALLAN'>('SALES_ORDER');
+
+  const handleOpenViewInvoice = (order: Order, mode?: 'SALES_ORDER' | 'DISPATCH_CHALLAN') => {
+    setSelectedOrderForInvoice(order);
+    if (mode) {
+      setSelectedInvoiceDocMode(mode);
+    } else {
+      const isBilled = Boolean(order.invoice_number || order.status === 'BILLED' || isOrderDispatchedOrBeyond(order.status));
+      setSelectedInvoiceDocMode(isBilled ? 'DISPATCH_CHALLAN' : 'SALES_ORDER');
+    }
+  };
   const [selectedOrderForReturnRequest, setSelectedOrderForReturnRequest] = useState<Order | null>(null);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const handleOpenReturnModal = (order?: Order | null) => {
+    setSelectedOrderForReturnRequest(order || null);
+    setIsReturnModalOpen(true);
+  };
   const [selectedOrderForProcessReturn, setSelectedOrderForProcessReturn] = useState<Order | null>(null);
   const [selectedOrderForPOD, setSelectedOrderForPOD] = useState<Order | null>(null);
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
@@ -350,6 +382,14 @@ const MainLayout: React.FC = () => {
   const [isZoneMasterOpen, setIsZoneMasterOpen] = useState(false);
   const [isRegisterAgencyOpen, setIsRegisterAgencyOpen] = useState(false);
   const [createOrderInitialAgencyId, setCreateOrderInitialAgencyId] = useState<string | undefined>(undefined);
+  const [createOrderSessionId, setCreateOrderSessionId] = useState(0);
+
+  const handleOpenCreateOrder = () => {
+    setOrderToEdit(null);
+    setCreateOrderInitialAgencyId(undefined);
+    setCreateOrderSessionId(c => c + 1);
+    setIsCreateOpen(true);
+  };
 
   // Task Management States
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
@@ -479,6 +519,72 @@ const MainLayout: React.FC = () => {
           category: 'TASK',
           task_id: taskId
         });
+
+        // Auto-schedule next occurrence if this is a recurring task
+        if (res.updatedTask.repeat_frequency && res.updatedTask.repeat_frequency !== 'NONE') {
+          const nextDueDate = getNextRecurrenceDueDate(
+            res.updatedTask.due_date,
+            res.updatedTask.repeat_frequency,
+            res.updatedTask.skip_weekends ?? false
+          );
+          const nextReminderDate = res.updatedTask.reminder_date
+            ? getNextRecurrenceDueDate(res.updatedTask.reminder_date, res.updatedTask.repeat_frequency, res.updatedTask.skip_weekends ?? false)
+            : undefined;
+
+          const nextTask: TaskItem = {
+            id: generateUuid(),
+            task_number: `TSK-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+            title: res.updatedTask.title,
+            summary: res.updatedTask.summary,
+            priority: res.updatedTask.priority,
+            category: res.updatedTask.category,
+            status: 'PENDING',
+            assignment_type: res.updatedTask.assignment_type,
+            assigned_to_id: res.updatedTask.assigned_to_id,
+            assigned_to_name: res.updatedTask.assigned_to_name,
+            assigned_to_role: res.updatedTask.assigned_to_role,
+            assigned_to_email: res.updatedTask.assigned_to_email,
+            created_by_id: res.updatedTask.created_by_id,
+            created_by_name: res.updatedTask.created_by_name,
+            created_by_role: res.updatedTask.created_by_role,
+            due_date: nextDueDate,
+            reminder_date: nextReminderDate,
+            reminder_note: res.updatedTask.reminder_note,
+            reminder_sent: false,
+            repeat_frequency: res.updatedTask.repeat_frequency,
+            skip_weekends: res.updatedTask.skip_weekends,
+            parent_task_id: res.updatedTask.parent_task_id || res.updatedTask.id,
+            iteration_count: (res.updatedTask.iteration_count || 1) + 1,
+            support_docs: res.updatedTask.support_docs,
+            checklist_items: (res.updatedTask.checklist_items || []).map(ci => ({ ...ci, completed: false })),
+            created_at: nowIso,
+            updated_at: nowIso,
+            activity_log: [
+              {
+                id: generateUuid(),
+                action: 'RECURRENCE_GENERATED',
+                user_id: currentUser?.id || 'system',
+                user_name: currentUser?.full_name || 'System Auto-Scheduler',
+                timestamp: nowIso,
+                remarks: `Auto-generated recurrence (#${(res.updatedTask.iteration_count || 1) + 1}) after completion of ${res.updatedTask.task_number}`
+              }
+            ]
+          };
+
+          saveTaskToSupabase(nextTask).then(saveRes => {
+            if (saveRes.data) {
+              setTasks(prev => [saveRes.data!, ...prev]);
+            }
+          });
+
+          addNotification({
+            title: `🔁 Next ${res.updatedTask.repeat_frequency} Task Scheduled`,
+            message: `Next iteration due on ${new Date(nextDueDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}${res.updatedTask.skip_weekends ? ' (Skipped Weekend)' : ''}`,
+            event_type: 'TASK_ASSIGNED',
+            category: 'TASK',
+            task_id: nextTask.id
+          });
+        }
       }
     }
   };
@@ -504,6 +610,7 @@ const MainLayout: React.FC = () => {
   const handleOpenCreateOrderForAgency = (agencyId: string) => {
     setOrderToEdit(null);
     setCreateOrderInitialAgencyId(agencyId);
+    setCreateOrderSessionId(c => c + 1);
     setIsCreateOpen(true);
   };
 
@@ -791,6 +898,8 @@ const MainLayout: React.FC = () => {
       return;
     }
     setOrderToEdit(order);
+    setCreateOrderInitialAgencyId(undefined);
+    setCreateOrderSessionId(c => c + 1);
     setIsCreateOpen(true);
   };
 
@@ -1713,33 +1822,250 @@ const MainLayout: React.FC = () => {
   };
 
   const handleSubmitReturnRequest = (orderId: string, returnRequestData: any) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? {
-      ...o,
-      return_request: returnRequestData
-    } : o));
+    setOrders(prev => {
+      const updated = prev.map(o => o.id === orderId ? {
+        ...o,
+        return_request: returnRequestData
+      } : o);
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save return request to localStorage', e);
+      }
+      return updated;
+    });
+
+    addNotification({
+      title: `⚠️ Return / Damage Request Raised: ${returnRequestData.order_number || orderId}`,
+      message: `${returnRequestData.requested_by_name} raised a ${returnRequestData.return_type === 'DAMAGED_RETURN' ? 'Damaged Goods Return' : 'Stock Replacement'} request for ${returnRequestData.brand_name || 'Brand'}. Awaiting Super Admin approval.`,
+      event_type: 'RETURN_REQUESTED',
+      order_id: orderId,
+      target_roles: ['SUPER_ADMIN', 'SALES_ADMIN']
+    });
   };
 
   const handleApproveReturnRequest = (orderId: string) => {
-    const approverName = currentUser ? `${currentUser.full_name} (${currentUser.role_name === 'SUPER_ADMIN' ? 'Super Admin' : 'System Admin'})` : 'System Admin';
-    setOrders(prev => prev.map(o => o.id === orderId && o.return_request ? {
-      ...o,
-      return_request: {
-        ...o.return_request,
-        status: 'APPROVED',
-        approved_by_name: approverName,
-        approved_at: new Date().toISOString().replace('T', ' ').substring(0, 16)
-      }
-    } : o));
+    const approverRole = currentUser?.role_name === 'SUPER_ADMIN' ? 'Super Admin' : 'Sale Admin';
+    const approverName = currentUser ? `${currentUser.full_name} (${approverRole})` : 'Sale Admin';
+    setOrders(prev => {
+      const updated = prev.map(o => o.id === orderId && o.return_request ? {
+        ...o,
+        return_request: {
+          ...o.return_request,
+          status: 'APPROVED_FOR_COLLECTION' as any,
+          approved_by_name: approverName,
+          approved_at: new Date().toISOString()
+        }
+      } : o);
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    addNotification({
+      title: `✅ Sale Admin Approved for Collect`,
+      message: `${approverName} approved return request. Dispatched person can now allocate vehicle and collect return / damaged stock.`,
+      event_type: 'RETURN_APPROVED',
+      order_id: orderId,
+      target_roles: ['DISPATCH_MANAGER', 'SALES_ADMIN', 'SUPER_ADMIN']
+    });
   };
 
   const handleRejectReturnRequest = (orderId: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId && o.return_request ? {
-      ...o,
-      return_request: {
-        ...o.return_request,
-        status: 'REJECTED'
-      }
-    } : o));
+    setOrders(prev => {
+      const updated = prev.map(o => o.id === orderId && o.return_request ? {
+        ...o,
+        return_request: {
+          ...o.return_request,
+          status: 'REJECTED' as any
+        }
+      } : o);
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const handleConfirmReturnCollection = (orderId: string, collectionData: any) => {
+    const collectorName = currentUser?.full_name || 'Dispatch Manager';
+    setOrders(prev => {
+      const updated = prev.map(o => {
+        if (o.id === orderId && o.return_request) {
+          const updatedItems = o.return_request.items.map((item: any) => {
+            const match = collectionData.items?.find((ci: any) => ci.order_item_id === item.order_item_id || ci.product_id === item.product_id);
+            return {
+              ...item,
+              collected_box_qty: match?.collected_box_qty ?? item.box_qty,
+              collected_loose_pcs: match?.collected_loose_pcs ?? item.loose_pcs,
+              collected_qty_pcs: match?.collected_qty_pcs ?? item.requested_qty_pcs
+            };
+          });
+
+          return {
+            ...o,
+            return_request: {
+              ...o.return_request,
+              status: 'COLLECTED' as any,
+              vehicle_number: collectionData.vehicle_number,
+              tempo_number: collectionData.tempo_number,
+              driver_name: collectionData.driver_name,
+              driver_mobile: collectionData.driver_mobile,
+              rental_agency_name: collectionData.transporter_name,
+              collection_remarks: collectionData.collection_remarks,
+              collected_at: new Date().toISOString(),
+              collected_by_name: collectorName,
+              items: updatedItems
+            }
+          };
+        }
+        return o;
+      });
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    addNotification({
+      title: `📦 Damaged Goods Collected: ${collectionData.vehicle_number || ''}`,
+      message: `Stock physically collected by ${collectorName} and brought to warehouse. Super Admin can review brand report and talk with company.`,
+      event_type: 'RETURN_COLLECTED',
+      order_id: orderId,
+      target_roles: ['SUPER_ADMIN', 'SALES_ADMIN']
+    });
+  };
+
+  const handleMarkTalkedWithCompany = (orderId: string, notes: string) => {
+    setOrders(prev => {
+      const updated = prev.map(o => {
+        if (o.id === orderId && o.return_request) {
+          return {
+            ...o,
+            return_request: {
+              ...o.return_request,
+              status: 'WAITING_FOR_COMPANY_APPROVAL' as const,
+              talked_with_company: true,
+              company_discussion_notes: notes,
+              talked_at: new Date().toISOString()
+            }
+          };
+        }
+        return o;
+      });
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    addNotification({
+      title: `⏳ Waiting for Company Approval Logged`,
+      message: `Marked: Waiting for Company Approval: "${notes}". Once company approves, release GRN or generate replacement order.`,
+      event_type: 'RETURN_WAITING_FOR_COMPANY_APPROVAL',
+      order_id: orderId,
+      target_roles: ['SUPER_ADMIN', 'SALES_ADMIN']
+    });
+  };
+
+  const handleReleaseReturnGRN = (orderId: string, grnData: any) => {
+    setOrders(prev => {
+      const updated = prev.map(o => {
+        if (o.id === orderId && o.return_request) {
+          return {
+            ...o,
+            grn_number: grnData.grn_number,
+            return_request: {
+              ...o.return_request,
+              status: 'GRN_RELEASED' as const,
+              resolution_type: 'GRN' as const,
+              grn_number: grnData.grn_number,
+              grn_value: grnData.grn_value,
+              resolution_remarks: grnData.remarks,
+              resolved_at: new Date().toISOString(),
+              resolved_by_name: currentUser?.full_name || 'Super Admin'
+            }
+          };
+        }
+        return o;
+      });
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    addNotification({
+      title: `📄 GRN Released: ${grnData.grn_number}`,
+      message: `Super Admin released GRN ${grnData.grn_number} for ₹${Number(grnData.grn_value || 0).toLocaleString('en-IN')}. Return settled.`,
+      event_type: 'RETURN_GRN_RELEASED',
+      order_id: orderId,
+      target_roles: ['SUPER_ADMIN', 'SALES_ADMIN', 'ACCOUNTS', 'BILLING']
+    });
+  };
+
+  const handleCreateReplacementRNOrder = (orderId: string, replacementData: any) => {
+    const originalOrder = orders.find(o => o.id === orderId);
+    const rnOrderNumber = replacementData.order_number;
+
+    const newRNOrder: Order = {
+      id: generateUuid(),
+      order_number: rnOrderNumber,
+      order_date: new Date().toISOString().substring(0, 10),
+      company_id: originalOrder?.company_id || '',
+      company_name: originalOrder?.company_name || replacementData.brand_name || 'Brand',
+      agency_id: originalOrder?.agency_id || '',
+      agency_name: originalOrder?.agency_name || replacementData.agency_name || 'Agency',
+      area_id: originalOrder?.area_id || '',
+      salesperson_id: currentUser?.id || originalOrder?.salesperson_id || '',
+      salesperson_name: currentUser?.full_name || originalOrder?.salesperson_name || 'Salesperson',
+      status: 'SUBMITTED',
+      total_box_qty: replacementData.total_box_qty || 0,
+      total_loose_pcs: replacementData.total_loose_pcs || 0,
+      total_qty_pcs: replacementData.total_qty_pcs || 0,
+      total_amount: replacementData.total_amount || 0,
+      payment_type: 'CREDIT',
+      priority: 'HIGH',
+      remarks: `Replacement Order created for Return Request against ${originalOrder?.order_number || replacementData.reference_number}. ${replacementData.remarks || ''}`,
+      items: replacementData.items || []
+    };
+
+    setOrders(prev => {
+      const updated = [
+        newRNOrder,
+        ...prev.map(o => {
+          if (o.id === orderId && o.return_request) {
+            return {
+              ...o,
+              return_request: {
+                ...o.return_request,
+                status: 'REPLACEMENT_ORDER_CREATED' as const,
+                resolution_type: 'REPLACEMENT_ORDER' as const,
+                replacement_order_number: rnOrderNumber,
+                resolution_remarks: replacementData.remarks,
+                resolved_at: new Date().toISOString(),
+                resolved_by_name: currentUser?.full_name || 'Super Admin'
+              }
+            };
+          }
+          return o;
+        })
+      ];
+      try {
+        localStorage.setItem('proline_oms_orders_v3', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    addNotification({
+      title: `🔄 Replacement Order Created: ${rnOrderNumber}`,
+      message: `Fresh replacement order ${rnOrderNumber} created against ${originalOrder?.order_number || replacementData.reference_number}. Added to Sales Orders queue.`,
+      event_type: 'REPLACEMENT_ORDER_CREATED',
+      order_id: newRNOrder.id,
+      target_roles: ['SUPER_ADMIN', 'SALES_ADMIN', 'DISPATCH_MANAGER', 'SALES_PERSON']
+    });
+    broadcastOrderSync(rnOrderNumber);
   };
 
   const handleConfirmReturnSettlement = (orderId: string, settlementData: any) => {
@@ -1825,9 +2151,9 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'dashboard' && (
           <DashboardPage 
-            key="page_dashboard"
+            key={`page_dashboard_${refreshCount}`}
             orders={globallyFilteredOrders} 
-            onOpenCreateOrder={() => setIsCreateOpen(true)}
+            onOpenCreateOrder={handleOpenCreateOrder}
             onSelectOrder={(o) => setSelectedOrderForApproval(o)}
             onReleaseHold={handleReleaseHold}
             onNavigateToTasks={() => setCurrentTab('tasks')}
@@ -1841,16 +2167,19 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'orders' && (
           <OrdersPage 
-            key="page_orders"
+            key={`page_orders_${refreshCount}`}
             initialTab="ALL"
             orders={globallyFilteredOrders} 
-            onOpenCreateOrder={() => { setOrderToEdit(null); setIsCreateOpen(true); }}
+            onRefresh={handleGlobalRefresh}
+            onOpenCreateOrder={handleOpenCreateOrder}
             onOpenEditOrder={handleOpenEditOrder}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
-            onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
+            onViewInvoice={handleOpenViewInvoice}
             onCancelOrder={handleCancelOrder}
             onDeleteOrder={handleDeleteOrder}
-            onOpenReturnRequestModal={(o) => setSelectedOrderForReturnRequest(o)}
+            onOpenReturnRequestModal={handleOpenReturnModal}
+            onApproveReturnRequest={handleApproveReturnRequest}
+            onRejectReturnRequest={handleRejectReturnRequest}
             onApprove={handleApproveOrder}
             onHold={handleHoldOrder}
             onReject={handleRejectOrder}
@@ -1863,7 +2192,7 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'approvals' && (
           <OrdersPage 
-            key="page_approvals"
+            key={`page_approvals_${refreshCount}`}
             initialTab="APPROVAL_NEEDED"
             orders={globallyFilteredOrders.filter(o => 
               o.status === 'SUBMITTED' || 
@@ -1872,16 +2201,19 @@ const MainLayout: React.FC = () => {
               o.status === 'POD_ISSUE_RAISED' ||
               o.status === 'REJECTED'
             )} 
-            onOpenCreateOrder={() => { setOrderToEdit(null); setIsCreateOpen(true); }}
+            onRefresh={handleGlobalRefresh}
+            onOpenCreateOrder={handleOpenCreateOrder}
             onOpenEditOrder={handleOpenEditOrder}
             onSelectOrderForApproval={(o) => setSelectedOrderForApproval(o)}
             onApprove={handleApproveOrder}
             onHold={handleHoldOrder}
             onReject={handleRejectOrder}
-            onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
+            onViewInvoice={handleOpenViewInvoice}
             onCancelOrder={handleCancelOrder}
             onDeleteOrder={handleDeleteOrder}
-            onOpenReturnRequestModal={(o) => setSelectedOrderForReturnRequest(o)}
+            onOpenReturnRequestModal={handleOpenReturnModal}
+            onApproveReturnRequest={handleApproveReturnRequest}
+            onRejectReturnRequest={handleRejectReturnRequest}
             onRequestAccountsApproval={handleRequestAccountsApproval}
             onAccountsApprovalResponse={handleAccountsApprovalResponse}
             onOpenPODModal={(o) => setSelectedOrderForPOD(o)}
@@ -1892,21 +2224,33 @@ const MainLayout: React.FC = () => {
 
         {currentTab === 'masters' && (
           <MastersPage 
-            key="page_masters"
+            key={`page_masters_${refreshCount}`}
             initialTab="agencies" 
             onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} 
             onOpenCreateOrderForAgency={handleOpenCreateOrderForAgency}
             onClearOperationalData={handleClearOperationalData}
+            onRefreshData={handleGlobalRefresh}
+            refreshTrigger={refreshCount}
+            liveCompanies={liveCompanies}
+            liveAgencies={liveAgencies}
+            liveProducts={liveProducts}
+            liveUsers={liveUsers}
           />
         )}
 
         {currentTab === 'zones' && (
           <MastersPage 
-            key="page_zones"
+            key={`page_zones_${refreshCount}`}
             initialTab="areas" 
             onOpenUserMgmtModal={(user) => { setUserToEditInMgmt(user || null); setIsUserMgmtOpen(true); }} 
             onOpenCreateOrderForAgency={handleOpenCreateOrderForAgency}
             onClearOperationalData={handleClearOperationalData}
+            onRefreshData={handleGlobalRefresh}
+            refreshTrigger={refreshCount}
+            liveCompanies={liveCompanies}
+            liveAgencies={liveAgencies}
+            liveProducts={liveProducts}
+            liveUsers={liveUsers}
           />
         )}
 
@@ -1919,7 +2263,7 @@ const MainLayout: React.FC = () => {
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onOpenProcessReturnModal={(o) => setSelectedOrderForProcessReturn(o)}
             onOpenPODModal={(o) => setSelectedOrderForPOD(o)}
-            onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
+            onViewInvoice={handleOpenViewInvoice}
           />
         )}
 
@@ -1931,7 +2275,7 @@ const MainLayout: React.FC = () => {
             onGenerateInvoice={handleGenerateInvoice}
             onCompleteGrn={handleCompleteGrn}
             onReattemptDelivery={(order) => void handleReattemptDelivery(order.id)}
-            onViewInvoice={(o) => setSelectedOrderForInvoice(o)}
+            onViewInvoice={handleOpenViewInvoice}
           />
         )}
 
@@ -1952,7 +2296,13 @@ const MainLayout: React.FC = () => {
             onResolveException={handleResolveException}
             onForwardGrnToBilling={handleForwardGrnToBilling}
             onCompleteOrderAfterGrn={handleCompleteOrderAfterGrn}
-            onOpenReturnRequestModal={(o) => setSelectedOrderForReturnRequest(o)}
+            onOpenReturnRequestModal={handleOpenReturnModal}
+            onApproveReturnRequest={handleApproveReturnRequest}
+            onRejectReturnRequest={handleRejectReturnRequest}
+            onConfirmReturnCollection={handleConfirmReturnCollection}
+            onMarkTalkedWithCompany={handleMarkTalkedWithCompany}
+            onReleaseGRN={handleReleaseReturnGRN}
+            onCreateReplacementOrder={handleCreateReplacementRNOrder}
           />
         )}
 
@@ -2008,6 +2358,7 @@ const MainLayout: React.FC = () => {
 
       {/* Global Modals */}
       <CreateOrderModal 
+        key={`create_order_modal_${createOrderSessionId}`}
         isOpen={isCreateOpen}
         orderToEdit={orderToEdit}
         initialAgencyId={createOrderInitialAgencyId}
@@ -2037,16 +2388,25 @@ const MainLayout: React.FC = () => {
 
       <ReturnRequestModal 
         order={selectedOrderForReturnRequest}
-        isOpen={!!selectedOrderForReturnRequest}
-        onClose={() => setSelectedOrderForReturnRequest(null)}
+        isOpen={isReturnModalOpen || !!selectedOrderForReturnRequest}
+        onClose={() => {
+          setSelectedOrderForReturnRequest(null);
+          setIsReturnModalOpen(false);
+        }}
         onSubmitReturnRequest={handleSubmitReturnRequest}
+        availableOrders={orders}
+        products={productsPool}
+        companies={companiesPool}
       />
 
-      <ProcessReturnModal 
+      <ProcessCollectionModal
         order={selectedOrderForProcessReturn}
         isOpen={!!selectedOrderForProcessReturn}
         onClose={() => setSelectedOrderForProcessReturn(null)}
-        onConfirmReturnSettlement={handleConfirmReturnSettlement}
+        onConfirmCollection={(orderId, collectionData) => {
+          handleConfirmReturnCollection(orderId, collectionData);
+          setSelectedOrderForProcessReturn(null);
+        }}
       />
 
       <UserManagementModal 
@@ -2065,6 +2425,8 @@ const MainLayout: React.FC = () => {
         order={selectedOrderForInvoice}
         isOpen={!!selectedOrderForInvoice}
         onClose={() => setSelectedOrderForInvoice(null)}
+        initialDocMode={selectedInvoiceDocMode}
+        agencies={agenciesPool}
       />
 
       <GlobalFilterModal 

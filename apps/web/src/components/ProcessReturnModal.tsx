@@ -36,12 +36,13 @@ export const ProcessReturnModal: React.FC<ProcessReturnModalProps> = ({
       return_request_id: returnReq.id,
       return_type: returnReq.return_type,
       dispatch_notes: dispatchNotes,
-      items: returnReq.items.map(item => {
-        const val = settlementItems[item.order_item_id] !== undefined 
-          ? settlementItems[item.order_item_id] 
+      items: returnReq.items.map((item, idx) => {
+        const itemId = item.order_item_id || item.product_id || String(idx);
+        const val = settlementItems[itemId] !== undefined 
+          ? settlementItems[itemId] 
           : item.requested_qty_pcs;
         return {
-          order_item_id: item.order_item_id,
+          order_item_id: itemId,
           settled_qty_pcs: val
         };
       })
@@ -118,20 +119,21 @@ export const ProcessReturnModal: React.FC<ProcessReturnModalProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {returnReq.items.map(item => {
-                  const val = settlementItems[item.order_item_id] !== undefined 
-                    ? settlementItems[item.order_item_id] 
+                {returnReq.items.map((item, idx) => {
+                  const itemId = item.order_item_id || item.product_id || String(idx);
+                  const val = settlementItems[itemId] !== undefined 
+                    ? settlementItems[itemId] 
                     : item.requested_qty_pcs;
 
                   return (
-                    <tr key={item.order_item_id}>
+                    <tr key={itemId}>
                       <td><strong style={{ color: '#f8fafc' }}>{item.product_name}</strong></td>
                       <td style={{ textAlign: 'center' }}><strong style={{ color: '#fbbf24' }}>{item.requested_qty_pcs} PCS</strong></td>
                       <td style={{ textAlign: 'center' }}>
                         <input 
                           type="number"
                           value={val}
-                          onChange={e => handleQtyChange(item.order_item_id, parseInt(e.target.value) || 0, item.requested_qty_pcs)}
+                          onChange={e => handleQtyChange(itemId, parseInt(e.target.value) || 0, item.requested_qty_pcs)}
                           style={{ width: 100, padding: '0.4rem', background: '#0f172a', border: '1px solid #34d399', borderRadius: 6, color: '#34d399', fontWeight: 900, textAlign: 'center', fontSize: '0.85rem' }}
                         />
                       </td>

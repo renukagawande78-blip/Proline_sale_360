@@ -17,7 +17,7 @@ import {
   isValidUuid
 } from '../lib/supabase';
 
-import { Order, OrderItem, Agency, Product, User } from '../types';
+import { Order, OrderItem, Agency, Product, User, getBrandByCode, getBrandByName } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface SearchableAgencySelectProps {
@@ -448,29 +448,41 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
   }, [isOpen]);
 
   const filteredProducts = activeProducts.filter(p => {
+    const parentCompany = activeCompanies.find(c => c.id === p.company_id || c.company_name?.toLowerCase() === p.company_name?.toLowerCase());
+
     // 1. Multi-Brand Filter: if specific companies selected, match any in selectedCompanyIds. If empty or 'ALL', match userCompanyHandle scope!
     let matchesCompany = true;
     if (selectedCompanyIds.length > 0 && !selectedCompanyIds.includes('ALL')) {
       matchesCompany = selectedCompanyIds.includes(p.company_id);
     } else {
-      const parentCompany = activeCompanies.find(c => c.id === p.company_id);
       matchesCompany = isCompanyAllowedForUser(parentCompany?.company_name, userCompanyHandle, parentCompany?.company_code);
     }
 
     // 2. Multi-Segment Filter: match any in selectedSegments
     let matchesSegment = true;
     if (selectedSegments.length > 0) {
-      const parentCompany = activeCompanies.find(c => c.id === p.company_id);
       const prodSegment = (p.segment || parentCompany?.segment || 'FMCG').toUpperCase();
       matchesSegment = selectedSegments.some(s => prodSegment.includes(s.toUpperCase()));
     }
 
     // 3. Search Query Match
     const q = searchQuery.toLowerCase();
+    let brandName = p.company_name || (p as any).Product_Company_Name || parentCompany?.company_name || (parentCompany as any)?.name || '';
+    if (!brandName) {
+      const parts = (p.product_code || '').split('-');
+      for (const part of parts) {
+        const matched = getBrandByCode(part) || getBrandByName(part);
+        if (matched) {
+          brandName = matched.name;
+          break;
+        }
+      }
+    }
     const nameMatch = (p?.product_name || '').toLowerCase().includes(q);
     const codeMatch = (p?.product_code || '').toLowerCase().includes(q);
+    const brandMatch = brandName.toLowerCase().includes(q);
 
-    return matchesCompany && matchesSegment && (nameMatch || codeMatch);
+    return matchesCompany && matchesSegment && (nameMatch || codeMatch || brandMatch);
   });
 
   return (
@@ -499,7 +511,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
         <span style={{ 
           overflow: 'hidden', 
           textOverflow: 'ellipsis', 
-          whiteSpace: 'nowrap',
+          whiteSpace: 'nowrap', 
           color: selectedProduct ? '#ffffff' : '#94a3b8',
           fontStyle: selectedProduct ? 'normal' : 'italic'
         }}>
@@ -532,7 +544,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
             <Search size={14} color="#38bdf8" />
             <input 
               type="text" 
-              placeholder="Search product name or code..." 
+              placeholder="Search product name or brand..." 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               autoFocus
@@ -556,8 +568,24 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
               filteredProducts.map(p => {
                 const isSelected = p.id === selectedProductId;
                 const isAlreadyChosen = !isSelected && alreadySelectedProductIds.includes(p.id);
-                const parentCompany = activeCompanies.find(c => c.id === p.company_id);
-                const prodSegment = p.segment || parentCompany?.segment || 'FMCG';
+                const parentCompany = activeCompanies.find(c => c.id === p.company_id || c.company_name?.toLowerCase() === p.company_name?.toLowerCase());
+                let brandName = p.company_name || (p as any).Product_Company_Name || parentCompany?.company_name || (parentCompany as any)?.name;
+
+                if (!brandName || brandName === 'Brand' || brandName === 'N/A') {
+                  const parts = (p.product_code || '').split('-');
+                  for (const part of parts) {
+                    const matched = getBrandByCode(part) || getBrandByName(part);
+                    if (matched) {
+                      brandName = matched.name;
+                      break;
+                    }
+                  }
+                }
+                if (!brandName && selectedCompanyIds.length > 0) {
+                  const selComp = activeCompanies.find(c => selectedCompanyIds.includes(c.id));
+                  if (selComp) brandName = selComp.company_name || (selComp as any).name;
+                }
+                if (!brandName) brandName = 'Priyagold';
 
                 return (
                   <div
@@ -598,7 +626,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                         )}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: isAlreadyChosen ? '#64748b' : '#34d399', marginTop: 2, fontWeight: 600 }}>
-                        MRP: ₹{p.mrp_price ?? p.unit_price ?? 0} | Pack: {p.pcs_per_box} pcs/box | Code: {p.product_code}
+                        MRP: ₹{p.mrp_price ?? p.unit_price ?? 0} | Pack: {p.pcs_per_box} pcs/box | Brand: {brandName}
                       </div>
                     </div>
                     {isSelected && <Check size={16} color="#38bdf8" />}
@@ -894,6 +922,24 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
         remark: ''
       }
     ]);
+    const effectiveUser = (currentUser?.id && mergedUsers.find(u => u.id === currentUser.id)) || currentUser;
+    if (effectiveUser?.id) {
+      setSalespersonId(effectiveUser.id);
+    }
+    const userSegment = resolveSegmentForUser(effectiveUser, activeCompaniesPool);
+    if (userSegment !== 'ALL') {
+      setSelectedSegments([userSegment]);
+    } else {
+      setSelectedSegments(['FMCG', 'FMCD']);
+    }
+    const spHandle = effectiveUser?.company_handle || 'All';
+    const allowed = activeCompaniesPool.filter(c => isCompanyAllowedForUser(c.company_name, spHandle, c.company_code));
+    if (allowed.length > 0) {
+      setSelectedCompanyIds([allowed[0].id]);
+    } else {
+      setSelectedCompanyIds([]);
+    }
+    setAgencyId(initialAgencyId || (activeAgenciesPool[0]?.id || ''));
   };
 
   useEffect(() => {
@@ -935,7 +981,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
 
       setAgencyId(orderToEdit.agency_id || (activeAgenciesPool[0]?.id || MOCK_AGENCIES[0]?.id || ''));
       setDeliveryType(orderToEdit.delivery_type || 'F.O.R');
-      setRemarks(orderToEdit.remarks || '');
+      // Sanitize remarks: strip embedded metadata comments so input is clean and blank if untouched
+      const cleanUserRemarks = (orderToEdit.remarks || '')
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/<[^>]*>/g, '')
+        .trim();
+      setRemarks(cleanUserRemarks);
       if (orderToEdit.salesperson_id) {
         setSalespersonId(orderToEdit.salesperson_id);
       }
@@ -966,7 +1017,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
             loose_pcs: item.loose_pcs || 0,
             free_pcs: item.free_pcs || 0,
             unit_price: item.unit_price || foundProd?.unit_price || 100,
-            remark: item.remark || ''
+            remark: (item.remark || '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]*>/g, '').trim()
           };
         }));
       }
@@ -1581,10 +1632,10 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
                   <td>
                     <input 
                       type="text" 
-                      placeholder="Line remark..."
-                      value={item.remark}
+                      placeholder="Remark..."
+                      value={item.remark || ''}
                       onChange={e => handleRemarkChange(index, e.target.value)}
-                      style={{ width: '100%', padding: '0.35rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', fontSize: '0.775rem' }}
+                      style={{ width: '100%', padding: '0.35rem 0.5rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 4, color: 'white', fontSize: '0.775rem' }}
                     />
                   </td>
                   <td style={{ textAlign: 'center' }}>
@@ -1608,8 +1659,8 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onCl
           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ORDER LEVEL REMARKS / NOTES</label>
           <input 
             type="text"
-            placeholder="Special delivery instructions or order notes..."
-            value={remarks}
+            placeholder="Remark..."
+            value={remarks || ''}
             onChange={e => setRemarks(e.target.value)}
             style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: 'white', fontSize: '0.85rem' }}
           />

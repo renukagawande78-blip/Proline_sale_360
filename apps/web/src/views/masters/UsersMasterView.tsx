@@ -32,7 +32,7 @@ const ROLE_BADGE_COLORS: Record<string, { bg: string; color: string; border: str
   ACCOUNTS: { bg: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.35)' },
 };
 
-export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ searchQuery, onOpenUserMgmtModal }) => {
+export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ users, searchQuery, onOpenUserMgmtModal }) => {
   const { currentUser, updateUser, deleteUser } = useAuth();
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
@@ -80,6 +80,12 @@ export const UsersMasterView: React.FC<UsersMasterViewProps> = ({ searchQuery, o
     });
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    if (users && users.length > 0) {
+      setLocalUsers(deduplicateUsers(users));
+    }
+  }, [users]);
 
   const handleSyncLiveUsers = async () => {
     setIsSyncing(true);

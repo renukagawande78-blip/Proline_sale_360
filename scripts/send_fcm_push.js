@@ -53,7 +53,7 @@ async function sendPushNotification({ targetToken, topic, title, body, data }) {
     android: {
       priority: 'high',
       notification: {
-        channel_id: 'proline_orders',
+        channel_id: 'prokap_oms_orders',
         sound: 'default',
         default_sound: true,
         default_vibrate_timings: true,

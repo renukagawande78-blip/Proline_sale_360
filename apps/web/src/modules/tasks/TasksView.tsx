@@ -26,7 +26,8 @@ import {
   Trash2,
   Edit3,
   RefreshCw,
-  FolderOpen
+  FolderOpen,
+  Repeat
 } from 'lucide-react';
 import { TaskItem, TaskStatus, TaskPriority, TaskCategory, User, TaskAttachment } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -62,34 +63,77 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const canCreateTask = isSuperAdmin || currentUser?.role_name === 'SALES_ADMIN';
 
   // Filters State
-  const [activeTab, setActiveTab] = useState<'ALL' | 'MY_TASKS' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE'>('ALL');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'TODAY_PENDING' | 'TOMORROW' | 'COMPLETED' | 'FOR_SELF' | 'DELEGATED' | 'CHECKLIST' | 'PENDING' | 'IN_PROGRESS' | 'OVERDUE'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'LIST' | 'KANBAN'>('LIST');
 
+  // Date helper functions
+  const isSameDay = (d1: Date, d2: Date) => (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+
+  const parseValidDate = (d: string | Date | undefined): Date | null => {
+    if (!d) return null;
+    const parsed = new Date(d);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
   // Metrics calculation
   const metrics = useMemo(() => {
     const now = new Date();
-    const myTasks = tasks.filter(t => 
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+    const forSelfTasks = tasks.filter(t => 
+      t.assignment_type === 'SELF' ||
       t.assigned_to_id === currentUser?.id || 
       (t.assigned_to_name || '').toLowerCase() === (currentUser?.full_name || '').toLowerCase()
     );
+
+    const delegatedTasks = tasks.filter(t => 
+      t.assignment_type === 'OTHER' ||
+      (t.assigned_to_id !== currentUser?.id && (t.assigned_to_name || '').toLowerCase() !== (currentUser?.full_name || '').toLowerCase())
+    );
+
+    const checklistTasks = tasks.filter(t => 
+      t.category === 'CHECKLIST' ||
+      (t.repeat_frequency && t.repeat_frequency !== 'NONE') ||
+      (t.checklist_items && t.checklist_items.length > 0)
+    );
+
+    const todayPendingTasks = tasks.filter(t => {
+      const d = parseValidDate(t.due_date);
+      return d ? isSameDay(d, today) && t.status !== 'COMPLETED' && t.status !== 'CANCELLED' : false;
+    });
+
+    const tomorrowTasks = tasks.filter(t => {
+      const d = parseValidDate(t.due_date);
+      return d ? isSameDay(d, tomorrow) && t.status !== 'CANCELLED' : false;
+    });
 
     const pending = tasks.filter(t => t.status === 'PENDING');
     const inProgress = tasks.filter(t => t.status === 'IN_PROGRESS');
     const completed = tasks.filter(t => t.status === 'COMPLETED');
     const overdue = tasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && new Date(t.due_date) < now);
-    const myPending = myTasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED');
+    const myPending = forSelfTasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED');
 
     return {
       total: tasks.length,
-      myTotal: myTasks.length,
+      todayPending: todayPendingTasks.length,
+      tomorrow: tomorrowTasks.length,
+      completed: completed.length,
+      forSelf: forSelfTasks.length,
+      myTotal: forSelfTasks.length,
+      delegated: delegatedTasks.length,
+      checklist: checklistTasks.length,
       myPending: myPending.length,
       pending: pending.length,
       inProgress: inProgress.length,
-      completed: completed.length,
       overdue: overdue.length
     };
   }, [tasks, currentUser]);
@@ -97,18 +141,40 @@ export const TasksView: React.FC<TasksViewProps> = ({
   // Filtered Tasks
   const filteredTasks = useMemo(() => {
     const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
     return tasks.filter(task => {
       // Tab filter
-      if (activeTab === 'MY_TASKS') {
-        const isMyTask = task.assigned_to_id === currentUser?.id || 
+      if (activeTab === 'TODAY_PENDING') {
+        const d = parseValidDate(task.due_date);
+        const isTodayDue = d ? isSameDay(d, today) : false;
+        const isPending = task.status !== 'COMPLETED' && task.status !== 'CANCELLED';
+        if (!isTodayDue || !isPending) return false;
+      } else if (activeTab === 'TOMORROW') {
+        const d = parseValidDate(task.due_date);
+        const isTomorrowDue = d ? isSameDay(d, tomorrow) : false;
+        const notCancelled = task.status !== 'CANCELLED';
+        if (!isTomorrowDue || !notCancelled) return false;
+      } else if (activeTab === 'COMPLETED') {
+        if (task.status !== 'COMPLETED') return false;
+      } else if (activeTab === 'FOR_SELF') {
+        const isSelf = task.assignment_type === 'SELF' ||
+          task.assigned_to_id === currentUser?.id || 
           (task.assigned_to_name || '').toLowerCase() === (currentUser?.full_name || '').toLowerCase();
-        if (!isMyTask) return false;
+        if (!isSelf) return false;
+      } else if (activeTab === 'DELEGATED') {
+        const isDelegated = task.assignment_type === 'OTHER' ||
+          (task.assigned_to_id !== currentUser?.id && (task.assigned_to_name || '').toLowerCase() !== (currentUser?.full_name || '').toLowerCase());
+        if (!isDelegated) return false;
+      } else if (activeTab === 'CHECKLIST') {
+        const isChecklist = task.category === 'CHECKLIST' ||
+          (task.repeat_frequency && task.repeat_frequency !== 'NONE') ||
+          (task.checklist_items && task.checklist_items.length > 0);
+        if (!isChecklist) return false;
       } else if (activeTab === 'PENDING' && task.status !== 'PENDING') {
         return false;
       } else if (activeTab === 'IN_PROGRESS' && task.status !== 'IN_PROGRESS') {
-        return false;
-      } else if (activeTab === 'COMPLETED' && task.status !== 'COMPLETED') {
         return false;
       } else if (activeTab === 'OVERDUE') {
         const isOverdue = task.status !== 'COMPLETED' && task.status !== 'CANCELLED' && new Date(task.due_date) < now;
@@ -313,7 +379,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
       </div>
 
       {/* KPI Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.85rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.85rem' }}>
         
         {/* Total Tasks */}
         <div 
@@ -335,12 +401,12 @@ export const TasksView: React.FC<TasksViewProps> = ({
           <div style={{ fontSize: '0.72rem', color: '#64748b' }}>All organizational tasks</div>
         </div>
 
-        {/* My Pending Tasks */}
+        {/* Today Pending Tasks */}
         <div 
-          onClick={() => setActiveTab('MY_TASKS')}
+          onClick={() => setActiveTab('TODAY_PENDING')}
           style={{
-            background: activeTab === 'MY_TASKS' ? 'rgba(168, 85, 247, 0.15)' : '#141f36',
-            border: `1px solid ${activeTab === 'MY_TASKS' ? '#a855f7' : '#1e293b'}`,
+            background: activeTab === 'TODAY_PENDING' ? 'rgba(245, 158, 11, 0.18)' : '#141f36',
+            border: `1px solid ${activeTab === 'TODAY_PENDING' ? '#f59e0b' : metrics.todayPending > 0 ? 'rgba(245, 158, 11, 0.4)' : '#1e293b'}`,
             borderRadius: 12,
             padding: '1rem',
             cursor: 'pointer',
@@ -348,31 +414,71 @@ export const TasksView: React.FC<TasksViewProps> = ({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#c084fc', textTransform: 'uppercase' }}>My Tasks</span>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase' }}>Today Pending</span>
+            <Clock size={16} color="#f59e0b" />
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f59e0b' }}>{metrics.todayPending}</div>
+          <div style={{ fontSize: '0.72rem', color: '#fbbf24' }}>Due today needing action</div>
+        </div>
+
+        {/* Tomorrow Tasks */}
+        <div 
+          onClick={() => setActiveTab('TOMORROW')}
+          style={{
+            background: activeTab === 'TOMORROW' ? 'rgba(56, 189, 248, 0.18)' : '#141f36',
+            border: `1px solid ${activeTab === 'TOMORROW' ? '#38bdf8' : '#1e293b'}`,
+            borderRadius: 12,
+            padding: '1rem',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase' }}>Tomorrow Tasks</span>
+            <Calendar size={16} color="#38bdf8" />
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#38bdf8' }}>{metrics.tomorrow}</div>
+          <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Scheduled for tomorrow</div>
+        </div>
+
+        {/* Completed */}
+        <div 
+          onClick={() => setActiveTab('COMPLETED')}
+          style={{
+            background: activeTab === 'COMPLETED' ? 'rgba(16, 185, 129, 0.18)' : '#141f36',
+            border: `1px solid ${activeTab === 'COMPLETED' ? '#10b981' : '#1e293b'}`,
+            borderRadius: 12,
+            padding: '1rem',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#34d399', textTransform: 'uppercase' }}>Completed</span>
+            <CheckCheck size={16} color="#10b981" />
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#10b981' }}>{metrics.completed}</div>
+          <div style={{ fontSize: '0.72rem', color: '#6ee7b7' }}>Finished successfully</div>
+        </div>
+
+        {/* My Tasks (For Self) */}
+        <div 
+          onClick={() => setActiveTab('FOR_SELF')}
+          style={{
+            background: activeTab === 'FOR_SELF' ? 'rgba(168, 85, 247, 0.15)' : '#141f36',
+            border: `1px solid ${activeTab === 'FOR_SELF' ? '#a855f7' : '#1e293b'}`,
+            borderRadius: 12,
+            padding: '1rem',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#c084fc', textTransform: 'uppercase' }}>For Self (My Tasks)</span>
             <UserIcon size={16} color="#a855f7" />
           </div>
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#e879f9' }}>{metrics.myPending}</div>
           <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Assigned to you ({metrics.myTotal} total)</div>
-        </div>
-
-        {/* In Progress */}
-        <div 
-          onClick={() => setActiveTab('IN_PROGRESS')}
-          style={{
-            background: activeTab === 'IN_PROGRESS' ? 'rgba(56, 189, 248, 0.15)' : '#141f36',
-            border: `1px solid ${activeTab === 'IN_PROGRESS' ? '#38bdf8' : '#1e293b'}`,
-            borderRadius: 12,
-            padding: '1rem',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase' }}>In Progress</span>
-            <PlayCircle size={16} color="#38bdf8" />
-          </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#38bdf8' }}>{metrics.inProgress}</div>
-          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Active execution</div>
         </div>
 
         {/* Overdue Alert */}
@@ -395,26 +501,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
           <div style={{ fontSize: '0.72rem', color: '#fda4af' }}>Requires urgent attention</div>
         </div>
 
-        {/* Completed */}
-        <div 
-          onClick={() => setActiveTab('COMPLETED')}
-          style={{
-            background: activeTab === 'COMPLETED' ? 'rgba(16, 185, 129, 0.15)' : '#141f36',
-            border: `1px solid ${activeTab === 'COMPLETED' ? '#10b981' : '#1e293b'}`,
-            borderRadius: 12,
-            padding: '1rem',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#10b981', textTransform: 'uppercase' }}>Completed</span>
-            <CheckCheck size={16} color="#10b981" />
-          </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#10b981' }}>{metrics.completed}</div>
-          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Finished tasks</div>
-        </div>
-
       </div>
 
       {/* Filter Tabs & Search Controls */}
@@ -434,46 +520,62 @@ export const TasksView: React.FC<TasksViewProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             {[
               { id: 'ALL', label: 'All Tasks', count: metrics.total },
-              { id: 'MY_TASKS', label: '👤 My Tasks', count: metrics.myPending, highlight: true },
+              { id: 'TODAY_PENDING', label: '📅 Today Pending', count: metrics.todayPending, tone: 'amber' },
+              { id: 'TOMORROW', label: '⏳ Tomorrow Tasks', count: metrics.tomorrow, tone: 'cyan' },
+              { id: 'COMPLETED', label: '✅ Completed', count: metrics.completed, tone: 'emerald' },
+              { id: 'FOR_SELF', label: '🙋 For Self', count: metrics.forSelf, tone: 'purple' },
+              { id: 'DELEGATED', label: '👥 Assigned to Others', count: metrics.delegated },
+              { id: 'CHECKLIST', label: '📋 Operation Checklist', count: metrics.checklist, tone: 'teal' },
               { id: 'PENDING', label: 'Pending', count: metrics.pending },
               { id: 'IN_PROGRESS', label: 'In Progress', count: metrics.inProgress },
-              { id: 'OVERDUE', label: '⚠️ Overdue', count: metrics.overdue, danger: true },
-              { id: 'COMPLETED', label: 'Completed', count: metrics.completed }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id as any)}
-                style={{
-                  padding: '0.45rem 0.9rem',
-                  borderRadius: 8,
-                  background: activeTab === tab.id 
-                    ? (tab.danger ? '#f43f5e' : tab.highlight ? '#a855f7' : '#0284c7') 
-                    : '#1e293b',
-                  border: `1px solid ${activeTab === tab.id ? 'transparent' : '#334155'}`,
-                  color: activeTab === tab.id ? 'white' : '#cbd5e1',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <span>{tab.label}</span>
-                <span 
+              { id: 'OVERDUE', label: '⚠️ Overdue', count: metrics.overdue, tone: 'rose' }
+            ].map(tab => {
+              const getTabBg = () => {
+                if (activeTab !== tab.id) return '#1e293b';
+                switch (tab.tone) {
+                  case 'amber': return '#d97706';
+                  case 'cyan': return '#0284c7';
+                  case 'emerald': return '#059669';
+                  case 'purple': return '#9333ea';
+                  case 'teal': return '#0d9488';
+                  case 'rose': return '#e11d48';
+                  default: return '#0284c7';
+                }
+              };
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as any)}
                   style={{
-                    padding: '0.1rem 0.45rem',
-                    borderRadius: 10,
-                    background: activeTab === tab.id ? 'rgba(255,255,255,0.25)' : 'rgba(15, 23, 42, 0.6)',
-                    fontSize: '0.72rem'
+                    padding: '0.45rem 0.9rem',
+                    borderRadius: 8,
+                    background: getTabBg(),
+                    border: `1px solid ${activeTab === tab.id ? 'transparent' : '#334155'}`,
+                    color: activeTab === tab.id ? 'white' : '#cbd5e1',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  {tab.count}
-                </span>
-              </button>
-            ))}
+                  <span>{tab.label}</span>
+                  <span 
+                    style={{
+                      padding: '0.1rem 0.45rem',
+                      borderRadius: 10,
+                      background: activeTab === tab.id ? 'rgba(255,255,255,0.25)' : 'rgba(15, 23, 42, 0.6)',
+                      fontSize: '0.72rem'
+                    }}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* View Switcher: List vs Kanban */}
@@ -562,12 +664,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
               }}
             >
               <option value="ALL">All Categories</option>
+              <option value="CHECKLIST">📋 Operation Checklist</option>
+              <option value="OPERATIONS">⚙️ Operations</option>
               <option value="SALES">🛒 Sales & Orders</option>
               <option value="ACCOUNTS">🧾 Accounts & Ledger</option>
               <option value="BILLING">💳 Billing</option>
               <option value="DISPATCH">🚚 Dispatch</option>
               <option value="AUDIT">🔍 Stock Audit</option>
-              <option value="OPERATIONS">⚙️ Operations</option>
               <option value="FOLLOW_UP">📞 Party Follow-Up</option>
               <option value="GENERAL">📌 General</option>
             </select>
@@ -669,7 +772,11 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     const StatusIcon = statusMeta.icon;
                     const priorityMeta = getPriorityBadge(task.priority);
                     const now = new Date();
+                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
                     const dueDate = new Date(task.due_date);
+                    const isDueToday = isSameDay(dueDate, today);
+                    const isDueTomorrow = isSameDay(dueDate, tomorrow);
                     const isOverdue = task.status !== 'COMPLETED' && task.status !== 'CANCELLED' && dueDate < now;
                     const isAssignedToMe = task.assigned_to_id === currentUser?.id || (task.assigned_to_name || '').toLowerCase() === (currentUser?.full_name || '').toLowerCase();
 
@@ -730,6 +837,83 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                     <span>{task.support_docs.length} Doc</span>
                                   </span>
                                 )}
+                                {task.repeat_frequency && task.repeat_frequency !== 'NONE' && (
+                                  <span 
+                                    title={`Repeats ${task.repeat_frequency}${task.skip_weekends ? ' (Skipping weekends)' : ''}`}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3,
+                                      padding: '0.1rem 0.45rem',
+                                      borderRadius: 4,
+                                      background: 'rgba(168, 85, 247, 0.15)',
+                                      color: '#c084fc',
+                                      border: '1px solid rgba(168, 85, 247, 0.3)',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 800
+                                    }}
+                                  >
+                                    <Repeat size={10} />
+                                    <span>
+                                      {task.repeat_frequency === 'DAILY' ? 'Daily' : task.repeat_frequency === 'WEEKLY' ? 'Weekly' : 'Monthly'}
+                                      {task.skip_weekends ? ' (Excl. W/E)' : ''}
+                                    </span>
+                                  </span>
+                                )}
+
+                                {task.assignment_type === 'SELF' ? (
+                                  <span 
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3,
+                                      padding: '0.1rem 0.45rem',
+                                      borderRadius: 4,
+                                      background: 'rgba(168, 85, 247, 0.15)',
+                                      color: '#c084fc',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700
+                                    }}
+                                  >
+                                    🙋 For Self
+                                  </span>
+                                ) : (
+                                  <span 
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3,
+                                      padding: '0.1rem 0.45rem',
+                                      borderRadius: 4,
+                                      background: 'rgba(56, 189, 248, 0.12)',
+                                      color: '#38bdf8',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700
+                                    }}
+                                  >
+                                    👥 Delegated
+                                  </span>
+                                )}
+
+                                {task.checklist_items && task.checklist_items.length > 0 && (
+                                  <span 
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3,
+                                      padding: '0.1rem 0.45rem',
+                                      borderRadius: 4,
+                                      background: 'rgba(52, 211, 153, 0.15)',
+                                      color: '#34d399',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700
+                                    }}
+                                  >
+                                    <CheckSquare size={10} />
+                                    <span>{task.checklist_items.filter(c => c.completed).length}/{task.checklist_items.length} Checklist</span>
+                                  </span>
+                                )}
+
                                 {task.reminder_date && (
                                   <span title="Scheduled reminder active" style={{ color: '#fbbf24', display: 'inline-flex' }}>
                                     <Bell size={12} />
@@ -797,11 +981,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
                         {/* Target Completion */}
                         <td style={{ padding: '1rem' }}>
-                          <div style={{ color: isOverdue ? '#f43f5e' : '#cbd5e1', fontWeight: isOverdue ? 800 : 600 }}>
+                          <div style={{ color: isOverdue ? '#f43f5e' : isDueToday ? '#f59e0b' : isDueTomorrow ? '#38bdf8' : '#cbd5e1', fontWeight: isOverdue || isDueToday ? 800 : 600 }}>
                             {new Date(task.due_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </div>
-                          <div style={{ fontSize: '0.72rem', color: isOverdue ? '#fda4af' : '#64748b' }}>
-                            {isOverdue ? '⚠️ Overdue' : task.status === 'COMPLETED' ? 'Completed' : 'On Schedule'}
+                          <div style={{ fontSize: '0.72rem', color: isOverdue ? '#fda4af' : isDueToday ? '#fbbf24' : isDueTomorrow ? '#7dd3fc' : '#64748b' }}>
+                            {isOverdue 
+                              ? '⚠️ Overdue' 
+                              : isDueToday 
+                              ? '📅 Due Today' 
+                              : isDueTomorrow 
+                              ? '⏳ Due Tomorrow' 
+                              : task.status === 'COMPLETED' 
+                              ? 'Completed' 
+                              : 'On Schedule'}
                           </div>
                         </td>
 
@@ -931,7 +1123,11 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     colTasks.map(task => {
                       const priorityMeta = getPriorityBadge(task.priority);
                       const now = new Date();
+                      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
                       const dueDate = new Date(task.due_date);
+                      const isDueToday = isSameDay(dueDate, today);
+                      const isDueTomorrow = isSameDay(dueDate, tomorrow);
                       const isOverdue = task.status !== 'COMPLETED' && task.status !== 'CANCELLED' && dueDate < now;
 
                       return (
@@ -981,6 +1177,27 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                 <span>{task.support_docs.length} Attachment</span>
                               </span>
                             )}
+                            {task.repeat_frequency && task.repeat_frequency !== 'NONE' && (
+                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: 4, background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.3)', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 700 }}>
+                                <Repeat size={10} />
+                                <span>{task.repeat_frequency === 'DAILY' ? 'Daily' : task.repeat_frequency === 'WEEKLY' ? 'Weekly' : 'Monthly'}{task.skip_weekends ? ' (Excl. W/E)' : ''}</span>
+                              </span>
+                            )}
+                            {task.assignment_type === 'SELF' ? (
+                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: 4, background: 'rgba(168, 85, 247, 0.12)', color: '#c084fc', fontSize: '0.7rem', fontWeight: 700 }}>
+                                🙋 Self
+                              </span>
+                            ) : (
+                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: 4, background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', fontSize: '0.7rem', fontWeight: 700 }}>
+                                👥 Delegated
+                              </span>
+                            )}
+                            {task.checklist_items && task.checklist_items.length > 0 && (
+                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: 4, background: 'rgba(52, 211, 153, 0.15)', color: '#34d399', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                <CheckSquare size={10} />
+                                <span>{task.checklist_items.filter(c => c.completed).length}/{task.checklist_items.length}</span>
+                              </span>
+                            )}
                             <span style={{ padding: '0.15rem 0.45rem', borderRadius: 4, background: '#0f172a', color: '#cbd5e1', fontSize: '0.7rem' }}>
                               {task.category}
                             </span>
@@ -1024,8 +1241,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                   <span>Done</span>
                                 </button>
                               )}
-                              <div style={{ fontSize: '0.72rem', color: isOverdue ? '#f43f5e' : '#94a3b8', fontWeight: isOverdue ? 800 : 500 }}>
-                                {new Date(task.due_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                              <div style={{ fontSize: '0.72rem', color: isOverdue ? '#f43f5e' : isDueToday ? '#f59e0b' : isDueTomorrow ? '#38bdf8' : '#94a3b8', fontWeight: isOverdue || isDueToday ? 800 : 500 }}>
+                                {isOverdue ? '⚠️ Overdue' : isDueToday ? '📅 Today' : isDueTomorrow ? '⏳ Tomorrow' : new Date(task.due_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
                               </div>
                             </div>
                           </div>

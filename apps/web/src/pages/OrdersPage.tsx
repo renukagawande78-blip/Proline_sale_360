@@ -17,8 +17,11 @@ interface OrdersPageProps {
   onOpenReturnRequestModal?: (order: Order) => void;
   onRequestAccountsApproval?: (orderId: string, message: string) => void;
   onAccountsApprovalResponse?: (orderId: string, status: 'APPROVED' | 'HOLD' | 'REJECTED', remark: string) => void;
+  onApproveReturnRequest?: (orderId: string) => void;
+  onRejectReturnRequest?: (orderId: string) => void;
   onOpenPODModal?: (order: Order) => void;
   onBulkImportOrders?: (orders: Order[]) => void;
+  onRefresh?: () => Promise<void> | void;
 }
 
 export const OrdersPage: React.FC<OrdersPageProps> = (props) => {

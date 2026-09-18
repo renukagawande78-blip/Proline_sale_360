@@ -68,6 +68,18 @@ export const ProductsMasterView: React.FC<ProductsMasterViewProps> = ({ products
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    if (products && products.length > 0) {
+      setLocalProducts(deduplicateProducts(products));
+    }
+  }, [products]);
+
+  useEffect(() => {
+    if (initialCompanies && initialCompanies.length > 0) {
+      setLocalCompanies(initialCompanies);
+    }
+  }, [initialCompanies]);
+
   const handleSyncLiveProducts = async () => {
     setIsSyncing(true);
     const [liveProds, liveComps] = await Promise.all([

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Receipt, DollarSign, CheckCircle2, X, Truck, FileSpreadsheet, PackageX, FileCheck2, AlertTriangle, ArrowRight, ShieldCheck, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Receipt, DollarSign, CheckCircle2, X, Truck, FileSpreadsheet, PackageX, FileCheck2, AlertTriangle, ArrowRight, ShieldCheck, FileText, MoreVertical } from 'lucide-react';
 import { Order, Agency, isOrderDispatchedOrBeyond } from '../../types';
 import { useNotifications } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
@@ -13,7 +13,7 @@ interface AccountsViewProps {
   onGenerateInvoice?: (order: Order, invoiceNumber: string, billingTotalQty: number, invoiceAmount: number, creditDays: number, remark: string, billedQtyByItem: Record<string, number>) => void;
   onCompleteGrn?: (orderId: string, grnNumber: string, grnDate: string, grnValue: number, grnRemark: string) => void;
   onReattemptDelivery?: (order: Order) => void;
-  onViewInvoice?: (order: Order) => void;
+  onViewInvoice?: (order: Order, mode?: 'SALES_ORDER' | 'DISPATCH_CHALLAN') => void;
 }
 
 export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, onGenerateInvoice, onCompleteGrn, onReattemptDelivery, onViewInvoice }) => {
@@ -21,9 +21,22 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
   const { currentUser } = useAuth();
   const canViewAllCompanies = checkIsSuperAdmin(currentUser) || !currentUser?.company_handle || currentUser?.company_handle === 'All';
   const [activeTab, setActiveTab] = useState<'BILLS' | 'GRN'>('BILLS');
+  const [billingFilter, setBillingFilter] = useState<'ALL' | 'UPCOMING' | 'COMPLETED'>('ALL');
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState('');
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+
+  // Close 3-dot action dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (openActionMenuId && !(e.target as HTMLElement)?.closest('.action-menu-container')) {
+        setOpenActionMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openActionMenuId]);
 
   const getPartyName = (ord: Order | null) => {
     if (!ord) return '—';
@@ -53,12 +66,17 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
 
   // Billing users see only companies mapped to their login; Super Admin / All
   // handles continue to see the complete queue through the same helper.
-  const billingQueueOrders = orders
+  const allBillingOrders = orders
     .filter(o => 
       o.status === 'APPROVED' || 
       o.status === 'ACCOUNTS_APPROVED' || 
       o.status === 'SALES_ADMIN_APPROVED' || 
+      o.status === 'SUBMITTED' ||
+      o.status === 'WAIT_FOR_STOCK' ||
+      o.status === 'INVENTORY_AUDITED' ||
       o.status === 'BILLED' || 
+      o.status === 'INVOICED' || 
+      Boolean(o.invoice_number) ||
       o.status === 'DISPATCHED' || 
       o.status === 'PARTIALLY_DISPATCHED' ||
       o.status === 'OUT_FOR_DELIVERY' ||
@@ -73,6 +91,33 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
       const weightB = priorityWeight[b.priority || 'MEDIUM'] || 2;
       return weightB - weightA;
     });
+
+  // Upcoming For Billing: Orders pending invoice generation
+  const upcomingBillingOrders = allBillingOrders.filter(o => 
+    !o.invoice_number && 
+    o.status !== 'BILLED' && 
+    o.status !== 'INVOICED' && 
+    o.status !== 'DISPATCHED' && 
+    o.status !== 'DELIVERED' && 
+    o.status !== 'COMPLETED'
+  );
+
+  // Completed Billing: Orders that have bill/invoice issued
+  const completedBillingOrders = allBillingOrders.filter(o => 
+    Boolean(o.invoice_number) || 
+    o.status === 'BILLED' || 
+    o.status === 'INVOICED' || 
+    o.status === 'DISPATCHED' || 
+    o.status === 'DELIVERED' || 
+    o.status === 'COMPLETED'
+  );
+
+  // Filtered orders according to active sub-tab
+  const displayedBillingOrders = billingFilter === 'UPCOMING'
+    ? upcomingBillingOrders
+    : billingFilter === 'COMPLETED'
+    ? completedBillingOrders
+    : allBillingOrders;
 
   const formatBilledQtyDisplay = (order: Order) => {
     if (!order.invoice_number && (order.billing_total_qty == null || order.billing_total_qty === 0)) return '—';
@@ -160,7 +205,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
     const sumQty = Object.values(initialQty).reduce((sum, qty) => sum + qty, 0) || order.total_qty_pcs || 0;
     setBillingTotalQtyInput(order.billing_total_qty && order.billing_total_qty > 0 ? order.billing_total_qty : sumQty);
     setBillingAmountInput(order.invoice_amount && order.invoice_amount > 0 ? order.invoice_amount : '');
-    setInvoiceRemark((order.remarks || '').replace(/<!--[\s\S]*?-->/g, '').trim());
+    setInvoiceRemark('');
   };
 
   const handleOpenGrnModal = (order: Order) => {
@@ -170,10 +215,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
     setGrnNumberInput(order.grn_number || `GRN-${yr}-${orderNumDigits}`);
     setGrnDateInput(new Date().toISOString().substring(0, 10));
     setGrnValueInput(order.grn_value && order.grn_value > 0 ? order.grn_value : (order.invoice_amount || order.total_amount || 0));
-    const defaultRemark = order.pod_issue_details 
-      ? `POD Exception (${order.pod_issue_type || 'Discrepancy'}): ${order.pod_issue_details}` 
-      : (order.pod_issue_type ? `GRN issued for ${order.pod_issue_type}` : 'GRN issued for delivery discrepancy');
-    setGrnRemarkInput(order.grn_remark || defaultRemark);
+    setGrnRemarkInput(order.grn_remark || '');
   };
 
   const handleItemBoxChange = (itemId: string, val: number, pcsPerBox: number) => {
@@ -317,7 +359,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
           }}
         >
           <Receipt size={18} />
-          <span>Issue Bills / Invoices ({billingQueueOrders.length})</span>
+          <span>Issue Bills / Invoices ({allBillingOrders.length})</span>
         </button>
 
         <button
@@ -382,16 +424,111 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
 
       {/* TAB 1: BILLING QUEUE (ISSUE BILLS) */}
       {activeTab === 'BILLS' && (
-        <div className="data-table-container">
-          <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Billing Queue — Stock Verified Orders ({billingQueueOrders.length})</h2>
-            <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 700 }}>Priority Sorted (High Priority at Top)</span>
+        <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #334155', borderRadius: 12, background: 'var(--bg-card)', marginBottom: '1.5rem', boxShadow: 'var(--shadow-lg)' }}>
+          <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', background: '#0b1329' }}>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>
+                Billing Queue — {billingFilter === 'UPCOMING' ? 'Upcoming For Billing' : billingFilter === 'COMPLETED' ? 'Completed Billing' : 'All Orders'} ({displayedBillingOrders.length})
+              </h2>
+              <span style={{ fontSize: '0.775rem', color: '#94a3b8' }}>
+                {billingFilter === 'UPCOMING' && 'Approved orders awaiting tax invoice generation and billing'}
+                {billingFilter === 'COMPLETED' && 'Orders with completed tax invoicing and bill numbers'}
+                {billingFilter === 'ALL' && 'All orders in billing lifecycle sorted by priority'}
+              </span>
+            </div>
+
+            {/* Sub-Filter Pills for Billing */}
+            <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setBillingFilter('ALL')}
+                style={{
+                  padding: '0.4rem 0.85rem',
+                  borderRadius: 20,
+                  border: billingFilter === 'ALL' ? '1.5px solid #38bdf8' : '1px solid #334155',
+                  background: billingFilter === 'ALL' ? 'rgba(56, 189, 248, 0.18)' : '#0f172a',
+                  color: billingFilter === 'ALL' ? '#38bdf8' : '#94a3b8',
+                  fontWeight: 800,
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>All Orders</span>
+                <span style={{ background: billingFilter === 'ALL' ? '#38bdf8' : '#334155', color: billingFilter === 'ALL' ? '#090d16' : '#94a3b8', padding: '0.1rem 0.45rem', borderRadius: 9999, fontSize: '0.675rem', fontWeight: 900 }}>
+                  {allBillingOrders.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBillingFilter('UPCOMING')}
+                style={{
+                  padding: '0.4rem 0.85rem',
+                  borderRadius: 20,
+                  border: billingFilter === 'UPCOMING' ? '1.5px solid #fbbf24' : '1px solid #334155',
+                  background: billingFilter === 'UPCOMING' ? 'rgba(245, 158, 11, 0.18)' : '#0f172a',
+                  color: billingFilter === 'UPCOMING' ? '#fbbf24' : '#94a3b8',
+                  fontWeight: 800,
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>⏳ Upcoming For Billing</span>
+                <span style={{ background: billingFilter === 'UPCOMING' ? '#fbbf24' : '#334155', color: billingFilter === 'UPCOMING' ? '#090d16' : '#94a3b8', padding: '0.1rem 0.45rem', borderRadius: 9999, fontSize: '0.675rem', fontWeight: 900 }}>
+                  {upcomingBillingOrders.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBillingFilter('COMPLETED')}
+                style={{
+                  padding: '0.4rem 0.85rem',
+                  borderRadius: 20,
+                  border: billingFilter === 'COMPLETED' ? '1.5px solid #34d399' : '1px solid #334155',
+                  background: billingFilter === 'COMPLETED' ? 'rgba(52, 211, 153, 0.18)' : '#0f172a',
+                  color: billingFilter === 'COMPLETED' ? '#34d399' : '#94a3b8',
+                  fontWeight: 800,
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>✅ Completed Billing</span>
+                <span style={{ background: billingFilter === 'COMPLETED' ? '#34d399' : '#334155', color: billingFilter === 'COMPLETED' ? '#090d16' : '#94a3b8', padding: '0.1rem 0.45rem', borderRadius: 9999, fontSize: '0.675rem', fontWeight: 900 }}>
+                  {completedBillingOrders.length}
+                </span>
+              </button>
+            </div>
           </div>
 
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Order Number</th>
+          <div
+            className="data-table-container both-scrollbars scrollable-table"
+            style={{
+              maxHeight: 'calc(100vh - 270px)',
+              minHeight: 340,
+              overflowX: 'auto',
+              overflowY: 'auto',
+              border: 'none',
+              borderRadius: 0,
+              boxShadow: 'none'
+            }}
+          >
+            <table className="data-table" style={{ minWidth: 1100, width: '100%' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 20, backgroundColor: '#0d1527' }}>
+                <tr>
+                  <th>Order Number</th>
                 <th>Priority</th>
                 <th>Agency / B2B Party</th>
                 <th>Payment Type</th>
@@ -405,14 +542,19 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
               </tr>
             </thead>
             <tbody>
-              {billingQueueOrders.length === 0 ? (
+              {displayedBillingOrders.length === 0 ? (
                 <tr>
                   <td colSpan={11} style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
-                    No orders pending billing. Orders marked In Stock in Order Approvals appear here sorted by priority.
+                    {billingFilter === 'UPCOMING'
+                      ? 'No upcoming orders waiting for billing. All verified orders are billed.'
+                      : billingFilter === 'COMPLETED'
+                      ? 'No completed billing orders yet.'
+                      : 'No orders found in Billing Console.'}
                   </td>
                 </tr>
               ) : (
-                billingQueueOrders.map(order => {
+                displayedBillingOrders.map((order, index) => {
+                  const isLastItems = index >= displayedBillingOrders.length - 2 && displayedBillingOrders.length > 2;
                   const totalDispatchedVal = order.items?.reduce((sum, item) => {
                     return sum + ((item.dispatched_qty_pcs || 0) * item.unit_price);
                   }, 0) || order.total_amount;
@@ -467,9 +609,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                           <span className="status-badge status-SUBMITTED">READY FOR BILL</span>
                         )}
                       </td>
-                      <td style={{ textAlign: 'center' }}>
+                      <td style={{ textAlign: 'center', position: 'relative' }}>
                         {!isBilled ? (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                             <button 
                               className="btn btn-primary" 
                               onClick={() => handleOpenInvoiceModal(order)}
@@ -477,69 +619,315 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                             >
                               <Receipt size={14} /> {order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => exportOrderProductSheet(order)}
-                              style={{
-                                background: 'rgba(16, 185, 129, 0.15)',
-                                border: '1px solid #10b981',
-                                color: '#34d399',
-                                padding: '0.35rem 0.65rem',
-                                borderRadius: 6,
-                                fontSize: '0.75rem',
-                                fontWeight: 800,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.3rem',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                              title={`Download ${order.order_number}.xlsx (Product list for spreadsheet/ERP upload)`}
-                            >
-                              <FileSpreadsheet size={14} /> Excel
-                            </button>
+                            
+                            <div className="action-menu-container" style={{ position: 'relative', display: 'inline-block' }}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenActionMenuId(openActionMenuId === order.id ? null : order.id);
+                                }}
+                                className="btn btn-outline"
+                                style={{
+                                  padding: '0.35rem 0.45rem',
+                                  borderRadius: 6,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderColor: openActionMenuId === order.id ? '#38bdf8' : '#334155',
+                                  background: openActionMenuId === order.id ? 'rgba(56, 189, 248, 0.15)' : 'rgba(30, 41, 59, 0.6)',
+                                  color: openActionMenuId === order.id ? '#38bdf8' : '#cbd5e1',
+                                  cursor: 'pointer'
+                                }}
+                                title="More actions (Sale Order PDF, Excel XLS, etc.)"
+                              >
+                                <MoreVertical size={15} />
+                              </button>
+
+                              {openActionMenuId === order.id && (
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    right: 0,
+                                    top: isLastItems ? 'auto' : 'calc(100% + 4px)',
+                                    bottom: isLastItems ? 'calc(100% + 4px)' : 'auto',
+                                    zIndex: 150,
+                                    minWidth: 190,
+                                    background: '#0f172a',
+                                    border: '1px solid #334155',
+                                    borderRadius: 8,
+                                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6)',
+                                    padding: '0.35rem 0',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    textAlign: 'left'
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenuId(null);
+                                      if (onViewInvoice) onViewInvoice(order, 'SALES_ORDER');
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem',
+                                      width: '100%',
+                                      padding: '0.5rem 0.75rem',
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#38bdf8',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                    title="View or Print Sales Order Booking Form PDF"
+                                  >
+                                    <FileText size={15} color="#38bdf8" />
+                                    <span>Sale Order PDF</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenuId(null);
+                                      exportOrderProductSheet(order);
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem',
+                                      width: '100%',
+                                      padding: '0.5rem 0.75rem',
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#34d399',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                    title={`Download ${order.order_number}.xlsx`}
+                                  >
+                                    <FileSpreadsheet size={15} color="#34d399" />
+                                    <span>Export Excel (XLS)</span>
+                                  </button>
+
+                                  <div style={{ height: 1, background: '#1e293b', margin: '0.25rem 0' }} />
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenuId(null);
+                                      handleOpenInvoiceModal(order);
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem',
+                                      width: '100%',
+                                      padding: '0.5rem 0.75rem',
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#f8fafc',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                  >
+                                    <Receipt size={15} color="#60a5fa" />
+                                    <span>{order.reattempt_delivery ? 'Review / Modify Bill' : 'Issue Bill'}</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                             <button
                               className="btn btn-outline"
-                              onClick={() => onViewInvoice && onViewInvoice(order)}
+                              onClick={() => onViewInvoice && onViewInvoice(order, 'DISPATCH_CHALLAN')}
                               style={{ borderColor: '#f59e0b', color: '#fbbf24', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
                               title="View / Print Delivery Challan"
                             >
                               <Truck size={14} /> Delivery Challan
                             </button>
-                            {!isOrderDispatchedOrBeyond(order.status) && (
+
+                            <div className="action-menu-container" style={{ position: 'relative', display: 'inline-block' }}>
                               <button
-                                className="btn"
-                                onClick={() => handleOpenInvoiceModal(order)}
-                                style={{ background: 'rgba(56, 189, 248, 0.12)', border: '1px solid #38bdf8', color: '#38bdf8', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                                title="Edit Invoice details on this order"
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenActionMenuId(openActionMenuId === order.id ? null : order.id);
+                                }}
+                                className="btn btn-outline"
+                                style={{
+                                  padding: '0.35rem 0.45rem',
+                                  borderRadius: 6,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderColor: openActionMenuId === order.id ? '#38bdf8' : '#334155',
+                                  background: openActionMenuId === order.id ? 'rgba(56, 189, 248, 0.15)' : 'rgba(30, 41, 59, 0.6)',
+                                  color: openActionMenuId === order.id ? '#38bdf8' : '#cbd5e1',
+                                  cursor: 'pointer'
+                                }}
+                                title="More actions (Sale Order PDF, Excel XLS, Edit Invoice, etc.)"
                               >
-                                <Receipt size={14} /> Edit Invoice
+                                <MoreVertical size={15} />
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => exportOrderProductSheet(order)}
-                              style={{
-                                background: 'rgba(16, 185, 129, 0.15)',
-                                border: '1px solid #10b981',
-                                color: '#34d399',
-                                padding: '0.35rem 0.65rem',
-                                borderRadius: 6,
-                                fontSize: '0.75rem',
-                                fontWeight: 800,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.3rem',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                              title={`Download ${order.order_number}.xlsx (Product list)`}
-                            >
-                              <FileSpreadsheet size={14} /> Excel
-                            </button>
+
+                              {openActionMenuId === order.id && (
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    right: 0,
+                                    top: isLastItems ? 'auto' : 'calc(100% + 4px)',
+                                    bottom: isLastItems ? 'calc(100% + 4px)' : 'auto',
+                                    zIndex: 150,
+                                    minWidth: 190,
+                                    background: '#0f172a',
+                                    border: '1px solid #334155',
+                                    borderRadius: 8,
+                                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6)',
+                                    padding: '0.35rem 0',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    textAlign: 'left'
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenuId(null);
+                                      if (onViewInvoice) onViewInvoice(order, 'SALES_ORDER');
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem',
+                                      width: '100%',
+                                      padding: '0.5rem 0.75rem',
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#38bdf8',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                    title="View or Print Sales Order Booking Form PDF"
+                                  >
+                                    <FileText size={15} color="#38bdf8" />
+                                    <span>Sale Order PDF</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenuId(null);
+                                      exportOrderProductSheet(order);
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem',
+                                      width: '100%',
+                                      padding: '0.5rem 0.75rem',
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#34d399',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                    title={`Download ${order.order_number}.xlsx`}
+                                  >
+                                    <FileSpreadsheet size={15} color="#34d399" />
+                                    <span>Export Excel (XLS)</span>
+                                  </button>
+
+                                  <div style={{ height: 1, background: '#1e293b', margin: '0.25rem 0' }} />
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenuId(null);
+                                      if (onViewInvoice) onViewInvoice(order, 'DISPATCH_CHALLAN');
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem',
+                                      width: '100%',
+                                      padding: '0.5rem 0.75rem',
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#fbbf24',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(245, 158, 11, 0.12)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                  >
+                                    <Truck size={15} color="#fbbf24" />
+                                    <span>Delivery Challan</span>
+                                  </button>
+
+                                  {!isOrderDispatchedOrBeyond(order.status) && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionMenuId(null);
+                                        handleOpenInvoiceModal(order);
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        width: '100%',
+                                        padding: '0.5rem 0.75rem',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#38bdf8',
+                                        fontSize: '0.78rem',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        textAlign: 'left'
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                    >
+                                      <Receipt size={15} color="#38bdf8" />
+                                      <span>Edit Invoice</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </td>
@@ -550,12 +938,13 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
             </tbody>
           </table>
         </div>
+      </div>
       )}
 
       {/* TAB 2: GRN QUEUE (ISSUE GRN) */}
       {activeTab === 'GRN' && (
-        <div className="data-table-container">
-          <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #334155', borderRadius: 12, background: 'var(--bg-card)', marginBottom: '1.5rem', boxShadow: 'var(--shadow-lg)' }}>
+          <div style={{ padding: '1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', background: '#0b1329' }}>
             <div>
               <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fb7185', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <PackageX size={20} /> GRN Issuance Queue — Returns &amp; Delivery Exceptions ({grnQueueOrders.length})
@@ -566,10 +955,22 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
             </div>
           </div>
 
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Order Number</th>
+          <div
+            className="data-table-container both-scrollbars scrollable-table"
+            style={{
+              maxHeight: 'calc(100vh - 270px)',
+              minHeight: 340,
+              overflowX: 'auto',
+              overflowY: 'auto',
+              border: 'none',
+              borderRadius: 0,
+              boxShadow: 'none'
+            }}
+          >
+            <table className="data-table" style={{ minWidth: 1050, width: '100%' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 20, backgroundColor: '#0d1527' }}>
+                <tr>
+                  <th>Order Number</th>
                 <th>Agency / Party</th>
                 <th>Bill No &amp; Original Amount</th>
                 <th>POD Exception / Reason</th>
@@ -592,7 +993,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                   </td>
                 </tr>
               ) : (
-                grnQueueOrders.map(order => {
+                grnQueueOrders.map((order, index) => {
+                  const isLastGrnItem = index >= grnQueueOrders.length - 2 && grnQueueOrders.length > 2;
                   return (
                     <tr key={order.id} style={{ background: 'rgba(244, 63, 94, 0.04)' }}>
                       <td>
@@ -627,8 +1029,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                           PENDING GRN
                         </span>
                       </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <td style={{ textAlign: 'center', position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                           <button
                             className="btn btn-danger"
                             onClick={() => handleOpenGrnModal(order)}
@@ -658,26 +1060,110 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
                           >
                             <Truck size={15} /> 2. Re-attempt Delivery
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => exportOrderProductSheet(order)}
-                            style={{
-                              background: 'rgba(16, 185, 129, 0.15)',
-                              border: '1px solid #10b981',
-                              color: '#34d399',
-                              padding: '0.4rem 0.65rem',
-                              borderRadius: 6,
-                              fontSize: '0.75rem',
-                              fontWeight: 800,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.3rem',
-                              cursor: 'pointer'
-                            }}
-                            title={`Download ${order.order_number}.xlsx`}
-                          >
-                            <FileSpreadsheet size={14} /> Excel
-                          </button>
+
+                          <div className="action-menu-container" style={{ position: 'relative', display: 'inline-block' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenActionMenuId(openActionMenuId === order.id ? null : order.id);
+                              }}
+                              className="btn btn-outline"
+                              style={{
+                                padding: '0.4rem 0.5rem',
+                                borderRadius: 6,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderColor: openActionMenuId === order.id ? '#38bdf8' : '#334155',
+                                background: openActionMenuId === order.id ? 'rgba(56, 189, 248, 0.15)' : 'rgba(30, 41, 59, 0.6)',
+                                color: openActionMenuId === order.id ? '#38bdf8' : '#cbd5e1',
+                                cursor: 'pointer'
+                              }}
+                              title="More actions (Sale Order PDF, Excel XLS)"
+                            >
+                              <MoreVertical size={15} />
+                            </button>
+
+                            {openActionMenuId === order.id && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: isLastGrnItem ? 'auto' : 'calc(100% + 4px)',
+                                  bottom: isLastGrnItem ? 'calc(100% + 4px)' : 'auto',
+                                  zIndex: 150,
+                                  minWidth: 190,
+                                  background: '#0f172a',
+                                  border: '1px solid #334155',
+                                  borderRadius: 8,
+                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6)',
+                                  padding: '0.35rem 0',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  textAlign: 'left'
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenActionMenuId(null);
+                                    if (onViewInvoice) onViewInvoice(order, 'SALES_ORDER');
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    width: '100%',
+                                    padding: '0.5rem 0.75rem',
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#38bdf8',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    textAlign: 'left'
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                  title="View or Print Sales Order Booking Form PDF"
+                                >
+                                  <FileText size={15} color="#38bdf8" />
+                                  <span>Sale Order PDF</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenActionMenuId(null);
+                                    exportOrderProductSheet(order);
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    width: '100%',
+                                    padding: '0.5rem 0.75rem',
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#34d399',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    textAlign: 'left'
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                                  title={`Download ${order.order_number}.xlsx`}
+                                >
+                                  <FileSpreadsheet size={15} color="#34d399" />
+                                  <span>Export Excel (XLS)</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -687,6 +1173,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
             </tbody>
           </table>
         </div>
+      </div>
       )}
 
       {/* Tax Invoice Generation Modal */}
@@ -886,30 +1373,53 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
 
             <div style={{ marginBottom: '1.25rem' }}>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: 4 }}>BILLING REMARK</label>
-              <textarea rows={2} value={invoiceRemark} onChange={event => setInvoiceRemark(event.target.value)} placeholder="Example: 4 of 5 units issued; 1 pending stock." style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', resize: 'vertical' }} />
+              <textarea rows={2} value={invoiceRemark || ''} onChange={event => setInvoiceRemark(event.target.value)} placeholder="Remark..." style={{ width: '100%', padding: '0.6rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', resize: 'vertical' }} />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => selectedOrderForInvoice && exportOrderProductSheet(selectedOrderForInvoice)}
-                style={{
-                  background: 'rgba(16, 185, 129, 0.15)',
-                  border: '1px solid #10b981',
-                  color: '#34d399',
-                  padding: '0.45rem 0.9rem',
-                  fontSize: '0.78rem',
-                  fontWeight: 800,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  cursor: 'pointer'
-                }}
-                title={`Download ${selectedOrderForInvoice.order_number}.xlsx (Ordered Products Sheet)`}
-              >
-                <FileSpreadsheet size={16} /> Download Excel Product Sheet
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => selectedOrderForInvoice && onViewInvoice && onViewInvoice(selectedOrderForInvoice, 'SALES_ORDER')}
+                  style={{
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid #38bdf8',
+                    color: '#38bdf8',
+                    padding: '0.45rem 0.85rem',
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    cursor: 'pointer'
+                  }}
+                  title={`View / Print Sale Order PDF for ${selectedOrderForInvoice.order_number}`}
+                >
+                  <FileText size={16} /> View Sale Order PDF
+                </button>
+
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => selectedOrderForInvoice && exportOrderProductSheet(selectedOrderForInvoice)}
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid #10b981',
+                    color: '#34d399',
+                    padding: '0.45rem 0.85rem',
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    cursor: 'pointer'
+                  }}
+                  title={`Download ${selectedOrderForInvoice.order_number}.xlsx (Ordered Products Sheet)`}
+                >
+                  <FileSpreadsheet size={16} /> Download Excel (XLS)
+                </button>
+              </div>
 
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button className="btn btn-outline" onClick={() => setSelectedOrderForInvoice(null)}>Cancel</button>
@@ -1015,9 +1525,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
               </label>
               <textarea
                 rows={3}
-                value={grnRemarkInput}
+                value={grnRemarkInput || ''}
                 onChange={event => setGrnRemarkInput(event.target.value)}
-                placeholder="Enter reason for GRN issuance (e.g. 5 Pcs damaged in transit, store accepted remaining)..."
+                placeholder="Remark..."
                 style={{ width: '100%', padding: '0.55rem 0.65rem', background: '#0f172a', border: '1px solid #475569', borderRadius: 6, color: '#f8fafc', fontSize: '0.8rem', resize: 'vertical' }}
               />
             </div>

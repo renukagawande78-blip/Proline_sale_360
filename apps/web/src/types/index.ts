@@ -491,24 +491,82 @@ export const isOrderDispatchedOrBeyond = (status?: string): boolean => {
 
 export type ReturnType = 'REPLACEMENT' | 'DAMAGED_RETURN';
 
+export type ReturnRequestStatus = 
+  | 'PENDING_ADMIN_APPROVAL' 
+  | 'APPROVED'
+  | 'APPROVED_FOR_COLLECTION' 
+  | 'COLLECTED' 
+  | 'WAITING_FOR_COMPANY_APPROVAL'
+  | 'TALKED_WITH_COMPANY' 
+  | 'GRN_RELEASED' 
+  | 'REPLACEMENT_ORDER_CREATED' 
+  | 'DISPATCH_PROCESSED'
+  | 'REJECTED';
+
 export interface ReturnRequestItem {
-  order_item_id: string;
+  id?: string;
+  order_item_id?: string;
+  product_id?: string;
   product_name: string;
+  product_code?: string;
+  unit_price?: number;
+  pcs_per_box?: number;
+  box_qty?: number;
+  loose_pcs?: number;
   requested_qty_pcs: number;
+  is_custom_item?: boolean; // When product was added from brand catalog that wasn't in original order
   replaced_qty_pcs?: number;
   damaged_returned_qty_pcs?: number;
+  collected_box_qty?: number;
+  collected_loose_pcs?: number;
+  collected_qty_pcs?: number;
+  remark?: string;
 }
 
 export interface ReturnRequest {
   id: string;
   order_id: string;
+  order_number?: string;
+  brand_id?: string;
+  brand_name?: string;
+  agency_id?: string;
+  agency_name?: string;
+  segment?: 'FMCG' | 'FMCD';
   return_type: ReturnType;
   reason: string;
-  status: 'PENDING_ADMIN_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DISPATCH_PROCESSED';
+  remarks?: string;
+  total_damaged_pcs?: number;
+  status: ReturnRequestStatus;
   requested_by_name: string;
   requested_at: string;
+  raised_by_name?: string;
+  created_at?: string;
   approved_by_name?: string;
   approved_at?: string;
+  // Dispatch vehicle collection information
+  collected_by_name?: string;
+  collected_at?: string;
+  vehicle_number?: string;
+  tempo_number?: string;
+  driver_name?: string;
+  driver_mobile?: string;
+  rental_agency_name?: string;
+  transporter_name?: string;
+  collection_remarks?: string;
+  // Super admin discussion with company
+  talked_with_company?: boolean;
+  company_discussion_notes?: string;
+  company_discussed_at?: string;
+  company_discussed_by?: string;
+  // Settlement / Resolution
+  resolution_type?: 'GRN' | 'REPLACEMENT_ORDER';
+  grn_number?: string;
+  grn_amount?: number;
+  grn_date?: string;
+  grn_remark?: string;
+  replacement_order_id?: string;
+  replacement_order_number?: string;
+  reference_number?: string;
   items: ReturnRequestItem[];
   dispatch_notes?: string;
 }
@@ -607,6 +665,15 @@ export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD' | '
 
 export type TaskPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 
+export type TaskRepeatFrequency = 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+export type TaskAssignmentType = 'SELF' | 'OTHER';
+
+export interface TaskChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 export type TaskCategory = 
   | 'SALES' 
   | 'BILLING' 
@@ -615,7 +682,8 @@ export type TaskCategory =
   | 'AUDIT' 
   | 'OPERATIONS' 
   | 'GENERAL' 
-  | 'FOLLOW_UP';
+  | 'FOLLOW_UP'
+  | 'CHECKLIST';
 
 export interface TaskAttachment {
   id: string;
@@ -644,7 +712,8 @@ export interface TaskItem {
   category: TaskCategory;
   status: TaskStatus;
   
-  // Assignment
+  // Assignment & Delegation
+  assignment_type?: TaskAssignmentType; // 'SELF' (For Self) vs 'OTHER' (Assign to other)
   assigned_to_id: string;
   assigned_to_name: string;
   assigned_to_role?: string;
@@ -660,6 +729,15 @@ export interface TaskItem {
   reminder_date?: string; // ISO string
   reminder_note?: string;
   reminder_sent?: boolean;
+
+  // Recurrence / Repeating Schedule
+  repeat_frequency?: TaskRepeatFrequency; // 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
+  skip_weekends?: boolean; // Skip Saturday and Sunday
+  parent_task_id?: string;
+  iteration_count?: number;
+
+  // Operation Checklist items
+  checklist_items?: TaskChecklistItem[];
   
   // Support Documentation
   support_docs?: TaskAttachment[];

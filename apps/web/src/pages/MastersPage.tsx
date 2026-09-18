@@ -17,7 +17,8 @@ import {
   ShieldCheck,
   AlertTriangle,
   Compass,
-  Map
+  Map,
+  RefreshCw
 } from 'lucide-react';
 import { 
   isCompanyAllowedForUser, 
@@ -33,7 +34,7 @@ import {
 
 
 import { useAuth } from '../context/AuthContext';
-import { Company, Agency, Product } from '../types';
+import { Company, Agency, Product, User } from '../types';
 
 import { AgenciesMasterView } from '../views/masters/AgenciesMasterView';
 import { AreasMasterView } from '../views/masters/AreasMasterView';
@@ -54,13 +55,25 @@ interface MastersPageProps {
   onOpenUserMgmtModal?: (user?: any) => void;
   onOpenCreateOrderForAgency?: (agencyId: string) => void;
   onClearOperationalData?: () => Promise<void> | void;
+  onRefreshData?: () => Promise<void> | void;
+  refreshTrigger?: number;
+  liveCompanies?: Company[];
+  liveAgencies?: Agency[];
+  liveProducts?: Product[];
+  liveUsers?: User[];
 }
 
 export const MastersPage: React.FC<MastersPageProps> = ({ 
   initialTab = 'agencies', 
   onOpenUserMgmtModal, 
   onOpenCreateOrderForAgency,
-  onClearOperationalData 
+  onClearOperationalData,
+  onRefreshData,
+  refreshTrigger,
+  liveCompanies,
+  liveAgencies,
+  liveProducts,
+  liveUsers
 }) => {
 
   const { users, currentUser, hasPermission, createUser } = useAuth();
@@ -77,20 +90,71 @@ export const MastersPage: React.FC<MastersPageProps> = ({
   }, [initialTab]);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Master States — Live from Supabase ONLY (no dummy/mock data)
-  const [companiesList, setCompaniesList] = useState<Company[]>([]);
-  const [agenciesList, setAgenciesList] = useState<Agency[]>([]);
-  const [productsList, setProductsList] = useState<Product[]>([]);
+  const [companiesList, setCompaniesList] = useState<Company[]>(() => liveCompanies?.length ? deduplicateCompanies(liveCompanies) : []);
+  const [agenciesList, setAgenciesList] = useState<Agency[]>(() => liveAgencies?.length ? deduplicateAgencies(liveAgencies) : []);
+  const [productsList, setProductsList] = useState<Product[]>(() => liveProducts?.length ? deduplicateProducts(liveProducts) : []);
   const [isRegisterAgencyOpen, setIsRegisterAgencyOpen] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+
+  // Sync with live props from parent
+  useEffect(() => {
+    if (liveAgencies && liveAgencies.length > 0) {
+      setAgenciesList(deduplicateAgencies(liveAgencies));
+    }
+  }, [liveAgencies]);
+
+  useEffect(() => {
+    if (liveProducts && liveProducts.length > 0) {
+      setProductsList(deduplicateProducts(liveProducts));
+    }
+  }, [liveProducts]);
+
+  useEffect(() => {
+    if (liveCompanies && liveCompanies.length > 0) {
+      setCompaniesList(deduplicateCompanies(liveCompanies));
+    }
+  }, [liveCompanies]);
+
+  const handleRefreshAllMasters = async () => {
+    setIsRefreshing(true);
+    try {
+      const [agRes, prRes, compRes] = await Promise.allSettled([
+        fetchAgenciesFromSupabaseTable(),
+        fetchProductsFromSupabase(),
+        fetchCompaniesFromSupabase()
+      ]);
+      if (agRes.status === 'fulfilled' && agRes.value.agencies) {
+        setAgenciesList(deduplicateAgencies(agRes.value.agencies));
+      }
+      if (prRes.status === 'fulfilled' && prRes.value) {
+        setProductsList(deduplicateProducts(prRes.value));
+      }
+      if (compRes.status === 'fulfilled' && compRes.value) {
+        setCompaniesList(deduplicateCompanies(compRes.value));
+      }
+      if (onRefreshData) {
+        await onRefreshData();
+      }
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      handleRefreshAllMasters();
+    }
+  }, [refreshTrigger]);
 
   // Load live agencies from Supabase table on page mount
   useEffect(() => {
     let isMounted = true;
     const loadLiveAgencies = async () => {
       const { agencies: liveList } = await fetchAgenciesFromSupabaseTable();
-      if (isMounted) {
+      if (isMounted && liveList && liveList.length > 0) {
         setAgenciesList(deduplicateAgencies(liveList));
       }
     };
@@ -105,7 +169,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({
     let isMounted = true;
     const loadLiveProducts = async () => {
       const liveList = await fetchProductsFromSupabase();
-      if (isMounted && liveList) {
+      if (isMounted && liveList && liveList.length > 0) {
         setProductsList(deduplicateProducts(liveList));
       }
     };
@@ -622,16 +686,41 @@ export const MastersPage: React.FC<MastersPageProps> = ({
       </div>
 
 
-      {/* Search Toolbar */}
-      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: '0.85rem 1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', maxWidth: 450 }}>
-        <Search size={16} color="#64748b" />
-        <input 
-          type="text" 
-          placeholder={`Search mapped ${activeTab}...`}
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%', fontSize: '0.85rem' }}
-        />
+      {/* Search Toolbar & Refresh */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 260, maxWidth: 450, flex: 1 }}>
+          <Search size={16} color="#64748b" />
+          <input 
+            type="text" 
+            placeholder={`Search mapped ${activeTab}...`}
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%', fontSize: '0.85rem' }}
+          />
+        </div>
+
+        <button
+          onClick={handleRefreshAllMasters}
+          disabled={isRefreshing}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.75rem 1.1rem',
+            background: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: 10,
+            color: '#38bdf8',
+            fontWeight: 800,
+            fontSize: '0.825rem',
+            cursor: isRefreshing ? 'wait' : 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          title="Refresh master data from live database"
+        >
+          <RefreshCw size={14} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+          {isRefreshing ? 'Refreshing...' : `Refresh ${activeTab === 'companies' ? 'Brands' : activeTab === 'products' ? 'Products (FMCG)' : activeTab === 'users' ? 'Users' : activeTab === 'agencies' ? 'Agencies' : 'Data'}`}
+        </button>
       </div>
 
       {/* Sub-Views */}
@@ -670,7 +759,7 @@ export const MastersPage: React.FC<MastersPageProps> = ({
       )}
 
       {activeTab === 'users' && !isSalesPerson && (
-        <UsersMasterView users={users} searchQuery={searchQuery} onOpenUserMgmtModal={onOpenUserMgmtModal} />
+        <UsersMasterView users={liveUsers && liveUsers.length > 0 ? liveUsers : users} searchQuery={searchQuery} onOpenUserMgmtModal={onOpenUserMgmtModal} />
       )}
 
       {activeTab === 'permissions' && (

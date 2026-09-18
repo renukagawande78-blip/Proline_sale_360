@@ -20,12 +20,14 @@ import {
   UploadCloud,
   History,
   ShieldCheck,
-  ExternalLink
+  ExternalLink,
+  Repeat,
+  CheckSquare
 } from 'lucide-react';
 import { TaskItem, TaskStatus, TaskAttachment, TaskPriority, TaskCategory } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { getRoleBadge } from '../context/NotificationContext';
-import { generateUuid } from '../lib/supabase';
+import { generateUuid, saveTaskToSupabase } from '../lib/supabase';
 
 interface TaskDetailsModalProps {
   task: TaskItem | null;
@@ -374,6 +376,35 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                   )}
                 </div>
               )}
+
+              {/* Recurrence Schedule Badge */}
+              {task.repeat_frequency && task.repeat_frequency !== 'NONE' && (
+                <div 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '0.35rem 0.75rem',
+                    borderRadius: 8,
+                    background: 'rgba(168, 85, 247, 0.15)',
+                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                    color: '#c084fc',
+                    fontSize: '0.82rem',
+                    fontWeight: 700
+                  }}
+                >
+                  <Repeat size={14} />
+                  <span>
+                    Repeats: {task.repeat_frequency === 'DAILY' ? 'Every Day' : task.repeat_frequency === 'WEEKLY' ? 'Every Week' : 'Every Month'}
+                    {task.skip_weekends ? ' (Skipping Weekends)' : ''}
+                  </span>
+                  {task.iteration_count && task.iteration_count > 1 && (
+                    <span style={{ padding: '0.1rem 0.4rem', borderRadius: 4, background: '#a855f7', color: 'white', fontSize: '0.7rem' }}>
+                      Cycle #{task.iteration_count}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -381,8 +412,19 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
             {/* Assigned To Card */}
             <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: '1rem 1.25rem' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-                Assigned Team Member
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Assigned Team Member
+                </span>
+                {task.assignment_type === 'SELF' ? (
+                  <span style={{ padding: '0.15rem 0.45rem', borderRadius: 4, background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', fontSize: '0.7rem', fontWeight: 800 }}>
+                    🙋 For Self
+                  </span>
+                ) : (
+                  <span style={{ padding: '0.15rem 0.45rem', borderRadius: 4, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', fontSize: '0.7rem', fontWeight: 800 }}>
+                    👥 Delegated
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div 
@@ -390,7 +432,7 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                     width: 38,
                     height: 38,
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
+                    background: task.assignment_type === 'SELF' ? 'linear-gradient(135deg, #a855f7, #6366f1)' : 'linear-gradient(135deg, #0284c7, #38bdf8)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -450,12 +492,78 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
           <div style={{ background: '#141f36', border: '1px solid #1e293b', borderRadius: 12, padding: '1.25rem' }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#38bdf8', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: 6 }}>
               <FileText size={16} />
-              <span>Task Summary & Scope of Work</span>
+              <span>Task Summary &amp; Scope of Work</span>
             </h3>
             <p style={{ fontSize: '0.92rem', color: '#f1f5f9', lineHeight: 1.6, whiteSpace: 'pre-wrap', margin: 0 }}>
               {task.summary || 'No detailed instructions provided.'}
             </p>
           </div>
+
+          {/* Operation Checklist Section if checklist items exist */}
+          {task.checklist_items && task.checklist_items.length > 0 && (
+            <div style={{ background: '#141f36', border: '1px solid #1e293b', borderRadius: 12, padding: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#34d399', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <CheckSquare size={16} />
+                  <span>Operation Checklist Steps ({task.checklist_items.filter(c => c.completed).length}/{task.checklist_items.length} Completed)</span>
+                </h3>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Click step to check/uncheck</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {task.checklist_items.map((item, idx) => (
+                  <div
+                    key={item.id || idx}
+                    onClick={() => {
+                      const updatedChecklist = task.checklist_items!.map((c, i) => i === idx ? { ...c, completed: !c.completed } : c);
+                      const updatedTask: TaskItem = {
+                        ...task,
+                        checklist_items: updatedChecklist
+                      };
+                      saveTaskToSupabase(updatedTask);
+                      if (onUpdateStatus) {
+                        onUpdateStatus(task.id, task.status, undefined, task.support_docs);
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.65rem 0.85rem',
+                      background: item.completed ? 'rgba(52, 211, 153, 0.1)' : '#1e293b',
+                      border: `1px solid ${item.completed ? 'rgba(52, 211, 153, 0.3)' : '#334155'}`,
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 5,
+                      border: `1.5px solid ${item.completed ? '#34d399' : '#64748b'}`,
+                      background: item.completed ? '#34d399' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#0f172a',
+                      flexShrink: 0
+                    }}>
+                      {item.completed && <CheckSquare size={14} color="#0f172a" />}
+                    </div>
+                    <span style={{
+                      fontSize: '0.88rem',
+                      color: item.completed ? '#94a3b8' : '#f8fafc',
+                      textDecoration: item.completed ? 'line-through' : 'none',
+                      fontWeight: 600
+                    }}>
+                      {item.text}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Support Documents Section */}
           <div>
@@ -634,8 +742,8 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                 </label>
                 <textarea 
                   rows={3}
-                  placeholder="Describe outcome, action taken, collection reference no, or verification summary..."
-                  value={completionRemarks}
+                  placeholder="Remark..."
+                  value={completionRemarks || ''}
                   onChange={(e) => setCompletionRemarks(e.target.value)}
                   style={{
                     width: '100%',

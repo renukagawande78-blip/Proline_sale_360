@@ -97,6 +97,12 @@ export const AgenciesMasterView: React.FC<AgenciesMasterViewProps> = ({ agencies
     };
   }, []);
 
+  useEffect(() => {
+    if (agencies && agencies.length > 0) {
+      setLocalAgencies(agencies);
+    }
+  }, [agencies]);
+
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
   const handleDeleteAgency = async (agencyId: string, agencyName: string) => {

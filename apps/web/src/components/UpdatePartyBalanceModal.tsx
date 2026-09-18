@@ -638,8 +638,8 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
             </label>
             <textarea
               rows={3}
-              placeholder="e.g. Received ₹50,000 via NEFT Ref #987123. Overdue cleared. Account approved for new orders."
-              value={remarks}
+              placeholder="Remark..."
+              value={remarks || ''}
               onChange={(e) => setRemarks(e.target.value)}
               style={{
                 width: '100%',

@@ -71,7 +71,7 @@ async function sendSingleMessage(accessToken, projectId, target, title, body, da
     android: {
       priority: 'high',
       notification: {
-        channel_id: 'proline_orders',
+        channel_id: 'prokap_oms_orders',
         sound: 'default',
         default_sound: true,
         default_vibrate_timings: true,
@@ -203,7 +203,7 @@ module.exports = async function handler(req, res) {
     let topicResult = null;
     if (topic || recipientTokens.size === 0) {
       try {
-        topicResult = await sendSingleMessage(accessToken, sa.project_id, { topic: topic || 'proline_orders' }, alertTitle, alertBody, dataPayload);
+        topicResult = await sendSingleMessage(accessToken, sa.project_id, { topic: topic || 'prokap_oms_orders' }, alertTitle, alertBody, dataPayload);
       } catch (tErr) {
         topicResult = { error: tErr.message };
       }

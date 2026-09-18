@@ -21,6 +21,8 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
   order,
   isOpen,
   onClose,
+  onApproveReturnRequest,
+  onRejectReturnRequest,
   onOpenEditOrder
 }) => {
   const { currentUser } = useAuth();
@@ -211,12 +213,13 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                   <th style={{ textAlign: 'center' }}>LOOSE PCS</th>
                   <th style={{ textAlign: 'center' }}>FREE PCS</th>
                   <th style={{ textAlign: 'center' }}>ORDERED DEMAND</th>
+                  {order.invoice_number && <th style={{ textAlign: 'center', color: '#34d399' }}>BILLED QTY</th>}
                 </tr>
               </thead>
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>
+                    <td colSpan={order.invoice_number ? 8 : 7} style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>
                       No SKU line items attached to this order.
                     </td>
                   </tr>
@@ -251,6 +254,24 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                         <td style={{ textAlign: 'center', fontWeight: 800, color: '#34d399' }}>
                           {qtyDisplay} ({item.total_qty_pcs?.toLocaleString() || 0} PCS)
                         </td>
+                        {order.invoice_number && (
+                          <td style={{ textAlign: 'center', fontWeight: 900, color: '#10b981', background: 'rgba(16, 185, 129, 0.08)' }}>
+                            {(() => {
+                              const issued = item.issued_qty_pcs != null && item.issued_qty_pcs > 0 ? item.issued_qty_pcs : (item.total_qty_pcs || 0);
+                              const pack = item.pcs_per_box && item.pcs_per_box > 0 ? item.pcs_per_box : 1;
+                              if (isFMCDItem || pack <= 1) {
+                                return `${issued.toLocaleString()} PCS`;
+                              }
+                              const bBox = Math.floor(issued / pack);
+                              const bLoose = issued % pack;
+                              return bBox > 0 && bLoose > 0
+                                ? `${bBox} BOX, ${bLoose} PCS`
+                                : bBox > 0
+                                  ? `${bBox} BOX`
+                                  : `${bLoose} PCS`;
+                            })()}
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -274,6 +295,11 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                     <td style={{ textAlign: 'center', fontWeight: 900, color: '#34d399' }}>
                       {totBox > 0 ? `${totBox} BOX` : ''}{totBox > 0 && totLoose > 0 ? ', ' : ''}{totLoose > 0 ? `${totLoose} PCS` : ''}{totBox === 0 && totLoose === 0 ? `${totPcs} PCS` : ''} ({totPcs.toLocaleString()} PCS)
                     </td>
+                    {order.invoice_number && (
+                      <td style={{ textAlign: 'center', fontWeight: 900, color: '#10b981', background: 'rgba(16, 185, 129, 0.08)' }}>
+                        {order.billing_total_qty ? `${order.billing_total_qty.toLocaleString()} PCS` : `${totPcs.toLocaleString()} PCS`}
+                      </td>
+                    )}
                   </tr>
                 </tfoot>
               )}
@@ -313,6 +339,131 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Return & Damaged Goods Request Section */}
+        {order.return_request && (
+          <div style={{
+            background: 'rgba(251, 191, 36, 0.05)',
+            border: '1px solid rgba(251, 191, 36, 0.3)',
+            borderRadius: 10,
+            padding: '1.25rem',
+            marginBottom: '1.25rem'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(251, 191, 36, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fbbf24' }}>
+                  <Package size={16} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#f8fafc' }}>
+                    {order.return_request.return_type === 'DAMAGED_RETURN' ? 'Damaged Goods Return Request' : 'Stock Replacement Request'}
+                  </h4>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    Raised by {order.return_request.raised_by_name || 'Sales Person'} on {fmtDate(order.return_request.created_at)}
+                  </div>
+                </div>
+              </div>
+
+              <span style={{
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                padding: '0.25rem 0.65rem',
+                borderRadius: 6,
+                background: order.return_request.status === 'PENDING_ADMIN_APPROVAL' ? 'rgba(251, 191, 36, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                color: order.return_request.status === 'PENDING_ADMIN_APPROVAL' ? '#fbbf24' : '#38bdf8',
+                border: order.return_request.status === 'PENDING_ADMIN_APPROVAL' ? '1px solid rgba(251, 191, 36, 0.4)' : '1px solid rgba(56, 189, 248, 0.4)'
+              }}>
+                {order.return_request.status === 'PENDING_ADMIN_APPROVAL' 
+                  ? '⏳ Pending Sale Admin Approval' 
+                  : order.return_request.status === 'APPROVED_FOR_COLLECTION'
+                  ? '🚚 Sale Admin Approved for Collect'
+                  : order.return_request.status === 'COLLECTED'
+                  ? '📦 Damaged Stock Collected'
+                  : order.return_request.status}
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', fontSize: '0.8rem', background: 'rgba(15, 23, 42, 0.6)', padding: '0.85rem', borderRadius: 8, marginBottom: '0.75rem' }}>
+              <div>
+                <span style={{ color: '#64748b' }}>Total Damaged / Return: </span>
+                <strong style={{ color: '#fbbf24' }}>{order.return_request.total_damaged_pcs} PCS</strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b' }}>Primary Reason: </span>
+                <span style={{ color: '#cbd5e1' }}>{order.return_request.reason}</span>
+              </div>
+              {order.return_request.remarks && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span style={{ color: '#64748b' }}>Remarks: </span>
+                  <span style={{ color: '#cbd5e1' }}>{order.return_request.remarks}</span>
+                </div>
+              )}
+            </div>
+
+            {/* If Pending Approval and user is Sales Admin or Super Admin */}
+            {order.return_request.status === 'PENDING_ADMIN_APPROVAL' && (isSalesAdmin || isSuperAdmin) && onApproveReturnRequest && (
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(251, 191, 36, 0.2)' }}>
+                {onRejectReturnRequest && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onRejectReturnRequest(order.id);
+                      onClose();
+                    }}
+                    style={{
+                      padding: '0.45rem 0.95rem',
+                      background: 'rgba(244, 63, 94, 0.15)',
+                      border: '1px solid rgba(244, 63, 94, 0.35)',
+                      color: '#fb7185',
+                      borderRadius: 7,
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Reject Return Request
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApproveReturnRequest(order.id);
+                    onClose();
+                  }}
+                  style={{
+                    padding: '0.45rem 1.1rem',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    border: 'none',
+                    borderRadius: 7,
+                    color: 'white',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                  }}
+                  title="Sale Admin approves request for physical collection by Dispatched person"
+                >
+                  <CheckCircle2 size={15} /> Sale Admin: Approve for Collect
+                </button>
+              </div>
+            )}
+
+            {order.return_request.status === 'APPROVED_FOR_COLLECTION' && (
+              <div style={{ fontSize: '0.78rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700 }}>
+                <Truck size={14} /> Approved by Sale Admin — Dispatched person can now allocate vehicle and collect damaged stock.
+              </div>
+            )}
+
+            {order.return_request.status === 'COLLECTED' && (
+              <div style={{ fontSize: '0.78rem', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700 }}>
+                <CheckCircle2 size={14} color="#a78bfa" /> Physical collection completed by Dispatched person. Vehicle: {order.return_request.vehicle_number || 'Recorded'}, Driver: {order.return_request.driver_name || 'Recorded'}
+              </div>
+            )}
           </div>
         )}
 

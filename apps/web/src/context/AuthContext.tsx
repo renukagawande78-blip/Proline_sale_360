@@ -265,7 +265,29 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [permissionGroups, setPermissionGroups] = useState<PermissionGroup[]>(INITIAL_PERMISSION_GROUPS);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('proline_oms_current_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.id && parsed.role_name) {
+          return { ...parsed, permissions: parsed.permissions || getDefaultPermissions(parsed.role_name) };
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  // Persist current user session to localStorage so refresh / pull-to-refresh doesn't log out
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem('proline_oms_current_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('proline_oms_current_user');
+      }
+    } catch {}
+  }, [currentUser]);
 
   // Load live users from Supabase cloud database (supports 'users' & 'system_users' tables)
   useEffect(() => {
@@ -484,7 +506,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const savedFcmUser = typeof window !== 'undefined' ? localStorage.getItem('proline_oms_fcm_user') : null;
 
     // 1. Clear all localStorage — removes Supabase auth tokens + any app cache
-    try { localStorage.clear(); } catch (_) {}
+    try {
+      localStorage.removeItem('proline_oms_current_user');
+      localStorage.clear();
+    } catch (_) {}
 
     // Restore device push notification token
     if (savedFcmToken) {
