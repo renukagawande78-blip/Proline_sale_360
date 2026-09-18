@@ -1591,6 +1591,18 @@ const MainLayout: React.FC = () => {
       ...item,
       issued_qty_pcs: billedQtyByItem[item.id] !== undefined ? Math.max(0, billedQtyByItem[item.id]) : (item.issued_qty_pcs ?? item.total_qty_pcs ?? 0)
     }));
+    let totalBilledBoxes = 0;
+    let totalBilledLoose = 0;
+    updatedItems.forEach(item => {
+      const pack = item.pcs_per_box && item.pcs_per_box > 1 ? item.pcs_per_box : 1;
+      if (pack > 1) {
+        totalBilledBoxes += Math.floor((item.issued_qty_pcs || 0) / pack);
+        totalBilledLoose += ((item.issued_qty_pcs || 0) % pack);
+      } else {
+        totalBilledLoose += (item.issued_qty_pcs || 0);
+      }
+    });
+
     const updatedOrder: Order = {
       ...order,
       status: 'BILLED',
@@ -1598,6 +1610,8 @@ const MainLayout: React.FC = () => {
       invoice_date: invoiceDate,
       invoice_amount: invoiceAmount,
       billing_total_qty: billingTotalQty,
+      billing_total_boxes: totalBilledBoxes,
+      billing_total_loose_pcs: totalBilledLoose,
       reattempt_delivery: false,
       credit_days: creditDays,
       remarks: remark,

@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, FileText, Truck, Edit, AlertTriangle, CheckCircle2, Package, MapPin, User, Building2, Lock } from 'lucide-react';
-import { Order, isOrderDispatchedOrBeyond, isSalesAdminApprovedOrBeyond } from '../types';
+import { Order, isOrderDispatchedOrBeyond, isSalesAdminApprovedOrBeyond, getOrderBilledQuantityBreakdown } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -169,27 +169,53 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
             <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 1 }}>{order.payment_type || 'Credit'}</div>
           </div>
 
-          <div>
-            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 2 }}>
-              TOTAL BOXES (FMCG)
-            </div>
-            <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.875rem' }}>
-              {order.total_box_qty > 0 ? `${order.total_box_qty} Boxes` : '—'}
-            </div>
-            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 1 }}>{order.total_loose_pcs || 0} Loose PCS</div>
-          </div>
+          {(() => {
+            const billedBD = getOrderBilledQuantityBreakdown(order);
+            const isBilledOrCompleted = Boolean(
+              order.invoice_number ||
+              order.status === 'BILLED' ||
+              ['DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(order.status)
+            );
 
-          <div>
-            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 2 }}>
-              TOTAL DEMAND (PCS)
-            </div>
-            <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.875rem' }}>
-              {order.total_qty_pcs?.toLocaleString() || 0} PCS
-            </div>
-            <div style={{ fontSize: '0.7rem', color: '#34d399', marginTop: 1 }}>
-              {order.billing_total_qty ? `${order.billing_total_qty} Issued PCS` : 'Fulfillment pending'}
-            </div>
-          </div>
+            return (
+              <>
+                <div>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 2 }}>
+                    {isBilledOrCompleted ? 'BOXES (BILLED vs ORD)' : 'TOTAL BOXES (FMCG)'}
+                  </div>
+                  <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.875rem' }}>
+                    {isBilledOrCompleted ? (
+                      <span>
+                        <strong style={{ color: '#34d399' }}>{billedBD.billedBoxes} Billed Bx</strong>
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}> / {order.total_box_qty || 0} Ord</span>
+                      </span>
+                    ) : (
+                      order.total_box_qty > 0 ? `${order.total_box_qty} Boxes` : '—'
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 1 }}>
+                    {isBilledOrCompleted ? (billedBD.billedLoosePcs > 0 ? `+${billedBD.billedLoosePcs} Loose PCS` : '0 Loose PCS') : `${order.total_loose_pcs || 0} Loose PCS`}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 2 }}>
+                    {isBilledOrCompleted ? 'QUANTITY (BILLED vs ORD)' : 'TOTAL DEMAND (PCS)'}
+                  </div>
+                  <div style={{ fontWeight: 800, color: isBilledOrCompleted ? '#34d399' : '#38bdf8', fontSize: '0.875rem' }}>
+                    {isBilledOrCompleted ? (
+                      `${billedBD.billedTotalPcs.toLocaleString()} Billed PCS`
+                    ) : (
+                      `${order.total_qty_pcs?.toLocaleString() || 0} PCS`
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: isBilledOrCompleted ? '#94a3b8' : '#34d399', marginTop: 1 }}>
+                    {isBilledOrCompleted ? `Ordered: ${(order.total_qty_pcs || 0).toLocaleString()} PCS` : 'Fulfillment pending'}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
 
           <div>
             <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 2 }}>
@@ -237,7 +263,9 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                   <th style={{ textAlign: 'center' }}>LOOSE PCS</th>
                   <th style={{ textAlign: 'center' }}>FREE PCS</th>
                   <th style={{ textAlign: 'center' }}>ORDERED DEMAND</th>
-                  {order.invoice_number && <th style={{ textAlign: 'center', color: '#34d399' }}>BILLED QTY</th>}
+                  {(order.invoice_number || ['BILLED', 'DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(order.status)) && (
+                    <th style={{ textAlign: 'center', color: '#34d399' }}>BILLED QTY</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -278,7 +306,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                         <td style={{ textAlign: 'center', fontWeight: 800, color: '#34d399' }}>
                           {qtyDisplay} ({item.total_qty_pcs?.toLocaleString() || 0} PCS)
                         </td>
-                        {order.invoice_number && (
+                        {(order.invoice_number || ['BILLED', 'DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(order.status)) && (
                           <td style={{ textAlign: 'center', fontWeight: 900, color: '#10b981', background: 'rgba(16, 185, 129, 0.08)' }}>
                             {(() => {
                               const issued = item.issued_qty_pcs !== undefined ? Number(item.issued_qty_pcs) : (item.total_qty_pcs || 0);
@@ -319,9 +347,9 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
                     <td style={{ textAlign: 'center', fontWeight: 900, color: '#34d399' }}>
                       {totBox > 0 ? `${totBox} BOX` : ''}{totBox > 0 && totLoose > 0 ? ', ' : ''}{totLoose > 0 ? `${totLoose} PCS` : ''}{totBox === 0 && totLoose === 0 ? `${totPcs} PCS` : ''} ({totPcs.toLocaleString()} PCS)
                     </td>
-                    {order.invoice_number && (
+                    {(order.invoice_number || ['BILLED', 'DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(order.status)) && (
                       <td style={{ textAlign: 'center', fontWeight: 900, color: '#10b981', background: 'rgba(16, 185, 129, 0.08)' }}>
-                        {order.billing_total_qty ? `${order.billing_total_qty.toLocaleString()} PCS` : `${totPcs.toLocaleString()} PCS`}
+                        {getOrderBilledQuantityBreakdown(order).displayText}
                       </td>
                     )}
                   </tr>

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { fetchCompaniesFromSupabase, isCompanyAllowedForUser, getOrderAccessPermission, MOCK_COMPANIES } from '../../lib/supabase';
-import { Order, Company, PermissionControl, isOrderDispatchedOrBeyond, isSalesAdminApprovedOrBeyond } from '../../types';
+import { Order, Company, PermissionControl, isOrderDispatchedOrBeyond, isSalesAdminApprovedOrBeyond, getOrderBilledQuantityBreakdown } from '../../types';
 import { PermissionDeniedModal } from '../../components/PermissionDeniedModal';
 import { BulkImportModal } from '../../components/BulkImportModal';
 
@@ -983,33 +983,11 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                           return <span style={{ color: '#10b981', fontWeight: 900 }}>{ordDisplay}</span>;
                         }
 
-                        // Calculate Billed Breakdown
-                        let billedBoxes = 0;
-                        let billedLoose = 0;
-                        let billedTotalPcs = 0;
-                        (order.items || []).forEach(it => {
-                          const issued = it.issued_qty_pcs !== undefined ? Number(it.issued_qty_pcs) : (it.total_qty_pcs || 0);
-                          const pack = it.pcs_per_box && it.pcs_per_box > 0 ? it.pcs_per_box : 1;
-                          if (!isFMCD && pack > 1) {
-                            billedBoxes += Math.floor(issued / pack);
-                            billedLoose += (issued % pack);
-                          } else {
-                            billedLoose += issued;
-                          }
-                          billedTotalPcs += issued;
-                        });
+                        const billedBD = getOrderBilledQuantityBreakdown(order);
 
-                        if (billedTotalPcs === 0 && order.billing_total_qty) {
-                          billedTotalPcs = order.billing_total_qty;
+                        if (!isBilled) {
+                          return <span style={{ color: '#10b981', fontWeight: 900 }}>{ordDisplay}</span>;
                         }
-
-                        const billedDisplay = isFMCD
-                          ? `${billedTotalPcs.toLocaleString()} PCS`
-                          : billedBoxes > 0 && billedLoose > 0
-                            ? `${billedBoxes} BOX, ${billedLoose} PCS`
-                            : billedBoxes > 0
-                              ? `${billedBoxes} BOX (${billedTotalPcs.toLocaleString()} PCS)`
-                              : `${billedTotalPcs.toLocaleString()} PCS`;
 
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
@@ -1026,7 +1004,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                               borderRadius: 4,
                               whiteSpace: 'nowrap'
                             }}>
-                              🧾 Billed: {billedDisplay}
+                              🧾 Billed: {billedBD.displayText}
                             </span>
                           </div>
                         );
@@ -1618,42 +1596,19 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                   ['DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(selectedOrder.status)
                 );
 
-                let billedBoxes = 0;
-                let billedLoose = 0;
-                let billedTotalPcs = 0;
-                (selectedOrder.items || []).forEach(it => {
-                  const issued = it.issued_qty_pcs !== undefined ? Number(it.issued_qty_pcs) : (it.total_qty_pcs || 0);
-                  const pack = it.pcs_per_box && it.pcs_per_box > 0 ? it.pcs_per_box : 1;
-                  if (!isFMCD && pack > 1) {
-                    billedBoxes += Math.floor(issued / pack);
-                    billedLoose += (issued % pack);
-                  } else {
-                    billedLoose += issued;
-                  }
-                  billedTotalPcs += issued;
-                });
-                if (billedTotalPcs === 0 && selectedOrder.billing_total_qty) {
-                  billedTotalPcs = selectedOrder.billing_total_qty;
-                }
-
-                const billedValue = isFMCD
-                  ? `${billedTotalPcs.toLocaleString()} PCS`
-                  : billedBoxes > 0 && billedLoose > 0
-                    ? `${billedBoxes} BOX, ${billedLoose} PCS`
-                    : billedBoxes > 0
-                      ? `${billedBoxes} BOX (${billedTotalPcs.toLocaleString()} PCS)`
-                      : `${billedTotalPcs.toLocaleString()} PCS`;
+                const billedBD = getOrderBilledQuantityBreakdown(selectedOrder);
 
                 const cards = isFMCD ? [
                   { label: 'Ordered Qty (PCS)', value: totalPcs + ' PCS', color: '#38bdf8' },
-                  ...(isBilled ? [{ label: 'Billed Qty (PCS)', value: billedValue, color: '#34d399' }] : []),
+                  ...(isBilled ? [{ label: 'Billed Qty (PCS)', value: billedBD.displayText, color: '#34d399' }] : []),
                   { label: 'Products', value: (selectedOrder.items?.length || 0) + ' SKU(s)', color: '#fbbf24' },
                   { label: 'Segment', value: 'FMCD (Unit PCS)', color: '#34d399' },
                   { label: 'Order Value', value: '₹' + Number(selectedOrder.total_amount || 0).toLocaleString('en-IN'), color: '#f8fafc' }
                 ] : [
-                  { label: 'Ordered Boxes', value: selectedOrder.total_box_qty + ' Boxes', color: '#f8fafc' },
+                  { label: 'Ordered Boxes', value: (selectedOrder.total_box_qty || 0) + ' Boxes', color: '#f8fafc' },
+                  ...(isBilled ? [{ label: 'Billed Boxes', value: billedBD.billedBoxes + ' Boxes', color: '#34d399' }] : []),
                   { label: 'Ordered Qty (Pcs)', value: (selectedOrder.total_qty_pcs || totalPcs) + ' PCS', color: '#38bdf8' },
-                  ...(isBilled ? [{ label: 'Billed Qty (FMCG)', value: billedValue, color: '#34d399' }] : []),
+                  ...(isBilled ? [{ label: 'Billed Volume', value: billedBD.displayText, color: '#34d399' }] : []),
                   { label: 'Loose PCS', value: (selectedOrder.total_loose_pcs || 0) + ' PCS', color: '#94a3b8' },
                   { label: 'Products', value: (selectedOrder.items?.length || 0) + ' SKU(s)', color: '#fbbf24' },
                 ];

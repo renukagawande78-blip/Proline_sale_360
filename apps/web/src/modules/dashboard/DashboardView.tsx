@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getOrderAccessPermission, getOrderSegment, resolveSegmentForUser, checkIsSuperAdmin } from '../../lib/supabase';
-import { Order } from '../../types';
+import { Order, getOrderBilledQuantityBreakdown } from '../../types';
 import { HoldReasonDirectoryModal } from '../../components/HoldReasonDirectoryModal';
 
 interface DashboardViewProps {
@@ -80,17 +80,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalOrdersCount = displayedOrders.length;
   
   const calcMetrics = (orderList: Order[]) => {
-    const totalPcs = orderList.reduce((sum, o) => {
-      if (o.total_qty_pcs != null && o.total_qty_pcs > 0) return sum + o.total_qty_pcs;
-      const itemsPcs = (o.items || []).reduce((iSum, it) => iSum + (it.total_qty_pcs || ((it.box_qty || 0) * (it.pcs_per_box || 1) + (it.loose_pcs || 0))), 0);
-      return sum + (itemsPcs || o.total_qty_pcs || 0);
-    }, 0);
+    let totalPcs = 0;
+    let totalBoxes = 0;
 
-    const totalBoxes = orderList.reduce((sum, o) => {
-      if (o.total_box_qty != null && o.total_box_qty > 0) return sum + o.total_box_qty;
-      const itemsBoxes = (o.items || []).reduce((iSum, it) => iSum + (it.box_qty || 0), 0);
-      return sum + itemsBoxes;
-    }, 0);
+    orderList.forEach(o => {
+      const isBilledOrCompleted = Boolean(
+        o.invoice_number ||
+        o.status === 'BILLED' ||
+        ['DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(o.status)
+      );
+
+      if (isBilledOrCompleted) {
+        const bd = getOrderBilledQuantityBreakdown(o);
+        totalBoxes += bd.billedBoxes;
+        totalPcs += bd.billedTotalPcs;
+      } else {
+        const oPcs = (o.total_qty_pcs != null && o.total_qty_pcs > 0)
+          ? o.total_qty_pcs
+          : (o.items || []).reduce((iSum, it) => iSum + (it.total_qty_pcs || ((it.box_qty || 0) * (it.pcs_per_box || 1) + (it.loose_pcs || 0))), 0);
+        const oBoxes = (o.total_box_qty != null && o.total_box_qty > 0)
+          ? o.total_box_qty
+          : (o.items || []).reduce((iSum, it) => iSum + (it.box_qty || 0), 0);
+        totalBoxes += oBoxes;
+        totalPcs += oPcs;
+      }
+    });
 
     return { totalPcs, totalBoxes };
   };
@@ -506,15 +520,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ) : (
                 displayedOrders.slice(0, 10).map(order => {
                   const seg = getOrderSegment(order);
-                  const billingPcs = (order.billing_total_qty != null && order.billing_total_qty > 0)
-                    ? order.billing_total_qty
-                    : (order.items || []).reduce((sum, it) => sum + (it.issued_qty_pcs || it.total_qty_pcs || 0), 0)
-                    || order.total_qty_pcs
-                    || 0;
-                  const billingBoxes = order.total_box_qty || (order.items || []).reduce((sum, it) => sum + (it.box_qty || 0), 0) || 0;
-                  const billingQtyText = seg === 'FMCD'
-                    ? `${billingPcs.toLocaleString()} PCS`
-                    : (billingBoxes > 0 ? `${billingBoxes.toLocaleString()} Boxes | ${billingPcs.toLocaleString()} PCS` : `${billingPcs.toLocaleString()} PCS`);
+                  const isFMCD = seg === 'FMCD';
+                  const billedBD = getOrderBilledQuantityBreakdown(order);
+                  const isCompletedOrBilled = Boolean(
+                    order.invoice_number ||
+                    order.status === 'BILLED' ||
+                    ['DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(order.status)
+                  );
 
                   return (
                     <tr key={order.id}>
@@ -537,7 +549,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </td>
                       <td>{order.agency_name}</td>
                       <td>
-                        {order.invoice_number ? (
+                        {order.status === 'COMPLETED' ? (
+                          <div>
+                            <span style={{ color: '#34d399', fontWeight: 800 }}>✅ COMPLETED</span>
+                            {order.invoice_number && (
+                              <div style={{ color: '#fbbf24', fontSize: '0.7rem', marginTop: 2 }}>{order.invoice_number}</div>
+                            )}
+                          </div>
+                        ) : order.invoice_number || order.status === 'BILLED' ? (
                           <div>
                             <span style={{ color: '#34d399', fontWeight: 800 }}>✅ BILLING DONE</span>
                             <div style={{ color: '#fbbf24', fontSize: '0.7rem', marginTop: 2 }}>{order.invoice_number}</div>
@@ -546,7 +565,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <span style={{ color: '#94a3b8', fontWeight: 700 }}>⏳ BILLING PENDING</span>
                         )}
                       </td>
-                      <td><strong style={{ color: '#38bdf8' }}>{order.invoice_number ? billingQtyText : '—'}</strong></td>
+                      <td>
+                        {isCompletedOrBilled && billedBD.hasBilledQty ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <strong style={{ color: '#34d399', fontSize: '0.8rem' }}>
+                              🧾 {billedBD.displayText}
+                            </strong>
+                            <span style={{ fontSize: '0.675rem', color: '#94a3b8' }}>
+                              Ord: {isFMCD ? `${(order.total_qty_pcs || 0).toLocaleString()} PCS` : `${order.total_box_qty || 0} BOX`}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#64748b', fontSize: '0.75rem' }}>—</span>
+                        )}
+                      </td>
                       <td><span className={`status-badge status-${order.status}`}>{order.status}</span></td>
                       <td>
                         <button 

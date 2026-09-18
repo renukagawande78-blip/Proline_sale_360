@@ -415,6 +415,8 @@ export interface Order {
   invoice_date?: string;
   invoice_amount?: number;
   billing_total_qty?: number;
+  billing_total_boxes?: number;
+  billing_total_loose_pcs?: number;
   return_request?: ReturnRequest;
 
   // Operational Workflow Diagram Fields
@@ -513,6 +515,82 @@ export const isSalesAdminApprovedOrBeyond = (order?: Partial<Order> | null): boo
     'DELIVERY_REATTEMPTED'
   ];
   return approvedStatuses.includes(status) || Boolean(order.invoice_number);
+};
+
+export interface BilledQuantityBreakdown {
+  billedBoxes: number;
+  billedLoosePcs: number;
+  billedTotalPcs: number;
+  displayText: string;
+  hasBilledQty: boolean;
+}
+
+// Accurately calculates Billed Box and PCS breakdown for any order across Dashboard, Orders, Billing, and Dispatch
+export const getOrderBilledQuantityBreakdown = (order?: Partial<Order> | null): BilledQuantityBreakdown => {
+  if (!order) {
+    return { billedBoxes: 0, billedLoosePcs: 0, billedTotalPcs: 0, displayText: '—', hasBilledQty: false };
+  }
+
+  const isFMCD = Boolean(
+    (order as any).company_segment?.toUpperCase() === 'FMCD' ||
+    (order as any).segment?.toUpperCase() === 'FMCD' ||
+    ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].includes((order.company_name || (order as any).company_handle || '').toUpperCase()) ||
+    ['WHIRLPOOL', 'DAIKIN', 'CRUISE', 'AKAI', 'AK'].some(k => (order.order_number || '').toUpperCase().startsWith(k)) ||
+    ((order.items || []).length > 0 && (order.items || []).every(it => !it.pcs_per_box || it.pcs_per_box <= 1))
+  );
+
+  const isBilled = Boolean(
+    order.invoice_number ||
+    order.status === 'BILLED' ||
+    (order.billing_total_qty != null && order.billing_total_qty > 0) ||
+    ['DISPATCHED', 'PARTIALLY_DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase())
+  );
+
+  let billedBoxes = 0;
+  let billedLoosePcs = 0;
+  let billedTotalPcs = 0;
+
+  (order.items || []).forEach(it => {
+    const issued = it.issued_qty_pcs !== undefined && it.issued_qty_pcs !== null 
+      ? Number(it.issued_qty_pcs) 
+      : (it.dispatched_qty_pcs !== undefined && it.dispatched_qty_pcs !== null ? Number(it.dispatched_qty_pcs) : (isBilled ? (it.total_qty_pcs || 0) : 0));
+    
+    const pack = it.pcs_per_box && it.pcs_per_box > 0 ? it.pcs_per_box : 1;
+    if (!isFMCD && pack > 1) {
+      billedBoxes += Math.floor(issued / pack);
+      billedLoosePcs += (issued % pack);
+    } else {
+      billedLoosePcs += issued;
+    }
+    billedTotalPcs += issued;
+  });
+
+  if (billedTotalPcs === 0 && order.billing_total_qty) {
+    billedTotalPcs = order.billing_total_qty;
+    if (order.billing_total_boxes != null && order.billing_total_boxes > 0) {
+      billedBoxes = order.billing_total_boxes;
+      billedLoosePcs = order.billing_total_loose_pcs || 0;
+    }
+  }
+
+  let displayText = '—';
+  if (isFMCD) {
+    displayText = `${billedTotalPcs.toLocaleString()} PCS`;
+  } else if (billedBoxes > 0 && billedLoosePcs > 0) {
+    displayText = `${billedBoxes} BOX, ${billedLoosePcs} PCS (${billedTotalPcs.toLocaleString()} PCS)`;
+  } else if (billedBoxes > 0) {
+    displayText = `${billedBoxes} BOX (${billedTotalPcs.toLocaleString()} PCS)`;
+  } else if (billedTotalPcs > 0) {
+    displayText = `${billedTotalPcs.toLocaleString()} PCS`;
+  }
+
+  return {
+    billedBoxes,
+    billedLoosePcs,
+    billedTotalPcs,
+    displayText,
+    hasBilledQty: isBilled || billedTotalPcs > 0
+  };
 };
 
 export type ReturnType = 'REPLACEMENT' | 'DAMAGED_RETURN';

@@ -304,18 +304,34 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
       order_id: selectedOrderForInvoice.id
     });
 
+    let totalBilledBoxes = 0;
+    let totalBilledLoose = 0;
+    const billedItems = (selectedOrderForInvoice.items || []).map(item => {
+      const issued = billedQtyByItem[item.id] !== undefined ? Number(billedQtyByItem[item.id]) : (item.total_qty_pcs || 0);
+      const pack = item.pcs_per_box && item.pcs_per_box > 1 ? item.pcs_per_box : 1;
+      if (pack > 1) {
+        totalBilledBoxes += Math.floor(issued / pack);
+        totalBilledLoose += (issued % pack);
+      } else {
+        totalBilledLoose += issued;
+      }
+      return {
+        ...item,
+        issued_qty_pcs: issued
+      };
+    });
+
     const billedOrder: Order = {
       ...selectedOrderForInvoice,
       status: 'BILLED',
       invoice_number: finalInvNo,
       invoice_amount: finalBillingAmount,
       billing_total_qty: finalBillingQty,
+      billing_total_boxes: totalBilledBoxes,
+      billing_total_loose_pcs: totalBilledLoose,
       credit_days: lockedCreditDays,
       remarks: invoiceRemark || selectedOrderForInvoice.remarks,
-      items: (selectedOrderForInvoice.items || []).map(item => ({
-        ...item,
-        issued_qty_pcs: billedQtyByItem[item.id] !== undefined ? billedQtyByItem[item.id] : (item.total_qty_pcs || 0)
-      }))
+      items: billedItems
     };
 
     setSelectedOrderForInvoice(null);
