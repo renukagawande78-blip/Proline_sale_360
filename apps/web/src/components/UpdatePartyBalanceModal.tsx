@@ -666,7 +666,7 @@ export const UpdatePartyBalanceModal: React.FC<UpdatePartyBalanceModalProps> = (
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '0.85rem', borderTop: '1px solid #1e293b' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '0.85rem', borderTop: '1px solid #1e293b', flexWrap: 'wrap' }}>
             <button
               type="button"
               onClick={onClose}

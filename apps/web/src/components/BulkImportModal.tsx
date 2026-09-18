@@ -905,7 +905,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
               </div>
 
               {/* Execution Action Button */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={handleExecuteSequentialUpload}
@@ -921,7 +921,10 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.5rem',
-                    boxShadow: '0 4px 20px rgba(16, 185, 129, 0.4)'
+                    boxShadow: '0 4px 20px rgba(16, 185, 129, 0.4)',
+                    maxWidth: '100%',
+                    whiteSpace: 'normal',
+                    textAlign: 'center'
                   }}
                 >
                   <Play size={18} />

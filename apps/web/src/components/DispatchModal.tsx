@@ -180,7 +180,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       <div className="modal-card" style={{ maxWidth: 960, width: '95vw', maxHeight: '92vh', overflowY: 'auto' }}>
         
         {/* Modal Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.85rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
               <Truck color="#38bdf8" size={22} />
@@ -546,9 +546,9 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         </div>
 
         {/* Modal Actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.85rem', borderTop: '1px solid #334155', paddingTop: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #334155', paddingTop: '1rem', flexWrap: 'wrap' }}>
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-          <button className="btn btn-success" onClick={handleConfirm} style={{ fontWeight: 800 }}>
+          <button className="btn btn-success" onClick={handleConfirm} style={{ fontWeight: 800, whiteSpace: 'normal', textAlign: 'center' }}>
             <Check size={16} /> Confirm Dispatch &amp; Assign Vehicle
           </button>
         </div>

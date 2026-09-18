@@ -809,7 +809,7 @@ body {
 
   /* Bottom sheet style modal on mobile */
   .modal-overlay {
-    padding: 0 !important;
+    padding: 0.5rem !important;
     align-items: flex-end !important;
   }
 
@@ -822,9 +822,52 @@ body {
     border-bottom-right-radius: 0 !important;
     border-top-left-radius: 20px !important;
     border-top-right-radius: 20px !important;
-    padding: 1.15rem 0.9rem 4rem !important;
+    padding: 1.15rem 0.9rem 2rem !important;
     margin: 0 !important;
     box-shadow: 0 -10px 40px rgba(0,0,0,0.8) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Responsive header actions and button bars */
+  .orders-header-actions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0.45rem !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .orders-header-actions > button,
+  .orders-header-actions > span,
+  .orders-header-actions > div {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  .invoice-modal-actions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0.35rem !important;
+    width: 100% !important;
+  }
+
+  .invoice-modal-actions > button {
+    flex: 1 1 calc(50% - 0.35rem) !important;
+    min-width: 0 !important;
+    justify-content: center !important;
+    font-size: 0.725rem !important;
+    padding: 0.4rem 0.5rem !important;
+  }
+
+  /* Universal button mobile containment */
+  button, .btn {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 }
 
@@ -897,6 +940,7 @@ body {
   .btn {
     min-height: 38px !important;
     font-size: 0.8rem !important;
+    max-width: 100% !important;
   }
 }
 

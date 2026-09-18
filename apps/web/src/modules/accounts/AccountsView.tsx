@@ -368,10 +368,13 @@ export const AccountsView: React.FC<AccountsViewProps> = ({ orders, agencies, on
             borderRadius: '10px',
             border: 'none',
             cursor: 'pointer',
-            boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
+            boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
+            maxWidth: '100%',
+            whiteSpace: 'normal',
+            textAlign: 'center'
           }}
         >
-          <DollarSign size={18} /> Update Party Financial Balance
+          <DollarSign size={18} style={{ flexShrink: 0 }} /> <span>Update Party Financial Balance</span>
         </button>
       </div>
 

@@ -28,31 +28,53 @@ export const NotificationToast: React.FC = () => {
 
   return (
     <div 
+      className="notification-toast-container"
       style={{
-        position: 'fixed',
-        top: 'calc(16px + env(safe-area-inset-top, 0px))',
-        left: '50%',
-        transform: 'translateX(-50%)',
         zIndex: 99999,
-        width: 'min(460px, calc(100vw - 24px))',
         background: '#0f172a',
         border: '1.5px solid #38bdf8',
         borderRadius: 14,
-        padding: '0.85rem 1rem',
-        boxShadow: '0 12px 35px rgba(0, 0, 0, 0.75), 0 0 25px rgba(56, 189, 248, 0.35)',
+        padding: '0.75rem 1rem',
+        boxShadow: '0 12px 35px rgba(0, 0, 0, 0.85), 0 0 25px rgba(56, 189, 248, 0.35)',
         display: 'flex',
         alignItems: 'flex-start',
         gap: '0.75rem',
-        animation: 'slideDownNotification 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
         backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)'
+        WebkitBackdropFilter: 'blur(12px)',
+        boxSizing: 'border-box'
       }}
     >
       <style>{`
+        .notification-toast-container {
+          position: fixed;
+          top: calc(16px + env(safe-area-inset-top, 0px));
+          left: 50%;
+          transform: translateX(-50%);
+          width: min(460px, calc(100vw - 24px));
+          animation: slideDownNotification 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
         @keyframes slideDownNotification {
           from {
             opacity: 0;
             transform: translate(-50%, -20px) scale(0.96);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, 0) scale(1);
+          }
+        }
+        @media (max-width: 768px) {
+          .notification-toast-container {
+            top: auto !important;
+            bottom: calc(70px + env(safe-area-inset-bottom, 10px)) !important;
+            width: min(390px, calc(100vw - 20px)) !important;
+            animation: slideUpNotification 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          }
+        }
+        @keyframes slideUpNotification {
+          from {
+            opacity: 0;
+            transform: translate(-50%, 20px) scale(0.96);
           }
           to {
             opacity: 1;

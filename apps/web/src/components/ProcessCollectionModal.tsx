@@ -366,14 +366,14 @@ export const ProcessCollectionModal: React.FC<ProcessCollectionModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #334155', paddingTop: '1rem', marginTop: '0.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #334155', paddingTop: '1rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
           <button className="btn btn-outline" onClick={onClose}>
             Cancel
           </button>
           <button
             className="btn btn-success"
             onClick={handleSubmit}
-            style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
+            style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.45rem', whiteSpace: 'normal', textAlign: 'center' }}
           >
             <CheckCircle2 size={16} /> Mark Damaged &amp; Return Collected
           </button>

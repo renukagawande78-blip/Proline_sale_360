@@ -52,10 +52,10 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100, position: 'fixed', inset: 0, background: 'rgba(2, 6, 23, 0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 960, width: '96vw', maxHeight: '92vh', overflowY: 'auto', background: '#0b1329', border: '1px solid #1e293b', borderRadius: 14, padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)' }}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 960, width: '96vw', maxHeight: '92vh', background: '#0b1329', border: '1px solid #1e293b', borderRadius: 14, padding: '1.25rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', borderBottom: '1px solid #1e293b', paddingBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.85rem', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
@@ -80,7 +80,7 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
               &nbsp;|&nbsp; Brand: <strong style={{ color: '#fbbf24' }}>{order.company_name || 'PROKAP'}</strong>
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
             {onOpenEditOrder && order.status !== 'CANCELLED' && (
               isSalesAdminApprovedOrBeyond(order) ? (
                 <button
@@ -136,6 +136,9 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Scrollable Modal Body */}
+        <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.25rem', minHeight: 0 }}>
 
         {/* Order Summary Metric Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.65rem', marginBottom: '1.25rem', background: '#0f172a', padding: '1rem', borderRadius: 10, border: '1px solid #1e293b' }}>
@@ -519,13 +522,16 @@ export const OrderApprovalModal: React.FC<OrderApprovalModalProps> = ({
           </div>
         )}
 
+        </div>
+        {/* End Scrollable Modal Body */}
+
         {/* Footer */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #1e293b', paddingTop: '1rem', flexWrap: 'wrap', gap: '0.65rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #1e293b', paddingTop: '0.85rem', marginTop: '0.5rem', flexWrap: 'wrap', gap: '0.65rem', flexShrink: 0 }}>
           <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
             <CheckCircle2 size={14} color="#34d399" /> PROKAP OMS 360 Order Telemetry View
           </div>
 
-          <div style={{ display: 'flex', gap: '0.55rem' }}>
+          <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
             {onOpenEditOrder && order.status !== 'CANCELLED' && (
               isSalesAdminApprovedOrBeyond(order) ? (
                 <button

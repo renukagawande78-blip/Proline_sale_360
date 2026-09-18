@@ -450,7 +450,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="invoice-modal-actions" style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
               {/* WhatsApp Share Button */}
               <button 
                 type="button"
@@ -596,7 +596,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({ order, isO
                 <SlidersHorizontal size={13} /> SELECT DOCUMENT FORMAT:
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
                 <button 
                   type="button"
                   onClick={() => handleModeChange('SALES_ORDER')}

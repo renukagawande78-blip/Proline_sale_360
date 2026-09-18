@@ -170,10 +170,10 @@ export const ProcessReturnModal: React.FC<ProcessReturnModalProps> = ({
         </div>
 
         {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #334155', paddingTop: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #334155', paddingTop: '1rem', flexWrap: 'wrap' }}>
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-          <button className="btn btn-success" onClick={handleConfirm} style={{ fontWeight: 800 }}>
-            <Check size={16} /> Confirm Settlement & Update Inventory Log
+          <button className="btn btn-success" onClick={handleConfirm} style={{ fontWeight: 800, whiteSpace: 'normal', textAlign: 'center' }}>
+            <Check size={16} /> Confirm Settlement &amp; Update Inventory Log
           </button>
         </div>
       </div>

@@ -583,10 +583,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', gap: 0, overflow: 'hidden' }}>
 
       {/* ── LEFT MAIN COLUMN ──────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', minWidth: 0, minHeight: 0 }}>
+      <div className="orders-main-content page-body" style={{ flex: 1, overflowY: 'auto', minWidth: 0, minHeight: 0 }}>
 
         {/* Page Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.85rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 2 }}>
               <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Home &rsaquo;</span>
@@ -603,8 +603,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 : 'Book agency sales orders, track status, and manage customer fulfillment'}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#1e293b', border: '1px solid #334155', padding: '0.35rem 0.65rem', borderRadius: 6 }}>
+          <div className="orders-header-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', maxWidth: '100%' }}>
+            <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#1e293b', border: '1px solid #334155', padding: '0.35rem 0.65rem', borderRadius: 6, whiteSpace: 'nowrap' }}>
               📅 Today: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
             </span>
             {canAddOrder && (
@@ -623,7 +623,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                     border: '1px solid rgba(56, 189, 248, 0.4)',
                     background: 'rgba(56, 189, 248, 0.12)',
                     color: '#38bdf8',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
                   }}
                   title="Bulk register multiple sales orders via CSV upload or paste"
                 >
@@ -653,7 +654,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                       background: 'rgba(30, 41, 59, 0.8)',
                       color: '#94a3b8',
                       cursor: isRefreshingOrders ? 'wait' : 'pointer',
-                      transition: 'all 0.15s ease'
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap'
                     }}
                     title="Refresh orders list from live database"
                   >
@@ -661,7 +663,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                     {isRefreshingOrders ? 'Refreshing...' : 'Refresh'}
                   </button>
                 )}
-                <button className="btn btn-primary" onClick={onOpenCreateOrder} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, fontSize: '0.85rem' }}>
+                <button className="btn btn-primary" onClick={onOpenCreateOrder} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                   <Plus size={15} /> Create Order
                 </button>
                 {onOpenReturnRequestModal && (
@@ -679,7 +681,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                       background: 'linear-gradient(135deg, rgba(244,63,94,0.25), rgba(244,63,94,0.1))',
                       color: '#fb7185',
                       cursor: 'pointer',
-                      boxShadow: '0 2px 8px rgba(244,63,94,0.2)'
+                      boxShadow: '0 2px 8px rgba(244,63,94,0.2)',
+                      whiteSpace: 'nowrap'
                     }}
                     title="Raise Damaged Goods Return or Stock Replacement Request against an existing order"
                   >

@@ -595,7 +595,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', flexWrap: 'wrap' }}>
               <button type="button" className="btn btn-outline" onClick={() => setIsRegisterOpen(false)}>Cancel</button>
               <button type="submit" className="btn btn-primary" style={{ fontWeight: 800 }}>
                 <Check size={16} /> {editingUserId ? 'Save User Updates' : 'Register & Create User'}
@@ -853,7 +853,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-outline" onClick={() => setIsCreatingGroup(false)}>Cancel</button>
                   <button type="submit" className="btn btn-primary">Save Permission Group</button>
                 </div>
